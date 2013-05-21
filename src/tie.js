@@ -1,4 +1,66 @@
 (function (window) {
+
+    if (!Object.prototype.watch) {
+        Object.prototype.watch = function (prop, handler) {
+            var newGet, newSet;
+            var desc = Object.getOwnPropertyDescriptor(this, prop);
+            if (!desc.configurable ||  desc.writable === false
+                || (desc.value === undefined && !desc.set))  {
+                return;
+            }
+            if (desc.value) {
+                var val = desc.value;
+                newGet = function () {
+                    return val;
+                };
+                newSet = function (newVal) {
+                    val = handler.call(this, prop, val, newVal);
+                };
+                newSet._watchHelper = {
+                    initialType: "dataDescriptor"
+                };
+            } else {
+                newGet = desc.get;
+                newSet = function (newVal) {
+                    val = handler.call(this, prop, val, newVal);
+                    desc.set.call(this, val);
+                };
+                newSet._watchHelper = {
+                    initialType: "accessorDescriptor",
+                    oldDesc: desc
+                };
+            }
+            Object.defineProperty(this, prop, {
+                get: newGet,
+                set: newSet,
+                configurable: true,
+                enumerable: desc.enumerable
+            });
+        };
+    }
+    if (!Object.prototype.unwatch) {
+        Object.prototype.unwatch = function (prop) {
+            var desc = Object.getOwnPropertyDescriptor(this, prop);
+            if (desc.set._watchHelper) {
+                if (desc.set._watchHelper.initialType == "dataDescriptor") {
+                    Object.defineProperty(this, prop, {
+                        value: this[prop],
+                        enumerable: desc.enumerable,
+                        configurable: true,
+                        writable: true
+                    });
+                } else {
+                    Object.defineProperty(this, prop, {
+                        get: desc.get,
+                        set: desc.set._watchHelper.oldDesc.set,
+                        enumerable: desc.enumerable,
+                        configurable: true
+                    });
+                }
+            }
+        };
+    }
+
     var utils = {
         isUndefined: function (value) {
             return typeof value == 'undefined';
@@ -106,13 +168,13 @@
                                     val = this._[property];
                                 }
                             }
-                            if(!name) {
-                               throw new Error("Where is your helm?")
+                            if (!name) {
+                                throw new Error("Where is your helm?")
                             }
                             if (!property && !val) {
                                 val = this._[name];
                             }
-                            if(this.$) {
+                            if (this.$) {
                                 if ('text' === name) {
                                     this.$.innerHTML = val;
                                 } else {
@@ -131,4 +193,5 @@
         }
     };
     window.tie = tie();
-})(window);
+})
+    (window);
