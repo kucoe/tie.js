@@ -1,0 +1,19 @@
+{
+    "name": "tie.js",
+    "version": "0.0.3",
+    "description": "Smart binding framework",
+    "author": "Wolf Bas <becevka@kucoe.net>",
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/kucoe/tie.js.git"
+    },
+    "dependencies": {
+    },
+    "keywords": ["amigo", "express", "mongo", "structure", "angular" , "generator"],
+    "licenses": [
+        {
+            "type": "MIT",
+            "url": "http://kucoe.mit-license.org/"
+        }
+    ]
+}

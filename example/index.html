@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+</head>
+<body>
+<div id="main" data-tie="app">
+    <label for="text" data-tie="label"></label>
+    <input id="text" name="text" type="text" data-tie="text"/>
+</div>
+<script src="../src/tie.js"></script>
+<script>
+    var app = tie("app", {
+        text: tie("text", {
+            value: 'test',
+            attributes: [
+                {name: 'style', value: 'color:red'},
+                {name: 'value', value: function (tied) {
+                    return tied.value
+                }}
+            ]
+        }),
+        label: tie("label", {
+            attributes: [
+                {name: 'style', value: 'color:green'},
+                {name: 'text', value: function (tied) {
+                    return tied.text.value
+                }}
+            ]
+        }, ['text'])
+    });
+</script>
+
+</body>
+</html>
