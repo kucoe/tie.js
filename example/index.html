@@ -10,25 +10,16 @@
 </div>
 <script src="../src/tie.js"></script>
 <script>
-    var app = tie("app", {
-        text: tie("text", {
-            value: 'test',
-            attributes: [
-                {name: 'style', value: 'color:red'},
-                {name: 'value', value: function (tied) {
-                    return tied.value
-                }}
-            ]
-        }),
-        label: tie("label", {
-            attributes: [
-                {name: 'style', value: 'color:green'},
-                {name: 'text', value: function (tied) {
-                    return tied.text.value
-                }}
-            ]
-        }, ['text'])
-    });
+    var app = tie("app", {});
+    tie("text", 'test');
+    tie("label", {
+        style:'color:green',
+        helm: ['style',
+            {name: 'text', value: function (tied) {
+                return tied.text.value
+            }}
+        ]
+    }, ['text']);
 </script>
 
 </body>
