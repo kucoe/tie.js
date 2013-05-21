@@ -103,20 +103,20 @@
                                     val = val.call(r, this._);
                                 }
                                 if (property && !val) {
-                                    val = r[property];
+                                    val = this._[property];
                                 }
                             }
                             if(!name) {
                                throw new Error("Where is your helm?")
                             }
                             if (!property && !val) {
-                                val = r[name];
+                                val = this._[name];
                             }
-                            if(r.$) {
+                            if(this.$) {
                                 if ('text' === name) {
-                                    r.$.innerHTML = val;
+                                    this.$.innerHTML = val;
                                 } else {
-                                    r.$.setAttribute(name, val);
+                                    this.$.setAttribute(name, val);
                                 }
                             }
                         }
