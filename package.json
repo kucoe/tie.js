@@ -9,7 +9,7 @@
     },
     "dependencies": {
     },
-    "keywords": ["amigo", "express", "mongo", "structure", "angular" , "generator"],
+    "keywords": ["binding", "tie"],
     "licenses": [
         {
             "type": "MIT",
