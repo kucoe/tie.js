@@ -7,6 +7,8 @@
 <div id="main" data-tie="app">
     <label for="text" data-tie="label"></label>
     <input id="text" name="text" type="text" data-tie="text"/>
+    <br/>
+    <label for="text" data-tie="label2"></label>
 </div>
 <script src="../src/tie.js"></script>
 <script>
@@ -15,11 +17,19 @@
     tie("label", {
         style:'color:red',
         helm: ['style',
-            {name: 'text', value: function (tied) {
-                return tied.text.value
+            {name: 'value', value: function () {
+                return this.text.value
             }}
         ]
     }, ['text']);
+    tie("label2", {
+        style:'color:red',
+        helm: ['style',
+            {name: 'value', value: function () {
+                return this.label.value.length;
+            }}
+        ]
+    }, ['label']);
 </script>
 
 </body>
