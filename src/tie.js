@@ -1,105 +1,96 @@
 (function (window) {
 
-    if (!Object.prototype.watch) {
-        Object.prototype.watch = function (prop, handler) {
-            var newGet, newSet;
-            var desc = Object.getOwnPropertyDescriptor(this, prop);
-            if (!desc.configurable || desc.writable === false
-                || (desc.value === undefined && !desc.set)) {
-                return;
+    var VALUE = 'value';
+
+    var proxy = function (tie) {
+        var obj = tie._;
+        var watch = function (desc, prop) {
+            if (desc && desc._proxyMark) {
+                return; //proxy already set
             }
-            if (desc.value) {
-                var val = desc.value;
-                newGet = function () {
-                    return val;
-                };
-                newSet = function (newVal) {
-                    val = handler.call(this, prop, val, newVal);
-                };
-                newSet._watchHelper = {
-                    initialType: "dataDescriptor"
-                };
-            } else {
-                newGet = desc.get;
-                newSet = function (newVal) {
-                    val = handler.call(this, prop, val, newVal);
-                    desc.set.call(this, val);
-                };
-                newSet._watchHelper = {
-                    initialType: "accessorDescriptor",
-                    oldDesc: desc
-                };
-            }
-            Object.defineProperty(this, prop, {
+            var newGet = function () {
+                if (desc) {
+                    if (desc.get) {
+                        return desc.get.call(obj);
+                    }
+                    return desc.value;
+                }
+                return tie.$attrValue(prop);
+            };
+            var newSet = function (val) {
+                if (desc) {
+                    if (desc.set) {
+                        desc.set.call(this, val);
+                    } else {
+                        desc.value = val;
+                    }
+                }
+                tie.$apply();
+            };
+            var enumerable = desc ? desc.enumerable : false;
+            Object.defineProperty(obj, prop, {
                 get: newGet,
                 set: newSet,
                 configurable: true,
-                enumerable: desc.enumerable
+                enumerable: enumerable,
+                _proxyMark: true
             });
         };
-    }
-    if (!Object.prototype.unwatch) {
-        Object.prototype.unwatch = function (prop) {
-            var desc = Object.getOwnPropertyDescriptor(this, prop);
-            if (desc.set._watchHelper) {
-                if (desc.set._watchHelper.initialType == "dataDescriptor") {
-                    Object.defineProperty(this, prop, {
-                        value: this[prop],
-                        enumerable: desc.enumerable,
-                        configurable: true,
-                        writable: true
-                    });
-                } else {
-                    Object.defineProperty(this, prop, {
-                        get: desc.get,
-                        set: desc.set._watchHelper.oldDesc.set,
-                        enumerable: desc.enumerable,
-                        configurable: true
-                    });
+
+        var props = [];
+
+        for (var prop in obj) {
+            props.push(prop);
+            if ('attrs' === prop) {
+                continue; // skip attributes
+            }
+            var desc = Object.getOwnPropertyDescriptor(obj, prop);
+            if (desc._proxyMark) {
+                continue; //skip already processed
+            }
+            if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
+                continue; // skip readonly
+            }
+            watch(desc, prop);
+        }
+        if (obj.attrs) {
+            _.forEach(obj.attrs, function (attr) {
+                if (_.isString(attr)) {
+                    attr = {
+                        name: attr
+                    };
                 }
+                var prop = attr.name;
+                if (props.indexOf(prop) == -1 || attr.property || attr.value) {
+                    watch(null, prop);
+                }
+            }, this);
+        }
+        return obj;
+    };
+
+    var $ = function (el, obj) {
+        var main = this;
+        var listener = function () {
+            var value = main.value();
+            value = _.trim(value);
+
+            if (obj[VALUE] !== value) {
+                obj[VALUE] = value;
             }
         };
-    }
-
-    var crux = function (el, scope, skipHandler) {
-        var main = this;
-        if (!skipHandler) {
-            var listener = function () {
-                var value = main.value();
-                value = utils.trim(value);
-
-                if (scope.$value() !== value) {
-                    scope.$apply(value);
-                }
-            };
-
-            if (env.hasEvent('input')) {
-                el.addEventListener('input', listener);
-            } else {
-                el.addEventListener('keydown', function (event) {
-                    var key = event.keyCode;
-                    // ignore
-                    //    command            modifiers                   arrows
-                    if (key === 91 || (15 < key && key < 19) || (37 <= key && key <= 40)) {
-                        return;
-                    }
-                    listener();
-                });
-                // if user paste into input using mouse, we need "change" event to catch it
-                el.addEventListener('change', listener, false);
-                // if user modifies input value using context menu in IE, we need "paste" and "cut" events to catch it
-                if (env.hasEvent('paste')) {
-                    el.addEventListener('paste', listener, false);
-                    el.addEventListener('cut', listener, false);
-                }
-            }
+        //TODO fix the mess
+        if (_.isDefined(el.value) && env.hasEvent('input')) {
+            el.addEventListener('input', listener);
+        } else {
+            el.addEventListener('change', listener);
         }
         this.$ = el;
     };
 
-    crux.prototype = {
+    $.prototype = {
         setAttribute: function (name, value) {
-            if ('value' === name) {
+            if (VALUE === name) {
                 this.value(value);
             } else {
                 this.$.setAttribute(name, value);
@@ -108,14 +99,14 @@
 
         value: function (val) {
             var v;
-            if (utils.isDefined(this.$.value)) {
-                if (utils.isDefined(val)) {
+            if (_.isDefined(this.$.value)) {
+                if (_.isDefined(val)) {
                     this.$.value = val;
                 } else {
                     v = this.$.value;
                 }
             } else {
-                if (utils.isDefined(val)) {
+                if (_.isDefined(val)) {
                     this.$.innerHTML = val;
                 } else {
                     v = this.$.innerHTML;
@@ -125,7 +116,8 @@
         }
     };
 
-    var utils = {
+    var _ = {
+
         valueFn: function (value) {
             return function () {
                 return value;
@@ -157,7 +149,12 @@
         },
 
         isArray: function (value) {
-            return Object.prototype.toString.apply(value) == '[object Array]';
+            return Array.isArray(value) || Object.prototype.toString.apply(value) == '[object Array]';
+        },
+
+        isCollection: function (value) {
+            return this.isArray(value) || value instanceof Array || value instanceof NodeList ||
+                value instanceof NamedNodeMap;
         },
 
         isFunction: function (value) {
@@ -182,12 +179,29 @@
 
         toInt: function (str) {
             return parseInt(str, 10);
+        },
+
+        forEach: function (collection, callback, thisArg) {
+            if (callback && this.isCollection(collection)) {
+                if (!thisArg) {
+                    thisArg = this;
+                }
+                var index = -1;
+                var length = collection.length;
+
+                while (++index < length) {
+                    if (callback.call(thisArg, collection[index], index, collection) === false) {
+                        break;
+                    }
+                }
+            }
+            return collection;
         }
     };
 
     var env = (function () {
         var eventSupport = {};
-        var msie = utils.toInt((/msie (\d+)/.exec(utils.lowercase(navigator.userAgent)) || [])[1]);
+        var msie = _.toInt((/msie (\d+)/.exec(_.lowercase(navigator.userAgent)) || [])[1]);
 
         return {
             hasEvent: function (event) {
@@ -196,7 +210,7 @@
                 // when cut operation is performed.
                 if (event == 'input' && msie == 9) return false;
 
-                if (utils.isUndefined(eventSupport[event])) {
+                if (_.isUndefined(eventSupport[event])) {
                     var divElm = document.createElement('div');
                     eventSupport[event] = 'on' + event in divElm;
                 }
@@ -218,29 +232,27 @@
         select: function (tieName, obj) {
             var nodes = window.document.querySelectorAll('[data-tie="' + tieName + '"]');
             var res = [];
-            for (var i = 0; i < nodes.length; i++) {
-                var el = nodes[i];
-                res.push(new crux(el, obj));
-            }
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, obj));
+            });
             return res;
         },
 
         attr: function (elements, attr) {
-            for (var i = 0; i < elements.length; i++) {
-                var el = elements[i];
+            _.forEach(elements, function (el) {
                 el.setAttribute(attr.name, attr.value);
-            }
+            });
         },
 
         wrap: function (obj) {
             return {
                 value: obj,
-                helm: ['value']
+                attrs: ['value']
             }
         },
 
-        deep: function (obj) {
-            if (!utils.isObject(obj) || utils.isDate(obj)) {
+        check: function (obj) {
+            if (!_.isObject(obj) || _.isDate(obj)) {
                 obj = this.wrap(obj);
             }
             return obj;
@@ -250,10 +262,9 @@
             if (!dependencies) {
                 return;
             }
-            for (var i = 0; i < dependencies.length; i++) {
-                var dep = dependencies[i];
-                if (ties[dep]) {
-                    var found = ties[dep];
+            _.forEach(dependencies, function (dep) {
+                var found = ties[dep];
+                if (found) {
                     tied._[dep] = found._;
                     if (found) {
                         if (found.touch.indexOf(tied.name) == -1) {
@@ -261,7 +272,7 @@
                         }
                     }
                 }
-            }
+            });
         },
 
         init: function (name, tiedObject, dependencies, ties) {
@@ -269,66 +280,85 @@
                 name: name,
                 tie: this,
                 touch: [],
-                valueAttr: null,
-                $value: function () {
-                    var v = this._.value;
-                    if (!v && this.valueAttr) {
-                        v = this.valueAttr.val(this._);
+                $attrValue: function (name, value) {
+                    var v = null;
+                    if (this._.attrs) {
+                        var attr = this.$attr(name);
+                        if (_.isUndefined(value)) {
+                            if (attr) {
+                                v = attr.val(this._);
+                            }
+                        } else {
+                            if (attr && attr.property) {
+                                if (_.isUndefined(value)) {
+                                    delete this._[this.attr.property];
+                                } else {
+                                    this._[this.attr.property] = value;
+                                }
+                            }
+                        }
                     }
                     return v;
                 },
-                $apply: function (value) {
-                    if (utils.isDefined(this._.value)) {
-                        this._.value = value;
-                    } else if (this.valueAttr && this.valueAttr.property) {
-                        this._[this.valueAttr.property] = value;
+                $apply: function () {
+                    _.forEach(this.touch, function (item) {
+                        var tie = ties[item];
+                        tie._[this.name] = this._;
+                        tie.$apply();
+                        tie.render();
+                    }, this);
+                },
+                $attr: function (name) {
+                    var res = null;
+                    if (this._.attrs) {
+                        _.forEach(this._.attrs, function (attr) {
+                            if (_.isObject(attr) && attr.name === name) {
+                                res = attr;
+                                return false;
+                            }
+                            return true;
+                        });
                     }
-                    for (var i = 0; i < this.touch.length; i++) {
-                        ties[this.touch[i]].render();
-                    }
+                    return res;
                 },
                 render: function () {
-                    var helm = this._.helm;
-                    if (helm) {
-                        for (var i = 0; i < helm.length; i++) {
-                            var attr = helm[i];
-                            if (utils.isString(attr)) {
+                    var attrs = this._.attrs;
+                    if (attrs) {
+                        var valueFn = function (obj) {
+                            var name = this.name;
+                            var val = this.value;
+                            var property = this.property;
+                            if (typeof val === "function") {
+                                val = val.call(obj);
+                            }
+                            if (property && _.isUndefined(val)) {
+                                val = obj[property];
+                            }
+                            if (!name) {
+                                throw new Error("Where is your export?")
+                            }
+                            if (_.isUndefined(property) && _.isUndefined(val)) {
+                                val = obj[name];
+                            }
+                            return val;
+                        };
+                        _.forEach(attrs, function (attr) {
+                            if (_.isString(attr)) {
                                 attr = {
                                     name: attr
                                 };
                             }
-                            attr.val = function (obj) {
-                                var name = this.name;
-                                var val = this.value;
-                                var property = this.property;
-                                if (typeof val === "function") {
-                                    val = val.call(obj);
-                                }
-                                if (property && !val) {
-                                    val = obj[property];
-                                }
-                                if (!name) {
-                                    throw new Error("Where is your helm?")
-                                }
-                                if (!property && !val) {
-                                    val = obj[name];
-                                }
-                                return val;
-                            };
-
+                            attr.val = valueFn;
                             var name = attr.name;
                             this.tie.attr(this.$, {name: name, value: attr.val(this._)});
-
-                            if (name === 'value') {
-                                this.valueAttr = attr;
-                            }
-                        }
+                        }, this)
                     }
                 }
 
             };
-            r._ = this.deep(tiedObject);
-            r.$ = this.select(name, r);
+            r._ = this.check(tiedObject);
+            r._ = proxy(r);
+            r.$ = this.select(name, r._);
             this.resolve(r, dependencies, ties);
             ties[name] = r;
             r.render();
@@ -336,7 +366,7 @@
         }
     };
     window.tie = tie();
-    window.tie.utils = utils;
+    window.tie.utils = _;
     window.tie.env = env;
 })
     (window);

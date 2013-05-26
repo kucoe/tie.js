@@ -16,7 +16,7 @@
     tie("text", 'test');
     tie("label", {
         style:'color:red',
-        helm: ['style',
+        attrs: ['style',
             {name: 'value', value: function () {
                 return this.text.value
             }}
@@ -24,7 +24,7 @@
     }, ['text']);
     tie("label2", {
         style:'color:red',
-        helm: ['style',
+        attrs: ['style',
             {name: 'value', value: function () {
                 return this.label.value.length;
             }}
