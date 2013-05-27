@@ -13,12 +13,11 @@
 <script src="../src/tie.js"></script>
 <script>
     var app = tie("app", {});
-    tie("text", 'test');
     tie("label", {
         style:'color:red',
         attrs: ['style',
             {name: 'value', value: function () {
-                return this.text.value
+                return this.$text.value
             }}
         ]
     }, ['text']);
@@ -26,10 +25,11 @@
         style:'color:red',
         attrs: ['style',
             {name: 'value', value: function () {
-                return this.label.value.length;
+                return this.$label.value.length;
             }}
         ]
     }, ['label']);
+    tie("text", 'test');
 </script>
 
 </body>
