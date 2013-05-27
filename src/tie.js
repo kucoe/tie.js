@@ -231,16 +231,24 @@
         },
 
 
-        wrap: function (obj) {
+        wrapPrimitive: function (obj) {
             return {
                 value: obj,
                 attrs: ['value']
             }
         },
 
+        wrapFunction : function(fn) {
+            return {
+                attrs: [{name: 'value', value: fn}]
+            }
+        },
+
         check: function (obj) {
-            if (!_.isObject(obj) || _.isDate(obj)) {
-                obj = this.wrap(obj);
+            if(_.isFunction(obj)) {
+                obj = this.wrapFunction(obj);
+            } else if (!_.isObject(obj) || _.isDate(obj)) {
+                obj = this.wrapPrimitive(obj);
             }
             return obj;
         },

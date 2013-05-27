@@ -25,13 +25,8 @@
             }}
         ]
     }, ['text']);
-    tie("label2", {
-        style: 'color:red',
-        attrs: ['style',
-            {name: 'value', value: function () {
-                return this.$label.value.length;
-            }}
-        ]
+    tie("label2", function () {
+        return this.$label.value.length;
     }, ['label']);
     tie("text", 'test');
     tie("bool", false);
