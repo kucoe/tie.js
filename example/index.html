@@ -12,7 +12,7 @@
     <br/>
     <label for="text" data-tie="label2"></label>
     <br/>
-    Sure? <input type="checkbox" data-tie="bool"/><span data-tie="boollabel"></span>
+    Sure? <input type="checkbox" data-tie="bool"/><span data-tie="bool"></span>
 </div>
 <script src="../src/tie.js"></script>
 <script>
@@ -35,12 +35,9 @@
     }, ['label']);
     tie("text", 'test');
     tie("bool", false);
-    tie("boollabel", function(){
-        return this.$bool.value;
-    }, ['bool']);
     tie("trigger", {
         float: function (evt) {
-            if(evt.type === 'mouseover') {
+            if (evt.type === 'mouseover') {
                 this.value = 'Over';
                 this.$label2.style = 'color:green';
             } else {
@@ -51,7 +48,7 @@
         trigger: function () {
             tie('text', 'changed');
         },
-        value : 'Out',
+        value: 'Out',
         attrs: ['value',
             {name: 'mouseover', property: 'float'},
             {name: 'mouseout', property: 'float'},
