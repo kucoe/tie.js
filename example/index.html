@@ -1,20 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title></title>
+    <title>Tie example</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
 </head>
 <body>
 <div id="main" data-tie="app">
     <label for="text" data-tie="label"></label>
     <input id="text" name="text" type="text" data-tie="text"/>
+    <input type="button" data-tie="trigger"/>
     <br/>
     <label for="text" data-tie="label2"></label>
+    <br/>
+    Sure? <input type="checkbox" data-tie="bool"/><span data-tie="boollabel"></span>
 </div>
 <script src="../src/tie.js"></script>
 <script>
     var app = tie("app", {});
     tie("label", {
-        style:'color:red',
+        style: 'color:red',
         attrs: ['style',
             {name: 'value', value: function () {
                 return this.$text.value
@@ -22,7 +26,7 @@
         ]
     }, ['text']);
     tie("label2", {
-        style:'color:red',
+        style: 'color:red',
         attrs: ['style',
             {name: 'value', value: function () {
                 return this.$label.value.length;
@@ -30,6 +34,30 @@
         ]
     }, ['label']);
     tie("text", 'test');
+    tie("bool", false);
+    tie("boollabel", function(){
+        return this.$bool.value;
+    }, ['bool']);
+    tie("trigger", {
+        float: function (evt) {
+            if(evt.type === 'mouseover') {
+                this.value = 'Over';
+                this.$label2.style = 'color:green';
+            } else {
+                this.value = 'Out';
+                this.$label2.style = 'color:red';
+            }
+        },
+        trigger: function () {
+            tie('text', 'changed');
+        },
+        value : 'Out',
+        attrs: ['value',
+            {name: 'mouseover', property: 'float'},
+            {name: 'mouseout', property: 'float'},
+            {name: 'click', property: 'trigger'}
+        ]
+    }, ['label2']);
 </script>
 
 </body>

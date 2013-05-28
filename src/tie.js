@@ -87,12 +87,25 @@
         }
         el.addEventListener('change', listener);
         this.$ = el;
+        this.obj = obj;
+        this.events = {};
     };
 
     $.prototype = {
         setAttribute: function (name, value) {
             if (VALUE === name) {
                 this.value(value);
+            } else if (_.isFunction(value)) {
+                var obj = this.obj;
+                var handler = this.events[name];
+                if (handler) {
+                    this.$.removeEventListener(name, handler);
+                }
+                handler = function (event) {
+                    value.call(obj, event);
+                };
+                this.events[name] = handler;
+                this.$.addEventListener(name, handler);
             } else {
                 this.$.setAttribute(name, value);
             }
@@ -239,7 +252,7 @@
             _.forEach(dependencies, function (dep) {
                 var found = ties[dep];
                 if (!found) {
-                    found = {name : dep, touch: [], obj: {_empty: true}};
+                    found = {name: dep, touch: [], obj: {_empty: true}};
                     this.define(dep, found, ties);
                 }
                 tied.obj['$' + dep] = found.obj;
@@ -292,6 +305,7 @@
                     return v;
                 },
                 $apply: function () {
+                    this.$render();
                     _.forEach(this.touch, function (item) {
                         var tie = ties[item];
                         tie.obj['$' + this.name] = this.obj;
@@ -325,11 +339,11 @@
                             var val = this.value;
                             var property = this.property;
                             if (typeof val === "function") {
-                                try{
+                                try {
                                     val = val.call(obj);
-                                } catch  (e) {
+                                } catch (e) {
                                     val = undefined;
-                                    if(self.$ready()) {
+                                    if (self.$ready()) {
                                         console.warn('Is ready and had an error');
                                     }
                                 }
