@@ -12,7 +12,12 @@
     <br/>
     <label for="text" data-tie="label2"></label>
     <br/>
-    Sure? <input type="checkbox" data-tie="bool"/><span data-tie="bool"></span>
+    <label for="bool">Sure?</label>
+    <input id="bool" type="checkbox" data-tie="bool"/>
+    <span data-tie="bool"></span>
+    <br/>
+    <input type="radio" data-tie="male"/>
+    <input type="radio" data-tie="female"/>
 </div>
 <script src="../src/tie.js"></script>
 <script>
@@ -29,7 +34,17 @@
         return this.$label.value.length;
     }, ['label']);
     tie("text", 'test');
-    tie("bool", false);
+    tie("bool", true);
+    tie("male", {
+        value: 'Male',
+        checked: true,
+        attrs: ['value', 'checked']
+    });
+    tie("female", {
+        value: 'Female',
+        checked: false,
+        attrs: ['value', 'checked']
+    });
     tie("trigger", {
         float: function (evt) {
             if (evt.type === 'mouseover') {

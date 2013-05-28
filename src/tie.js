@@ -113,7 +113,24 @@
 
         value: function (val) {
             var v;
-            if (_.isDefined(this.$.value)) {
+            if(_.isDefined(this.$.checked)){
+                if (_.isDefined(val)) {
+                    if(_.isBoolean(val)){
+                        if(val){
+                            this.$.setAttribute('checked', val);
+                        } else {
+                            this.$.removeAttribute('checked');
+                        }
+                    } else {
+                        this.$.value = val;
+                    }
+                } else {
+                    v = this.$.value;
+                    if(!v) {
+                        v = this.$.hasAttribute('checked');
+                    }
+                }
+            } else if (_.isDefined(this.$.value)) {
                 if (_.isDefined(val)) {
                     this.$.value = val;
                 } else {
@@ -131,12 +148,6 @@
     };
 
     var _ = {
-
-        valueFn: function (value) {
-            return function () {
-                return value;
-            };
-        },
 
         isUndefined: function (value) {
             return typeof value == 'undefined';
