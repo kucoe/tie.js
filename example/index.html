@@ -16,8 +16,8 @@
     <input id="bool" type="checkbox" data-tie="bool"/>
     <span data-tie="bool"></span>
     <br/>
-    <input type="radio" data-tie="male"/>
-    <input type="radio" data-tie="female"/>
+
+    <input type="radio" data-tie="sex"/>
 </div>
 <script src="../src/tie.js"></script>
 <script>
@@ -35,15 +35,9 @@
     }, ['label']);
     tie("text", 'test');
     tie("bool", true);
-    tie("male", {
-        value: 'Male',
-        checked: true,
-        attrs: ['value', 'checked']
-    });
-    tie("female", {
-        value: 'Female',
-        checked: false,
-        attrs: ['value', 'checked']
+    tie("sex", {
+        values: [{text:'Male', value:true}, {text:'Female', value:false}],
+        attrs: ['value', 'text']
     });
     tie("trigger", {
         float: function (evt) {

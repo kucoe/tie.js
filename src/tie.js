@@ -1,6 +1,8 @@
 (function (window) {
 
     var VALUE = 'value';
+    var VALUES = 'values';
+    var TEXT = 'text';
 
     var proxy = function (tie) {
         var obj = tie.obj;
@@ -89,12 +91,16 @@
         this.$ = el;
         this.obj = obj;
         this.events = {};
+        this.isInput = _.eqi(el.tagName,'input');
+        this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox') ;
     };
 
     $.prototype = {
         setAttribute: function (name, value) {
             if (VALUE === name) {
                 this.value(value);
+            } else if (TEXT === name) {
+                this.text(value);
             } else if (_.isFunction(value)) {
                 var obj = this.obj;
                 var handler = this.events[name];
@@ -113,34 +119,42 @@
 
         value: function (val) {
             var v;
-            if(_.isDefined(this.$.checked)){
+            if (this.hasCheck) {
                 if (_.isDefined(val)) {
-                    if(_.isBoolean(val)){
-                        if(val){
-                            this.$.setAttribute('checked', val);
-                        } else {
-                            this.$.removeAttribute('checked');
-                        }
+                    if (val) {
+                        this.$.setAttribute('checked', 'checked');
                     } else {
-                        this.$.value = val;
+                        this.$.removeAttribute('checked');
                     }
                 } else {
-                    v = this.$.value;
-                    if(!v) {
-                        v = this.$.hasAttribute('checked');
-                    }
+                    v = this.$.hasAttribute('checked');
                 }
-            } else if (_.isDefined(this.$.value)) {
+            } else if (this.isInput) {
                 if (_.isDefined(val)) {
                     this.$.value = val;
                 } else {
                     v = this.$.value;
                 }
             } else {
-                if (_.isDefined(val)) {
-                    this.$.innerHTML = val;
+                v = this.text(val);
+            }
+            return v;
+        },
+
+        text: function (text) {
+            var v = null;
+            if (_.isDefined(text)) {
+                if(this.isInput) {
+                    var textNode = window.document.createTextNode(text);
+                    this.$.parentNode.insertBefore(textNode, this.$.nextSibling);
                 } else {
-                    v = this.$.innerHTML;
+                    this.$.textContent = text
+                }
+            } else {
+                if(this.isInput) {
+                    v = this.$.nextSibling.textContent || '';
+                } else {
+                    v = this.$.textContent || '';
                 }
             }
             return v;
@@ -206,6 +220,10 @@
             return parseInt(str, 10);
         },
 
+        eqi: function(val1, val2) {
+            return this.lowercase(val1) === this.lowercase(val2);
+        },
+
         forEach: function (collection, callback, thisArg) {
             if (callback && this.isCollection(collection)) {
                 if (!thisArg) {
@@ -249,14 +267,16 @@
             }
         },
 
-        wrapFunction : function(fn) {
+        wrapFunction: function (fn) {
             return {
-                attrs: [{name: 'value', value: fn}]
+                attrs: [
+                    {name: 'value', value: fn}
+                ]
             }
         },
 
         check: function (obj) {
-            if(_.isFunction(obj)) {
+            if (_.isFunction(obj)) {
                 obj = this.wrapFunction(obj);
             } else if (!_.isObject(obj) || _.isDate(obj)) {
                 obj = this.wrapPrimitive(obj);
@@ -350,6 +370,13 @@
                     });
                 },
                 $render: function () {
+                    var values = this.obj.values;
+                    if(values) {
+                        _.forEach(values, function (value) {
+
+                        });
+                    }
+
                     var attrs = this.obj.attrs;
                     if (attrs) {
                         var self = this;
