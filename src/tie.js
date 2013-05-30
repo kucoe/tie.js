@@ -85,7 +85,16 @@
             }
         };
         if (_.isDefined(el.value)) {
-            el.addEventListener('input', listener);
+            if('oninput' in el){
+                el.addEventListener('input', listener);
+            } else {
+                el.addEventListener('keydown', function(event) {
+                    var key = event.keyCode;
+                    // ignore command         modifiers                   arrows
+                    if (key === 91 || (15 < key && key < 19) || (37 <= key && key <= 40)) return;
+                    listener(event);
+                });
+            }
         }
         el.addEventListener('change', listener);
         this.$ = el;
@@ -127,7 +136,7 @@
                         this.$.removeAttribute('checked');
                     }
                 } else {
-                    v = this.$.hasAttribute('checked');
+                    v = this.$.checked;
                 }
             } else if (this.isInput) {
                 if (_.isDefined(val)) {
