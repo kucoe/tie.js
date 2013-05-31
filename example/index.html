@@ -31,12 +31,18 @@
         ]
     }, ['text']);
     tie("label2", function () {
+        if(this.isUndefined(this.$label.value)) {
+            return 0;
+        }
         return this.$label.value.length;
     }, ['label']);
     tie("text", 'test');
     tie("bool", true);
     tie("sex", {
-        values: [{text:'Male', value:true}, {text:'Female', value:false}],
+        values: [
+            {text:'Male', value:true},
+            {text:'Female', value:false}
+        ],
         attrs: ['value', 'text']
     });
     tie("trigger", {

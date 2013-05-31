@@ -44,7 +44,7 @@
         for (var prop in obj) {
             if (obj.hasOwnProperty(prop)) {
                 props.push(prop);
-                if ('attrs' === prop) {
+                if ('attrs' == prop || 'prototype' == prop) {
                     continue; // skip attributes
                 }
                 var desc = Object.getOwnPropertyDescriptor(obj, prop);
@@ -75,20 +75,19 @@
     };
 
     var $ = function (el, obj) {
-        var main = this;
         var listener = function () {
-            var value = main.value();
+            var value = this.value();
             value = _.trim(value);
 
             if (obj[VALUE] !== value) {
                 obj[VALUE] = value;
             }
-        };
+        }.bind(this);
         if (_.isDefined(el.value)) {
-            if('oninput' in el){
+            if ('oninput' in el) {
                 el.addEventListener('input', listener);
             } else {
-                el.addEventListener('keydown', function(event) {
+                el.addEventListener('keydown', function (event) {
                     var key = event.keyCode;
                     // ignore command         modifiers                   arrows
                     if (key === 91 || (15 < key && key < 19) || (37 <= key && key <= 40)) return;
@@ -100,8 +99,8 @@
         this.$ = el;
         this.obj = obj;
         this.events = {};
-        this.isInput = _.eqi(el.tagName,'input');
-        this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox') ;
+        this.isInput = _.eqi(el.tagName, 'input');
+        this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
     };
 
     $.prototype = {
@@ -122,7 +121,11 @@
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
             } else {
-                this.$.setAttribute(name, value);
+                if(_.isDefined(value)){
+                    this.$.setAttribute(name, value);
+                } else {
+                    this.$.setAttribute(name, "");
+                }
             }
         },
 
@@ -153,14 +156,14 @@
         text: function (text) {
             var v = null;
             if (_.isDefined(text)) {
-                if(this.isInput) {
+                if (this.isInput) {
                     var textNode = window.document.createTextNode(text);
                     this.$.parentNode.insertBefore(textNode, this.$.nextSibling);
                 } else {
                     this.$.textContent = text
                 }
             } else {
-                if(this.isInput) {
+                if (this.isInput) {
                     v = this.$.nextSibling.textContent || '';
                 } else {
                     v = this.$.textContent || '';
@@ -229,7 +232,7 @@
             return parseInt(str, 10);
         },
 
-        eqi: function(val1, val2) {
+        eqi: function (val1, val2) {
             return this.lowercase(val1) === this.lowercase(val2);
         },
 
@@ -251,10 +254,23 @@
         }
     };
 
+    var model = function(obj) {
+        for (var prop in obj ) {
+            if ( obj.hasOwnProperty(prop) ) {
+                this[prop] = obj[prop];
+            }
+        }
+    };
+
+    model.prototype = _;
+
     var tie = function () {
         var ties = {};
         return function (name, tiedObject, dependencies) {
-            return tie.prototype.init(name, tiedObject, dependencies, ties);
+            var r = tie.prototype.init(name, tiedObject, dependencies, ties);
+            tie.prototype.define(name, r, ties);
+            r.$render();
+            return r.obj;
         }
     };
     tie.prototype = {
@@ -284,13 +300,29 @@
             }
         },
 
+        wrapArray: function (array) {
+            var checked = [];
+            _.forEach(array, function (item) {
+                checked.push(this.check(item));
+            }, this);
+            return {
+                values: checked,
+                attrs: ['value']
+            };
+        },
+
         check: function (obj) {
             if (_.isFunction(obj)) {
                 obj = this.wrapFunction(obj);
             } else if (!_.isObject(obj) || _.isDate(obj)) {
                 obj = this.wrapPrimitive(obj);
+            } else if (_.isArray(obj)) {
+                obj = this.wrapArray(obj);
             }
-            return obj;
+            if (_.isUndefined(obj.attrs)) {
+                obj.attrs = [];
+            }
+            return new model(obj);
         },
 
         resolve: function (tied, dependencies, ties) {
@@ -380,7 +412,7 @@
                 },
                 $render: function () {
                     var values = this.obj.values;
-                    if(values) {
+                    if (values) {
                         _.forEach(values, function (value) {
 
                         });
@@ -399,7 +431,7 @@
                                 } catch (e) {
                                     val = undefined;
                                     if (self.$ready()) {
-                                        console.warn('Is ready and had an error');
+                                        console.warn('Is ready and had an error:' + e.message);
                                     }
                                 }
                             } else {
@@ -424,7 +456,8 @@
                             attr.val = valueFn;
                             var name = attr.name;
                             this.$attrs(this.$, {name: name, value: attr.val(this.obj)});
-                        }, this)
+                        }, this);
+                        this.$attrs(this.$, {name: 'data-tied'});
                     }
                 }
 
@@ -433,12 +466,9 @@
             r.$ = this.select(name, r.obj);
             this.resolve(r, dependencies, ties);
             r.obj = proxy(r);
-            this.define(name, r, ties);
-            r.$render();
             return r;
         }
     };
     window.tie = tie();
-    window.tie.utils = _;
-})
-    (window);
+
+})(window);
