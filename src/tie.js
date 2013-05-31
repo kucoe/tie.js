@@ -176,11 +176,11 @@
     var _ = {
 
         isUndefined: function (value) {
-            return typeof value == 'undefined';
+            return value == undefined;
         },
 
         isDefined: function (value) {
-            return typeof value != 'undefined';
+            return value != undefined;
         },
 
         isObject: function (value) {
