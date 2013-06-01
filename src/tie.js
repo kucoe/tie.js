@@ -320,7 +320,7 @@
 
     model.prototype = _;
 
-    var bind = function(name, dependencies, ties) {
+    var bind = function (name, dependencies, ties) {
         this.name = name;
         this.touch = [];
         this.values = [];
@@ -335,7 +335,7 @@
         };
     };
 
-    bind.prototype =  {
+    bind.prototype = {
         $ready: function () {
             var ready = true;
             _.forEach(this.depends, function (dep) {
