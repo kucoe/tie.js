@@ -4,6 +4,10 @@
     var VALUES = 'values';
     var TEXT = 'text';
 
+    var s4 = function () {
+        return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    };
+
     var proxy = function (tie) {
         var obj = tie.obj;
         var watch = function (desc, prop, dependency) {
@@ -74,13 +78,28 @@
         return obj;
     };
 
-    var $ = function (el, obj) {
+    var q = {
+        next: function (index, newElements) {
+            var parent = index.parentNode;
+            _.forEach(newElements, function (node) {
+                parent.insertBefore(node, index.nextSibling);
+                index = node;
+            });
+        },
+
+        remove: function (element) {
+            var parent = element.parentNode;
+            if (parent) parent.removeChild(element);
+        }
+    };
+
+    var $ = function (el, tied) {
         var listener = function () {
             var value = this.value();
             value = _.trim(value);
 
-            if (obj[VALUE] !== value) {
-                obj[VALUE] = value;
+            if (tied.obj[VALUE] !== value) {
+                tied.obj[VALUE] = value;
             }
         }.bind(this);
         if (_.isDefined(el.value)) {
@@ -97,7 +116,8 @@
         }
         el.addEventListener('change', listener);
         this.$ = el;
-        this.obj = obj;
+        this._id = _.uid();
+        this.tied = tied;
         this.events = {};
         this.isInput = _.eqi(el.tagName, 'input');
         this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
@@ -110,7 +130,7 @@
             } else if (TEXT === name) {
                 this.text(value);
             } else if (_.isFunction(value)) {
-                var obj = this.obj;
+                var obj = this.tied.obj;
                 var handler = this.events[name];
                 if (handler) {
                     this.$.removeEventListener(name, handler);
@@ -121,7 +141,7 @@
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
             } else {
-                if(_.isDefined(value)){
+                if (_.isDefined(value)) {
                     this.$.setAttribute(name, value);
                 } else {
                     this.$.setAttribute(name, "");
@@ -158,7 +178,7 @@
             if (_.isDefined(text)) {
                 if (this.isInput) {
                     var textNode = window.document.createTextNode(text);
-                    this.$.parentNode.insertBefore(textNode, this.$.nextSibling);
+                    this.next(textNode);
                 } else {
                     this.$.textContent = text
                 }
@@ -170,6 +190,24 @@
                 }
             }
             return v;
+        },
+
+        remove: function () {
+            var element = this.$;
+            var array = this.tied.$;
+            delete array[array.indexOf(this)];
+            delete this.$;
+            delete this.tied;
+            delete this._id;
+            delete this.isInput;
+            delete this.hasCheck;
+            delete  this.events;
+            q.remove(element);
+        },
+
+        next: function (newElements) {
+            var index = this.$;
+            q.next(index, newElements);
         }
     };
 
@@ -237,32 +275,174 @@
         },
 
         forEach: function (collection, callback, thisArg) {
-            if (callback && this.isCollection(collection)) {
-                if (!thisArg) {
-                    thisArg = this;
-                }
-                var index = -1;
-                var length = collection.length;
+            if (!thisArg) {
+                thisArg = this;
+            }
+            if (callback) {
+                if (this.isCollection(collection)) {
+                    var index = -1;
+                    var length = collection.length;
 
-                while (++index < length) {
-                    if (callback.call(thisArg, collection[index], index, collection) === false) {
-                        break;
+                    while (++index < length) {
+                        if (callback.call(thisArg, collection[index], index, collection) === false) {
+                            break;
+                        }
                     }
+                } else {
+                    callback.call(thisArg, collection, 0, [collection]);
                 }
             }
             return collection;
-        }
-    };
+        },
 
-    var model = function(obj) {
-        for (var prop in obj ) {
-            if ( obj.hasOwnProperty(prop) ) {
-                this[prop] = obj[prop];
+        uid: function () {
+            return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
+        },
+
+        extend: function (dest, source) {
+            if (this.isCollection(dest) && this.isCollection(source)) {
+                this.forEach(source, function (item) {
+                    dest.push(item);
+                });
+            } else {
+                for (var prop in source) {
+                    if (source.hasOwnProperty(prop)) {
+                        dest[prop] = source[prop];
+                    }
+                }
             }
         }
     };
 
+    var model = function (obj) {
+        _.extend(this, obj);
+    };
+
     model.prototype = _;
+
+    var bind = function(name, dependencies, ties) {
+        this.name = name;
+        this.touch = [];
+        this.values = [];
+        this.depends = dependencies || [];
+        this.$apply = function () {
+            this.$render();
+            _.forEach(this.touch, function (item) {
+                var tie = ties[item];
+                tie.obj['$' + this.name] = this.obj;
+                tie.$render();
+            }, this);
+        };
+    };
+
+    bind.prototype =  {
+        $ready: function () {
+            var ready = true;
+            _.forEach(this.depends, function (dep) {
+                var d = this.obj['$' + dep];
+                if (d._empty) {
+                    ready = false;
+                    return false;
+                }
+                return true;
+            }, this);
+            return ready;
+        },
+        $attrValue: function (name, value) {
+            var v = null;
+            if (this.obj.attrs) {
+                var attr = this.$attr(name);
+                if (_.isUndefined(value)) {
+                    if (attr) {
+                        v = attr.val(this.obj);
+                    }
+                } else {
+                    if (attr && attr.property) {
+                        this.obj[attr.property] = value;
+                    }
+                }
+            }
+            return v;
+        },
+        $attr: function (name) {
+            var res = null;
+            if (this.obj.attrs) {
+                _.forEach(this.obj.attrs, function (attr) {
+                    if (_.isObject(attr) && attr.name === name) {
+                        res = attr;
+                        return false;
+                    }
+                    return true;
+                });
+            }
+            return res;
+        },
+        $attrs: function (elements, attr) {
+            _.forEach(elements, function (el) {
+                el.setAttribute(attr.name, attr.value);
+            });
+        },
+        $render: function () {
+            var values = this.obj.values;
+            if (values) {
+                _.forEach(values, function (value) {
+                    var r = this.values[value._id];
+                    if (r) {
+                        r.name = this.name;
+                        r.$render();
+                    }
+                }, this)
+            } else {
+                var attrs = this.obj.attrs;
+                if (attrs) {
+                    var self = this;
+                    var valueFn = function (obj) {
+                        var name = this.name;
+                        var val = this.value;
+                        var property = this.property;
+                        if (typeof val === "function") {
+                            try {
+                                val = val.call(obj);
+                            } catch (e) {
+                                val = undefined;
+                                if (self.$ready()) {
+                                    console.warn('Is ready and had an error:' + e.message);
+                                }
+                            }
+                        } else {
+                            if (property && _.isUndefined(val)) {
+                                val = obj[property];
+                            }
+                            if (!name) {
+                                throw new Error("Where is your export?")
+                            }
+                            if (_.isUndefined(property) && _.isUndefined(val)) {
+                                val = obj[name];
+                            }
+                        }
+                        return val;
+                    };
+                    _.forEach(attrs, function (attr) {
+                        if (_.isString(attr)) {
+                            attr = {
+                                name: attr
+                            };
+                        }
+                        attr.val = valueFn;
+                        var name = attr.name;
+                        this.$attrs(this.$, {name: name, value: attr.val(this.obj)});
+                    }, this);
+                    this.$attrs(this.$, {name: 'data-tied'});
+                    _.forEach(this.$, function (el) {
+                        if (el.isInput) {
+                            el.setAttribute('name', this.name);
+                        }
+                    }, this);
+                }
+            }
+        }
+
+    };
 
     var tie = function () {
         var ties = {};
@@ -275,11 +455,11 @@
     };
     tie.prototype = {
 
-        select: function (tieName, obj) {
+        select: function (tieName, tied) {
             var nodes = window.document.querySelectorAll('[data-tie="' + tieName + '"]');
             var res = [];
             _.forEach(nodes, function (el) {
-                res.push(new $(el, obj));
+                res.push(new $(el, tied));
             });
             return res;
         },
@@ -301,14 +481,21 @@
         },
 
         wrapArray: function (array) {
-            var checked = [];
-            _.forEach(array, function (item) {
-                checked.push(this.check(item));
-            }, this);
+            var checked = this.checkArray(array);
             return {
                 values: checked,
                 attrs: ['value']
             };
+        },
+
+        checkArray: function (array) {
+            var checked = [];
+            _.forEach(array, function (item) {
+                var o = this.check(item);
+                o._id = _.uid();
+                checked.push(o);
+            }, this);
+            return checked;
         },
 
         check: function (obj) {
@@ -319,10 +506,38 @@
             } else if (_.isArray(obj)) {
                 obj = this.wrapArray(obj);
             }
+            if (_.isDefined(obj.values)) {
+                obj.values = this.checkArray(obj.values);
+            }
             if (_.isUndefined(obj.attrs)) {
                 obj.attrs = [];
             }
             return new model(obj);
+        },
+
+        prepare: function (tied, dependencies, ties) {
+            var values = tied.obj.values;
+            var lastNodes = {};
+            if (values) {
+                _.forEach(values, function (value, i) {
+                    var name = tied.name + "_" + i;
+                    _.forEach(tied.$, function (el) {
+                        var node = el.$;
+                        node.style.display = 'none';
+                        var lastNode = lastNodes[el._id];
+                        if (!lastNode) {
+                            lastNode = node;
+                        }
+                        var newElement = node.cloneNode(true);
+                        newElement.setAttribute('data-tie', name);
+                        newElement.style.display = null;
+                        q.next(lastNode, newElement);
+                        lastNodes[el._id] = newElement;
+                    });
+                    _.extend(value.attrs, tied.obj.attrs);
+                    tied.values[value._id] = this.init(name, value, dependencies, ties);
+                }, this);
+            }
         },
 
         resolve: function (tied, dependencies, ties) {
@@ -352,120 +567,12 @@
         },
 
         init: function (name, tiedObject, dependencies, ties) {
-            var r = {
-                name: name,
-                touch: [],
-                depends: dependencies || [],
-                $ready: function () {
-                    var ready = true;
-                    _.forEach(this.depends, function (dep) {
-                        var d = this.obj['$' + dep];
-                        if (d._empty) {
-                            ready = false;
-                            return false;
-                        }
-                        return true;
-                    }, this);
-                    return ready;
-                },
-                $attrValue: function (name, value) {
-                    var v = null;
-                    if (this.obj.attrs) {
-                        var attr = this.$attr(name);
-                        if (_.isUndefined(value)) {
-                            if (attr) {
-                                v = attr.val(this.obj);
-                            }
-                        } else {
-                            if (attr && attr.property) {
-                                this.obj[attr.property] = value;
-                            }
-                        }
-                    }
-                    return v;
-                },
-                $apply: function () {
-                    this.$render();
-                    _.forEach(this.touch, function (item) {
-                        var tie = ties[item];
-                        tie.obj['$' + this.name] = this.obj;
-                        tie.$render();
-                    }, this);
-                },
-                $attr: function (name) {
-                    var res = null;
-                    if (this.obj.attrs) {
-                        _.forEach(this.obj.attrs, function (attr) {
-                            if (_.isObject(attr) && attr.name === name) {
-                                res = attr;
-                                return false;
-                            }
-                            return true;
-                        });
-                    }
-                    return res;
-                },
-                $attrs: function (elements, attr) {
-                    _.forEach(elements, function (el) {
-                        el.setAttribute(attr.name, attr.value);
-                    });
-                },
-                $render: function () {
-                    var values = this.obj.values;
-                    if (values) {
-                        _.forEach(values, function (value) {
-
-                        });
-                    }
-
-                    var attrs = this.obj.attrs;
-                    if (attrs) {
-                        var self = this;
-                        var valueFn = function (obj) {
-                            var name = this.name;
-                            var val = this.value;
-                            var property = this.property;
-                            if (typeof val === "function") {
-                                try {
-                                    val = val.call(obj);
-                                } catch (e) {
-                                    val = undefined;
-                                    if (self.$ready()) {
-                                        console.warn('Is ready and had an error:' + e.message);
-                                    }
-                                }
-                            } else {
-                                if (property && _.isUndefined(val)) {
-                                    val = obj[property];
-                                }
-                                if (!name) {
-                                    throw new Error("Where is your export?")
-                                }
-                                if (_.isUndefined(property) && _.isUndefined(val)) {
-                                    val = obj[name];
-                                }
-                            }
-                            return val;
-                        };
-                        _.forEach(attrs, function (attr) {
-                            if (_.isString(attr)) {
-                                attr = {
-                                    name: attr
-                                };
-                            }
-                            attr.val = valueFn;
-                            var name = attr.name;
-                            this.$attrs(this.$, {name: name, value: attr.val(this.obj)});
-                        }, this);
-                        this.$attrs(this.$, {name: 'data-tied'});
-                    }
-                }
-
-            };
+            var r = new bind(name, dependencies, ties);
             r.obj = this.check(tiedObject);
-            r.$ = this.select(name, r.obj);
+            r.$ = this.select(name, r);
             this.resolve(r, dependencies, ties);
             r.obj = proxy(r);
+            this.prepare(r, dependencies, ties);
             return r;
         }
     };

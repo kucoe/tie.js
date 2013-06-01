@@ -7,7 +7,7 @@
 <body>
 <div id="main" data-tie="app">
     <label for="text" data-tie="label"></label>
-    <input id="text" name="text" type="text" data-tie="text"/>
+    <input id="text" type="text" data-tie="text"/>
     <input type="button" data-tie="trigger"/>
     <br/>
     <label for="text" data-tie="label2"></label>
@@ -18,8 +18,12 @@
     <br/>
 
     <input type="radio" data-tie="sex"/>
+    <ul>
+        <li data-tie="sex"></li>
+    </ul>
+    <span data-tie="text"></span>
 </div>
-<script src="../src/tie.js"></script>
+<script src="../src/tie-all.js"></script>
 <script>
     var app = tie("app", {});
     tie("label", {
