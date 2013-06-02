@@ -4,11 +4,12 @@ var model = function (obj) {
 
 model.prototype = _;
 
-var bind = function(name, dependencies, ties) {
+var bind = function (name, dependencies, ties) {
     this.name = name;
     this.touch = [];
-    this.values = [];
+    this.values = {};
     this.depends = dependencies || [];
+    this.rendered = false;
     this.$apply = function () {
         this.$render();
         _.forEach(this.touch, function (item) {
@@ -19,7 +20,7 @@ var bind = function(name, dependencies, ties) {
     };
 };
 
-bind.prototype =  {
+bind.prototype = {
     $ready: function () {
         var ready = true;
         _.forEach(this.depends, function (dep) {
@@ -66,14 +67,27 @@ bind.prototype =  {
             el.setAttribute(attr.name, attr.value);
         });
     },
+    $show: function (shown) {
+        _.forEach(this.$, function (el) {
+            el.show(shown);
+        }, this);
+        for (var id in  this.values) {
+            if (this.values.hasOwnProperty(id)) {
+                var value = this.values[id];
+                value.$show(shown);
+            }
+        }
+    },
     $render: function () {
         var values = this.obj.values;
         if (values) {
             _.forEach(values, function (value) {
                 var r = this.values[value._id];
                 if (r) {
+                    var oldName = r.name;
                     r.name = this.name;
                     r.$render();
+                    r.name = oldName;
                 }
             }, this)
         } else {
@@ -124,6 +138,8 @@ bind.prototype =  {
                 }, this);
             }
         }
+        this.$show(this.obj.shown);
+        this.rendered = true;
     }
 
 };

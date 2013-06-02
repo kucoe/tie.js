@@ -10,6 +10,16 @@ var q = {
     remove: function (element) {
         var parent = element.parentNode;
         if (parent) parent.removeChild(element);
+    },
+
+    ready: function (fn) {
+        // check if document already is loaded
+        if (document.readyState === 'complete') {
+            setTimeout(fn, 0);
+        } else {
+            window.addEventListener('load', fn);
+        }
+        window.addEventListener('hashchange', fn);
     }
 };
 
@@ -41,6 +51,8 @@ var $ = function (el, tied) {
     this.events = {};
     this.isInput = _.eqi(el.tagName, 'input');
     this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
+    this.display = el.style.display;
+    this.shown = true;
 };
 
 $.prototype = {
@@ -128,5 +140,20 @@ $.prototype = {
     next: function (newElements) {
         var index = this.$;
         q.next(index, newElements);
+    },
+
+    show: function (show) {
+        if(this.shown === show) {
+            return;
+        }
+        if (!show) {
+            this.display = this.$.style.display;
+            this.$.style.display = 'none';
+            console.log('Hiding ' + this.tied.name);
+        } else {
+            this.$.style.display = this.display;
+            console.log('Showing ' + this.tied.name);
+        }
+        this.shown = show;
     }
 };

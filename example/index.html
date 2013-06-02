@@ -9,6 +9,7 @@
     <label for="text" data-tie="label"></label>
     <input id="text" type="text" data-tie="text"/>
     <input type="button" data-tie="trigger"/>
+    <span data-tie="text"></span>
     <br/>
     <label for="text" data-tie="label2"></label>
     <br/>
@@ -21,13 +22,19 @@
     <ul>
         <li data-tie="sex"></li>
     </ul>
-    <span data-tie="text"></span>
+
+    <a href="#/">Home</a>
+    <a href="#labels">Labels</a>
+    <a href="#sex">Sex</a>
 </div>
 <script src="../src/tie.js"></script>
 <script>
-    var app = tie("app", {});
+    tie("app", {
+        routes:['/', 'labels', 'sex']
+    });
     tie("label", {
         style: 'color:red',
+        routes: ['labels'],
         attrs: ['style',
             {name: 'value', value: function () {
                 return this.$text.value
@@ -41,12 +48,13 @@
         return this.$label.value.length;
     }, ['label']);
     tie("text", 'test');
-    tie("bool", true);
+    tie("bool", {value:true, attrs :['value'], routes:['-', 'sex']});
     tie("sex", {
         values: [
             {text:'Male', value:true},
             {text:'Female', value:false}
         ],
+        routes: ['sex'],
         attrs: ['value', 'text']
     });
     tie("trigger", {

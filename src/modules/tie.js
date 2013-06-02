@@ -1,9 +1,20 @@
+var app = null;
+
 var tie = function () {
     var ties = {};
     return function (name, tiedObject, dependencies) {
+        if(name != APP && ties[APP] == null) {
+            throw new Error('Please define your app tie first');
+        }
         var r = tie.prototype.init(name, tiedObject, dependencies, ties);
         tie.prototype.define(name, r, ties);
-        r.$render();
+        if(name == APP) {
+            app = r;
+            routes.init();
+            q.ready(function(){
+                routes.locate(ties);
+            });
+        }
         return r.obj;
     }
 };
@@ -63,19 +74,29 @@ tie.prototype = {
         if (_.isDefined(obj.values)) {
             obj.values = this.checkArray(obj.values);
         }
+        if (_.isUndefined(obj.shown)) {
+            obj.shown = true;
+        }
         if (_.isUndefined(obj.attrs)) {
             obj.attrs = [];
+        }
+        if (_.isUndefined(obj.routes)) {
+            if(app != null) {
+                obj.routes = app.obj.routes;
+            } else {
+                obj.routes = ['/'];
+            }
         }
         return new model(obj);
     },
 
-    prepare: function (tied, dependencies, ties) {
-        var values = tied.obj.values;
+    prepare: function (bind, dependencies, ties) {
+        var values = bind.obj.values;
         var lastNodes = {};
         if (values) {
             _.forEach(values, function (value, i) {
-                var name = tied.name + "_" + i;
-                _.forEach(tied.$, function (el) {
+                var name = bind.name + "_" + i;
+                _.forEach(bind.$, function (el) {
                     var node = el.$;
                     node.style.display = 'none';
                     var lastNode = lastNodes[el._id];
@@ -88,13 +109,13 @@ tie.prototype = {
                     q.next(lastNode, newElement);
                     lastNodes[el._id] = newElement;
                 });
-                _.extend(value.attrs, tied.obj.attrs);
-                tied.values[value._id] = this.init(name, value, dependencies, ties);
+                _.extend(value.attrs, bind.obj.attrs);
+                bind.values[value._id] = this.init(name, value, dependencies, ties);
             }, this);
         }
     },
 
-    resolve: function (tied, dependencies, ties) {
+    resolve: function (bind, dependencies, ties) {
         if (!dependencies) {
             return;
         }
@@ -104,19 +125,19 @@ tie.prototype = {
                 found = {name: dep, touch: [], obj: {_empty: true}};
                 this.define(dep, found, ties);
             }
-            tied.obj['$' + dep] = found.obj;
-            if (found.touch.indexOf(tied.name) == -1) {
-                found.touch.push(tied.name);
+            bind.obj['$' + dep] = found.obj;
+            if (found.touch.indexOf(bind.name) == -1) {
+                found.touch.push(bind.name);
             }
         }, this);
     },
 
-    define: function (name, tied, ties) {
+    define: function (name, bind, ties) {
         var old = ties[name];
-        ties[name] = tied;
+        ties[name] = bind;
         if (old && old.touch) {
-            tied.touch = old.touch;
-            tied.$apply();
+            bind.touch = old.touch;
+            bind.$apply();
         }
     },
 

@@ -1,6 +1,6 @@
 var proxy = function (tie) {
     var obj = tie.obj;
-    var watch = function (desc, prop, dependency) {
+    var observe = function (desc, prop, dependency) {
         if (desc && desc._proxyMark) {
             return; //proxy already set
         }
@@ -21,7 +21,11 @@ var proxy = function (tie) {
                     desc.value = val;
                 }
             }
-            tie.$apply();
+            if (prop == SHOWN) {
+                tie.$show(val);
+            } else {
+                tie.$apply();
+            }
         };
         var enumerable = desc ? desc.enumerable : false;
         Object.defineProperty(obj, prop, {
@@ -49,7 +53,7 @@ var proxy = function (tie) {
                 continue; // skip readonly
             }
             var dep = prop.charAt(0) === '$' && tie.depends.indexOf(prop.substring(1)) != -1;
-            watch(desc, prop, dep);
+            observe(desc, prop, dep);
         }
     }
     if (obj.attrs) {
@@ -61,7 +65,7 @@ var proxy = function (tie) {
             }
             var prop = attr.name;
             if (props.indexOf(prop) == -1 || attr.property || attr.value) {
-                watch(null, prop);
+                observe(null, prop);
             }
         }, this);
     }
