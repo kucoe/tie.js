@@ -71,12 +71,9 @@ bind.prototype = {
         _.forEach(this.$, function (el) {
             el.show(shown);
         }, this);
-        for (var id in  this.values) {
-            if (this.values.hasOwnProperty(id)) {
-                var value = this.values[id];
-                value.$show(shown);
-            }
-        }
+        _.forIn(this.values, function(value){
+            value.$show(shown);
+        });
     },
     $render: function () {
         var values = this.obj.values;

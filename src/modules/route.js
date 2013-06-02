@@ -19,15 +19,12 @@ var routes = {
         if (!current) {
             this.move(this.stripHash(window.location.href));
         } else {
-            for (var prop in ties) {
-                if (ties.hasOwnProperty(prop)) {
-                    var bind = ties[prop];
-                    bind.obj.shown = current.has(bind);
-                    if(!bind.rendered){
-                        bind.$render();
-                    }
+            _.forIn(ties, function (bind) {
+                bind.obj.shown = current.has(bind);
+                if (!bind.rendered) {
+                    bind.$render();
                 }
-            }
+            })
         }
     },
 

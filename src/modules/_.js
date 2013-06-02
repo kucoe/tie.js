@@ -82,6 +82,22 @@ var _ = {
         return collection;
     },
 
+    forIn: function (object, callback, thisArg) {
+        if (!thisArg) {
+            thisArg = this;
+        }
+        if (callback) {
+            for(var prop in object) {
+                if(object.hasOwnProperty(prop)) {
+                    if (callback.call(thisArg, object[prop], prop, object) === false) {
+                        break;
+                    }
+                }
+            }
+        }
+        return object;
+    },
+
     uid: function () {
         return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
     },

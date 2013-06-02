@@ -53,6 +53,7 @@ var $ = function (el, tied) {
     this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
     this.display = el.style.display;
     this.shown = true;
+    this.textEl = null;
 };
 
 $.prototype = {
@@ -109,8 +110,13 @@ $.prototype = {
         var v = null;
         if (_.isDefined(text)) {
             if (this.isInput) {
-                var textNode = window.document.createTextNode(text);
-                this.next(textNode);
+                if (this.textEl == null) {
+                    var textNode = window.document.createTextNode(text);
+                    this.next(textNode);
+                    this.textEl = textNode;
+                } else {
+                    this.textEl.textContent = text;
+                }
             } else {
                 this.$.textContent = text
             }
@@ -143,16 +149,20 @@ $.prototype = {
     },
 
     show: function (show) {
-        if(this.shown === show) {
+        if (this.shown === show) {
             return;
         }
         if (!show) {
             this.display = this.$.style.display;
             this.$.style.display = 'none';
-            console.log('Hiding ' + this.tied.name);
+            if(this.textEl != null){
+                this.textEl.style.display = 'none';
+            }
         } else {
             this.$.style.display = this.display;
-            console.log('Showing ' + this.tied.name);
+            if(this.textEl != null){
+                this.textEl.style.display = this.display;
+            }
         }
         this.shown = show;
     }
