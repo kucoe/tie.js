@@ -87,8 +87,8 @@ var _ = {
             thisArg = this;
         }
         if (callback) {
-            for(var prop in object) {
-                if(object.hasOwnProperty(prop)) {
+            for (var prop in object) {
+                if (object.hasOwnProperty(prop)) {
                     if (callback.call(thisArg, object[prop], prop, object) === false) {
                         break;
                     }

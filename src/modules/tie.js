@@ -3,15 +3,15 @@ var app = null;
 var tie = function () {
     var ties = {};
     return function (name, tiedObject, dependencies) {
-        if(name != APP && ties[APP] == null) {
+        if (name != APP && ties[APP] == null) {
             throw new Error('Please define your app tie first');
         }
         var r = tie.prototype.init(name, tiedObject, dependencies, ties);
         tie.prototype.define(name, r, ties);
-        if(name == APP) {
+        if (name == APP) {
             app = r;
             routes.init();
-            q.ready(function(){
+            q.ready(function () {
                 routes.locate(ties);
             });
         }
@@ -81,7 +81,7 @@ tie.prototype = {
             obj.attrs = [];
         }
         if (_.isUndefined(obj.routes)) {
-            if(app != null) {
+            if (app != null) {
                 obj.routes = app.obj.routes;
             } else {
                 obj.routes = ['/'];

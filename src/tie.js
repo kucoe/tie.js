@@ -308,12 +308,12 @@
             if (!show) {
                 this.display = this.$.style.display;
                 this.$.style.display = 'none';
-                if(this.textEl != null){
+                if (this.textEl != null) {
                     this.textEl.style.display = 'none';
                 }
             } else {
                 this.$.style.display = this.display;
-                if(this.textEl != null){
+                if (this.textEl != null) {
                     this.textEl.style.display = this.display;
                 }
             }
@@ -410,8 +410,8 @@
                 thisArg = this;
             }
             if (callback) {
-                for(var prop in object) {
-                    if(object.hasOwnProperty(prop)) {
+                for (var prop in object) {
+                    if (object.hasOwnProperty(prop)) {
                         if (callback.call(thisArg, object[prop], prop, object) === false) {
                             break;
                         }
@@ -513,7 +513,7 @@
             _.forEach(this.$, function (el) {
                 el.show(shown);
             }, this);
-            _.forIn(this.values, function(value){
+            _.forIn(this.values, function (value) {
                 value.$show(shown);
             });
         },
@@ -588,15 +588,15 @@
     var tie = function () {
         var ties = {};
         return function (name, tiedObject, dependencies) {
-            if(name != APP && ties[APP] == null) {
+            if (name != APP && ties[APP] == null) {
                 throw new Error('Please define your app tie first');
             }
             var r = tie.prototype.init(name, tiedObject, dependencies, ties);
             tie.prototype.define(name, r, ties);
-            if(name == APP) {
+            if (name == APP) {
                 app = r;
                 routes.init();
-                q.ready(function(){
+                q.ready(function () {
                     routes.locate(ties);
                 });
             }
@@ -666,7 +666,7 @@
                 obj.attrs = [];
             }
             if (_.isUndefined(obj.routes)) {
-                if(app != null) {
+                if (app != null) {
                     obj.routes = app.obj.routes;
                 } else {
                     obj.routes = ['/'];

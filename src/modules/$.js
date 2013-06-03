@@ -155,12 +155,12 @@ $.prototype = {
         if (!show) {
             this.display = this.$.style.display;
             this.$.style.display = 'none';
-            if(this.textEl != null){
+            if (this.textEl != null) {
                 this.textEl.style.display = 'none';
             }
         } else {
             this.$.style.display = this.display;
-            if(this.textEl != null){
+            if (this.textEl != null) {
                 this.textEl.style.display = this.display;
             }
         }

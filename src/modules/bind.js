@@ -71,7 +71,7 @@ bind.prototype = {
         _.forEach(this.$, function (el) {
             el.show(shown);
         }, this);
-        _.forIn(this.values, function(value){
+        _.forIn(this.values, function (value) {
             value.$show(shown);
         });
     },
