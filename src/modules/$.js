@@ -111,12 +111,10 @@ $.prototype = {
         if (_.isDefined(text)) {
             if (this.isInput) {
                 if (this.textEl == null) {
-                    var textNode = window.document.createTextNode(text);
-                    this.next(textNode);
-                    this.textEl = textNode;
-                } else {
-                    this.textEl.textContent = text;
+                    this.textEl = window.document.createElement('span');
+                    this.next(this.textEl);
                 }
+                this.textEl.textContent = text;
             } else {
                 this.$.textContent = text
             }
