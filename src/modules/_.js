@@ -108,11 +108,9 @@ var _ = {
                 dest.push(item);
             });
         } else {
-            for (var prop in source) {
-                if (source.hasOwnProperty(prop)) {
-                    dest[prop] = source[prop];
-                }
-            }
+            this.forIn(source, function (value, prop) {
+                dest[prop] = value;
+            });
         }
     }
 };

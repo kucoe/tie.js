@@ -4,18 +4,60 @@ var model = function (obj) {
 
 model.prototype = _;
 
+var safeCall = function (fn, fnThis, bindReady) {
+    var res;
+    try {
+        var args = Array.prototype.slice.call(arguments, 3);
+        res = fn.apply(fnThis, args);
+    } catch (e) {
+        res = undefined;
+        if (bindReady) {
+            console.warn('Is ready and had an error:' + e.message);
+        }
+    }
+    return res;
+};
+
+var valueFn = function (obj, bindReady) {
+    var name = this.name;
+    var val = this.value;
+    var property = this.property;
+    if (_.isFunction(val)) {
+        val = safeCall(val, obj, bindReady)
+    } else {
+        if (property && _.isUndefined(val)) {
+            val = obj[property];
+        }
+        if (!name) {
+            throw new Error("Where is your export?")
+        }
+        if (_.isUndefined(property) && _.isUndefined(val)) {
+            val = obj[name];
+        }
+    }
+    return val;
+};
+
 var bind = function (name, dependencies, ties) {
     this.name = name;
     this.touch = [];
     this.values = {};
     this.depends = dependencies || [];
     this.rendered = false;
+    this.applyCount = 0;
     this.$apply = function () {
-        this.$render();
+        this.applyCount++;
+        if(this.applyCount > 10) {
+            console.warn("Too many apply :" + this.name  +" - "+ this.applyCount);
+        }
+        if (this.rendered) {
+            this.$render();
+        }
         _.forEach(this.touch, function (item) {
             var tie = ties[item];
-            tie.obj['$' + this.name] = this.obj;
-            tie.$render();
+            if(tie){
+                tie.obj['$' + this.name] = this.obj;
+            }
         }, this);
     };
 };
@@ -33,13 +75,49 @@ bind.prototype = {
         }, this);
         return ready;
     },
+    $prepareRoutes: function () {
+        var routes = this.obj.routes;
+        if (routes) {
+            if (_.isArray(routes)) {
+                this.obj.routes = routes._({});
+            }
+            _.forIn(this.obj.routes, function (route, path) {
+                if (_.isFunction(route)) {
+                    route = {path: path, handler: route}
+                } else {
+                    route = {path: path}
+                }
+                this.obj.routes[path] = route;
+            }, this);
+        }
+    },
+    $prepareAttrs: function () {
+        var attrs = this.obj.attrs;
+        if (attrs) {
+            if (_.isArray(attrs)) {
+                this.obj.attrs = attrs._({});
+            }
+            _.forIn(this.obj.attrs, function (attr, name) {
+                if (_.isString(attr) && attr[0] == '#') {
+                    attr = {name: name, property: attr.substring(1)}
+                } else if (_.isFunction(attr)) {
+                    attr = {name: name, value: attr}
+                } else if (attr[ITEM_NAME]) {
+                    attr.name = attr[ITEM_NAME];
+                } else {
+                    attr = {name: name, value: attr}
+                }
+                this.obj.attrs[name] = attr;
+            }, this);
+        }
+    },
     $attrValue: function (name, value) {
         var v = null;
         if (this.obj.attrs) {
             var attr = this.$attr(name);
             if (_.isUndefined(value)) {
                 if (attr) {
-                    v = attr.val(this.obj);
+                    v = attr.val(this.obj, this.$ready());
                 }
             } else {
                 if (attr && attr.property) {
@@ -50,17 +128,10 @@ bind.prototype = {
         return v;
     },
     $attr: function (name) {
-        var res = null;
         if (this.obj.attrs) {
-            _.forEach(this.obj.attrs, function (attr) {
-                if (_.isObject(attr) && attr.name === name) {
-                    res = attr;
-                    return false;
-                }
-                return true;
-            });
+            return this.obj.attrs[name];
         }
-        return res;
+        return null;
     },
     $attrs: function (elements, attr) {
         _.forEach(elements, function (el) {
@@ -90,42 +161,9 @@ bind.prototype = {
         } else {
             var attrs = this.obj.attrs;
             if (attrs) {
-                var self = this;
-                var valueFn = function (obj) {
-                    var name = this.name;
-                    var val = this.value;
-                    var property = this.property;
-                    if (typeof val === "function") {
-                        try {
-                            val = val.call(obj);
-                        } catch (e) {
-                            val = undefined;
-                            if (self.$ready()) {
-                                console.warn('Is ready and had an error:' + e.message);
-                            }
-                        }
-                    } else {
-                        if (property && _.isUndefined(val)) {
-                            val = obj[property];
-                        }
-                        if (!name) {
-                            throw new Error("Where is your export?")
-                        }
-                        if (_.isUndefined(property) && _.isUndefined(val)) {
-                            val = obj[name];
-                        }
-                    }
-                    return val;
-                };
-                _.forEach(attrs, function (attr) {
-                    if (_.isString(attr)) {
-                        attr = {
-                            name: attr
-                        };
-                    }
+                _.forIn(attrs, function (attr) {
                     attr.val = valueFn;
-                    var name = attr.name;
-                    this.$attrs(this.$, {name: name, value: attr.val(this.obj)});
+                    this.$attrs(this.$, {name: attr.name, value: attr.val(this.obj, this.$ready())});
                 }, this);
                 this.$attrs(this.$, {name: 'data-tied'});
                 _.forEach(this.$, function (el) {

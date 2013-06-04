@@ -4,9 +4,9 @@ var routes = {
         if (app == null) {
             throw new Error("App is not ready");
         }
-        _.forEach(app.obj.routes, function (path) {
+        _.forIn(app.obj.routes, function (r, path) {
             path = path.toLowerCase();
-            this.list[path] = new route(path);
+            this.list[path] = new route(path, r.handler);
         }, this);
     },
 
@@ -19,8 +19,24 @@ var routes = {
         if (!current) {
             this.move(this.stripHash(window.location.href));
         } else {
+            app.location = function(url) {
+                if(url){
+                    this.move(url);
+                    return null;
+                } else {
+                    return {href: window.location.href, route: current};
+                }
+            }.bind(this);
+            if(current.handler) {
+                safeCall(current.handler, app.obj, app.$ready());
+            }
             _.forIn(ties, function (bind) {
+                bind.obj.$location = app.location;
                 bind.obj.shown = current.has(bind);
+                var r = bind.obj.routes[current.path];
+                if(r && r.handler) {
+                    safeCall(r.handler, bind.obj, bind.$ready());
+                }
                 if (!bind.rendered) {
                     bind.$render();
                 }
@@ -44,17 +60,18 @@ var routes = {
     }
 };
 
-var route = function (path) {
+var route = function (path, handler) {
     this.path = path;
+    this.handler = handler;
 };
 
 route.prototype = {
     has: function (bind) {
         var routes = bind.obj.routes;
-        var exclude = routes[0] == '-';
+        var exclude = routes['-'] != null;
         var contains = false;
-        _.forEach(routes, function (route) {
-            if (route.toLowerCase() == this.path) {
+        _.forIn(routes, function (route, path) {
+            if (path.toLowerCase() == this.path) {
                 contains = true;
                 return false;
             }

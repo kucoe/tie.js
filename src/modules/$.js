@@ -64,12 +64,13 @@ $.prototype = {
             this.text(value);
         } else if (_.isFunction(value)) {
             var obj = this.tied.obj;
+            var tied = this.tied;
             var handler = this.events[name];
             if (handler) {
                 this.$.removeEventListener(name, handler);
             }
             handler = function (event) {
-                value.call(obj, event);
+                safeCall(value, obj, tied.$ready(), event);
             };
             this.events[name] = handler;
             this.$.addEventListener(name, handler);

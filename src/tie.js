@@ -5,9 +5,21 @@
     var VALUES = 'values';
     var TEXT = 'text';
     var SHOWN = 'shown';
+    var ATTRS = 'attrs';
+    var ROUTES = 'routes';
+    var ITEM_NAME = '_item_name';
 
     var s4 = function () {
         return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    };
+
+    Array.prototype._ = function (obj) {
+        _.forEach(this, function (item) {
+            if (!obj.hasOwnProperty(item)) {
+                obj[item] = {'_item_name': item};
+            }
+        });
+        return obj;
     };
 
     var proxy = function (tie) {
@@ -36,6 +48,11 @@
                 if (prop == SHOWN) {
                     tie.$show(val);
                 } else {
+                    if (prop == ATTRS) {
+                        tie.$prepareAttrs();
+                    } else if (prop == ROUTES) {
+                        tie.$prepareRoutes();
+                    }
                     tie.$apply();
                 }
             };
@@ -54,8 +71,8 @@
         for (var prop in obj) {
             if (obj.hasOwnProperty(prop)) {
                 props.push(prop);
-                if ('attrs' == prop || 'prototype' == prop) {
-                    continue; // skip attributes
+                if ('prototype' == prop) {
+                    continue; // skip prototype
                 }
                 var desc = Object.getOwnPropertyDescriptor(obj, prop);
                 if (desc._proxyMark) {
@@ -69,13 +86,8 @@
             }
         }
         if (obj.attrs) {
-            _.forEach(obj.attrs, function (attr) {
-                if (_.isString(attr)) {
-                    attr = {
-                        name: attr
-                    };
-                }
-                var prop = attr.name;
+            _.forIn(obj.attrs, function (attr, prop) {
+                props.push(prop);
                 if (props.indexOf(prop) == -1 || attr.property || attr.value) {
                     observe(null, prop);
                 }
@@ -90,9 +102,9 @@
             if (app == null) {
                 throw new Error("App is not ready");
             }
-            _.forEach(app.obj.routes, function (path) {
+            _.forIn(app.obj.routes, function (r, path) {
                 path = path.toLowerCase();
-                this.list[path] = new route(path);
+                this.list[path] = new route(path, r.handler);
             }, this);
         },
     
@@ -105,8 +117,24 @@
             if (!current) {
                 this.move(this.stripHash(window.location.href));
             } else {
+                app.location = function(url) {
+                    if(url){
+                        this.move(url);
+                        return null;
+                    } else {
+                        return {href: window.location.href, route: current};
+                    }
+                }.bind(this);
+                if(current.handler) {
+                    safeCall(current.handler, app.obj, app.$ready());
+                }
                 _.forIn(ties, function (bind) {
+                    bind.obj.$location = app.location;
                     bind.obj.shown = current.has(bind);
+                    var r = bind.obj.routes[current.path];
+                    if(r && r.handler) {
+                        safeCall(r.handler, bind.obj, bind.$ready());
+                    }
                     if (!bind.rendered) {
                         bind.$render();
                     }
@@ -130,17 +158,18 @@
         }
     };
     
-    var route = function (path) {
+    var route = function (path, handler) {
         this.path = path;
+        this.handler = handler;
     };
     
     route.prototype = {
         has: function (bind) {
             var routes = bind.obj.routes;
-            var exclude = routes[0] == '-';
+            var exclude = routes['-'] != null;
             var contains = false;
-            _.forEach(routes, function (route) {
-                if (route.toLowerCase() == this.path) {
+            _.forIn(routes, function (route, path) {
+                if (path.toLowerCase() == this.path) {
                     contains = true;
                     return false;
                 }
@@ -217,12 +246,13 @@
                 this.text(value);
             } else if (_.isFunction(value)) {
                 var obj = this.tied.obj;
+                var tied = this.tied;
                 var handler = this.events[name];
                 if (handler) {
                     this.$.removeEventListener(name, handler);
                 }
                 handler = function (event) {
-                    value.call(obj, event);
+                    safeCall(value, obj, tied.$ready(), event);
                 };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -429,11 +459,9 @@
                     dest.push(item);
                 });
             } else {
-                for (var prop in source) {
-                    if (source.hasOwnProperty(prop)) {
-                        dest[prop] = source[prop];
-                    }
-                }
+                this.forIn(source, function (value, prop) {
+                    dest[prop] = value;
+                });
             }
         }
     };
@@ -444,18 +472,60 @@
     
     model.prototype = _;
     
+    var safeCall = function (fn, fnThis, bindReady) {
+        var res;
+        try {
+            var args = Array.prototype.slice.call(arguments, 3);
+            res = fn.apply(fnThis, args);
+        } catch (e) {
+            res = undefined;
+            if (bindReady) {
+                console.warn('Is ready and had an error:' + e.message);
+            }
+        }
+        return res;
+    };
+    
+    var valueFn = function (obj, bindReady) {
+        var name = this.name;
+        var val = this.value;
+        var property = this.property;
+        if (_.isFunction(val)) {
+            val = safeCall(val, obj, bindReady)
+        } else {
+            if (property && _.isUndefined(val)) {
+                val = obj[property];
+            }
+            if (!name) {
+                throw new Error("Where is your export?")
+            }
+            if (_.isUndefined(property) && _.isUndefined(val)) {
+                val = obj[name];
+            }
+        }
+        return val;
+    };
+    
     var bind = function (name, dependencies, ties) {
         this.name = name;
         this.touch = [];
         this.values = {};
         this.depends = dependencies || [];
         this.rendered = false;
+        this.applyCount = 0;
         this.$apply = function () {
-            this.$render();
+            this.applyCount++;
+            if(this.applyCount > 10) {
+                console.warn("Too many apply :" + this.name  +" - "+ this.applyCount);
+            }
+            if (this.rendered) {
+                this.$render();
+            }
             _.forEach(this.touch, function (item) {
                 var tie = ties[item];
-                tie.obj['$' + this.name] = this.obj;
-                tie.$render();
+                if(tie){
+                    tie.obj['$' + this.name] = this.obj;
+                }
             }, this);
         };
     };
@@ -473,13 +543,49 @@
             }, this);
             return ready;
         },
+        $prepareRoutes: function () {
+            var routes = this.obj.routes;
+            if (routes) {
+                if (_.isArray(routes)) {
+                    this.obj.routes = routes._({});
+                }
+                _.forIn(this.obj.routes, function (route, path) {
+                    if (_.isFunction(route)) {
+                        route = {path: path, handler: route}
+                    } else {
+                        route = {path: path}
+                    }
+                    this.obj.routes[path] = route;
+                }, this);
+            }
+        },
+        $prepareAttrs: function () {
+            var attrs = this.obj.attrs;
+            if (attrs) {
+                if (_.isArray(attrs)) {
+                    this.obj.attrs = attrs._({});
+                }
+                _.forIn(this.obj.attrs, function (attr, name) {
+                    if (_.isString(attr) && attr[0] == '#') {
+                        attr = {name: name, property: attr.substring(1)}
+                    } else if (_.isFunction(attr)) {
+                        attr = {name: name, value: attr}
+                    } else if (attr[ITEM_NAME]) {
+                        attr.name = attr[ITEM_NAME];
+                    } else {
+                        attr = {name: name, value: attr}
+                    }
+                    this.obj.attrs[name] = attr;
+                }, this);
+            }
+        },
         $attrValue: function (name, value) {
             var v = null;
             if (this.obj.attrs) {
                 var attr = this.$attr(name);
                 if (_.isUndefined(value)) {
                     if (attr) {
-                        v = attr.val(this.obj);
+                        v = attr.val(this.obj, this.$ready());
                     }
                 } else {
                     if (attr && attr.property) {
@@ -490,17 +596,10 @@
             return v;
         },
         $attr: function (name) {
-            var res = null;
             if (this.obj.attrs) {
-                _.forEach(this.obj.attrs, function (attr) {
-                    if (_.isObject(attr) && attr.name === name) {
-                        res = attr;
-                        return false;
-                    }
-                    return true;
-                });
+                return this.obj.attrs[name];
             }
-            return res;
+            return null;
         },
         $attrs: function (elements, attr) {
             _.forEach(elements, function (el) {
@@ -530,42 +629,9 @@
             } else {
                 var attrs = this.obj.attrs;
                 if (attrs) {
-                    var self = this;
-                    var valueFn = function (obj) {
-                        var name = this.name;
-                        var val = this.value;
-                        var property = this.property;
-                        if (typeof val === "function") {
-                            try {
-                                val = val.call(obj);
-                            } catch (e) {
-                                val = undefined;
-                                if (self.$ready()) {
-                                    console.warn('Is ready and had an error:' + e.message);
-                                }
-                            }
-                        } else {
-                            if (property && _.isUndefined(val)) {
-                                val = obj[property];
-                            }
-                            if (!name) {
-                                throw new Error("Where is your export?")
-                            }
-                            if (_.isUndefined(property) && _.isUndefined(val)) {
-                                val = obj[name];
-                            }
-                        }
-                        return val;
-                    };
-                    _.forEach(attrs, function (attr) {
-                        if (_.isString(attr)) {
-                            attr = {
-                                name: attr
-                            };
-                        }
+                    _.forIn(attrs, function (attr) {
                         attr.val = valueFn;
-                        var name = attr.name;
-                        this.$attrs(this.$, {name: name, value: attr.val(this.obj)});
+                        this.$attrs(this.$, {name: attr.name, value: attr.val(this.obj, this.$ready())});
                     }, this);
                     this.$attrs(this.$, {name: 'data-tied'});
                     _.forEach(this.$, function (el) {
@@ -622,9 +688,9 @@
     
         wrapFunction: function (fn) {
             return {
-                attrs: [
-                    {name: 'value', value: fn}
-                ]
+                attrs: []._({
+                    value: fn
+                })
             }
         },
     
@@ -661,7 +727,7 @@
                 obj.shown = true;
             }
             if (_.isUndefined(obj.attrs)) {
-                obj.attrs = [];
+                obj.attrs = {};
             }
             if (_.isUndefined(obj.routes)) {
                 if (app != null) {
@@ -674,6 +740,8 @@
         },
     
         prepare: function (bind, dependencies, ties) {
+            bind.$prepareAttrs();
+            bind.$prepareRoutes();
             var values = bind.obj.values;
             var lastNodes = {};
             if (values) {
@@ -720,6 +788,7 @@
             ties[name] = bind;
             if (old && old.touch) {
                 bind.touch = old.touch;
+                bind.rendered = old.rendered;
                 bind.$apply();
             }
         },

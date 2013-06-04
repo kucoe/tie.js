@@ -30,8 +30,8 @@
 <script src="../src/tie.js"></script>
 <script>
     tie("app", {
-        routes:['/', 'sex']._({
-            labels: function(){
+        routes: ['/', 'sex']._({
+            labels: function () {
                 tie('text', 'labelText');
             }
         })
@@ -40,27 +40,36 @@
         style: 'color:red',
         routes: ['labels'],
         attrs: ['style']._({
-            value : function () {
+            value: function () {
                 return this.$text.value
             }
         })
     }, ['text']);
     tie("label2", function () {
-        if(this.isUndefined(this.$label.value)) {
+        if (this.isUndefined(this.$label.value)) {
             return 0;
         }
         return this.$label.value.length;
     }, ['label']);
     tie("text", 'test');
-    tie("bool", {value:true, attrs :['value'], routes:['-', 'sex']});
+    tie("bool", {value: true, attrs: ['value'], routes: ['-', 'sex']});
     tie("sex", {
         values: [
-            {text:'Male', value:true},
-            {text:'Female', value:false}
+            {text: 'Male', value: true},
+            {text: 'Female', value: false}
         ],
-        routes: ['sex'],
+        routes: ['sex']._({
+            sex: function() {
+                this.$trigger.attrs = ['value']._({
+                    mouseover: '#float',
+                    mouseout: '#float',
+                    click: '#trigger',
+                    style: 'color:blue'
+                });
+            }
+        }),
         attrs: ['value', 'text']
-    });
+    }, ['trigger']);
     tie("trigger", {
         float: function (evt) {
             if (evt.type === 'mouseover') {
@@ -76,9 +85,9 @@
         },
         value: 'Out',
         attrs: ['value']._({
-              mouseover : '#float',
-              mouseout : '#float',
-              click : '#trigger'
+            mouseover: '#float',
+            mouseout: '#float',
+            click: '#trigger'
 
         })
     }, ['label2']);

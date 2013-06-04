@@ -24,6 +24,11 @@ var proxy = function (tie) {
             if (prop == SHOWN) {
                 tie.$show(val);
             } else {
+                if (prop == ATTRS) {
+                    tie.$prepareAttrs();
+                } else if (prop == ROUTES) {
+                    tie.$prepareRoutes();
+                }
                 tie.$apply();
             }
         };
@@ -42,8 +47,8 @@ var proxy = function (tie) {
     for (var prop in obj) {
         if (obj.hasOwnProperty(prop)) {
             props.push(prop);
-            if ('attrs' == prop || 'prototype' == prop) {
-                continue; // skip attributes
+            if ('prototype' == prop) {
+                continue; // skip prototype
             }
             var desc = Object.getOwnPropertyDescriptor(obj, prop);
             if (desc._proxyMark) {
@@ -57,13 +62,8 @@ var proxy = function (tie) {
         }
     }
     if (obj.attrs) {
-        _.forEach(obj.attrs, function (attr) {
-            if (_.isString(attr)) {
-                attr = {
-                    name: attr
-                };
-            }
-            var prop = attr.name;
+        _.forIn(obj.attrs, function (attr, prop) {
+            props.push(prop);
             if (props.indexOf(prop) == -1 || attr.property || attr.value) {
                 observe(null, prop);
             }

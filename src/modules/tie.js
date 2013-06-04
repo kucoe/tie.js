@@ -39,9 +39,9 @@ tie.prototype = {
 
     wrapFunction: function (fn) {
         return {
-            attrs: [
-                {name: 'value', value: fn}
-            ]
+            attrs: []._({
+                value: fn
+            })
         }
     },
 
@@ -78,7 +78,7 @@ tie.prototype = {
             obj.shown = true;
         }
         if (_.isUndefined(obj.attrs)) {
-            obj.attrs = [];
+            obj.attrs = {};
         }
         if (_.isUndefined(obj.routes)) {
             if (app != null) {
@@ -91,6 +91,8 @@ tie.prototype = {
     },
 
     prepare: function (bind, dependencies, ties) {
+        bind.$prepareAttrs();
+        bind.$prepareRoutes();
         var values = bind.obj.values;
         var lastNodes = {};
         if (values) {
@@ -137,6 +139,7 @@ tie.prototype = {
         ties[name] = bind;
         if (old && old.touch) {
             bind.touch = old.touch;
+            bind.rendered = old.rendered;
             bind.$apply();
         }
     },
