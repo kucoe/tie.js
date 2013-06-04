@@ -10,6 +10,10 @@
         return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
     };
 
+    Array.prototype._ = function(obj) {
+        _.forIn(obj, function(value:))
+    }
+
 //INSERT
     window.tie = tie();
 

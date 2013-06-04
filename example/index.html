@@ -30,16 +30,20 @@
 <script src="../src/tie.js"></script>
 <script>
     tie("app", {
-        routes:['/', 'labels', 'sex']
+        routes:['/', 'sex']._({
+            labels: function(){
+                tie('text', 'labelText');
+            }
+        })
     });
     tie("label", {
         style: 'color:red',
         routes: ['labels'],
-        attrs: ['style',
-            {name: 'value', value: function () {
+        attrs: ['style']._({
+            value : function () {
                 return this.$text.value
-            }}
-        ]
+            }
+        })
     }, ['text']);
     tie("label2", function () {
         if(this.isUndefined(this.$label.value)) {
@@ -71,11 +75,12 @@
             tie('text', 'changed');
         },
         value: 'Out',
-        attrs: ['value',
-            {name: 'mouseover', property: 'float'},
-            {name: 'mouseout', property: 'float'},
-            {name: 'click', property: 'trigger'}
-        ]
+        attrs: ['value']._({
+              mouseover : '#float',
+              mouseout : '#float',
+              click : '#trigger'
+
+        })
     }, ['label2']);
 </script>
 
