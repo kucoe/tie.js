@@ -58,16 +58,18 @@
             {text: 'Male', value: true},
             {text: 'Female', value: false}
         ],
-        routes: ['sex']._({
-            sex: function() {
-                this.$trigger.attrs = ['value']._({
+        routes: {
+            sex: function () {
+                this.$location('labels');
+                this.$trigger.attrs = {
+                    value: '#value',
                     mouseover: '#float',
                     mouseout: '#float',
                     click: '#trigger',
                     style: 'color:blue'
-                });
+                }
             }
-        }),
+        },
         attrs: ['value', 'text']
     }, ['trigger']);
     tie("trigger", {

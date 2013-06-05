@@ -17,7 +17,7 @@ var routes = {
         }
         current = this.find(current);
         if (!current) {
-            this.move(this.stripHash(window.location.href));
+            this.move('/');
         } else {
             app.location = function(url) {
                 if(url){
@@ -55,7 +55,7 @@ var routes = {
 
     move: function (url) {
         setTimeout(function () {
-            window.location.replace(url);
+            window.location.hash = '#' + url;
         }, 100);
     }
 };

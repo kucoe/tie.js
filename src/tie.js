@@ -87,10 +87,10 @@
         }
         if (obj.attrs) {
             _.forIn(obj.attrs, function (attr, prop) {
-                props.push(prop);
                 if (props.indexOf(prop) == -1 || attr.property || attr.value) {
                     observe(null, prop);
                 }
+                props.push(prop);
             }, this);
         }
         return obj;
@@ -115,7 +115,7 @@
             }
             current = this.find(current);
             if (!current) {
-                this.move(this.stripHash(window.location.href));
+                this.move('/');
             } else {
                 app.location = function(url) {
                     if(url){
@@ -153,7 +153,7 @@
     
         move: function (url) {
             setTimeout(function () {
-                window.location.replace(url);
+                window.location.hash = '#' + url;
             }, 100);
         }
     };
@@ -513,20 +513,27 @@
         this.depends = dependencies || [];
         this.rendered = false;
         this.applyCount = 0;
+        this.timeout = null;
         this.$apply = function () {
             this.applyCount++;
-            if(this.applyCount > 10) {
-                console.warn("Too many apply :" + this.name  +" - "+ this.applyCount);
+            if (this.applyCount > 10) {
+                console.warn("Too many apply :" + this.name + " - " + this.applyCount);
             }
             if (this.rendered) {
                 this.$render();
             }
             _.forEach(this.touch, function (item) {
                 var tie = ties[item];
-                if(tie){
+                if (tie) {
                     tie.obj['$' + this.name] = this.obj;
                 }
             }, this);
+            if (!this.timeout) {
+                this.timeout = setTimeout(function () {
+                    this.timeout = null;
+                    this.applyCount = 0;
+                }.bind(this), 3000);
+            }
         };
     };
     

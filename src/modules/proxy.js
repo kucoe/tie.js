@@ -63,10 +63,10 @@ var proxy = function (tie) {
     }
     if (obj.attrs) {
         _.forIn(obj.attrs, function (attr, prop) {
-            props.push(prop);
             if (props.indexOf(prop) == -1 || attr.property || attr.value) {
                 observe(null, prop);
             }
+            props.push(prop);
         }, this);
     }
     return obj;

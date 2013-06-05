@@ -45,20 +45,27 @@ var bind = function (name, dependencies, ties) {
     this.depends = dependencies || [];
     this.rendered = false;
     this.applyCount = 0;
+    this.timeout = null;
     this.$apply = function () {
         this.applyCount++;
-        if(this.applyCount > 10) {
-            console.warn("Too many apply :" + this.name  +" - "+ this.applyCount);
+        if (this.applyCount > 10) {
+            console.warn("Too many apply :" + this.name + " - " + this.applyCount);
         }
         if (this.rendered) {
             this.$render();
         }
         _.forEach(this.touch, function (item) {
             var tie = ties[item];
-            if(tie){
+            if (tie) {
                 tie.obj['$' + this.name] = this.obj;
             }
         }, this);
+        if (!this.timeout) {
+            this.timeout = setTimeout(function () {
+                this.timeout = null;
+                this.applyCount = 0;
+            }.bind(this), 3000);
+        }
     };
 };
 
