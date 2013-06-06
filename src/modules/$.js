@@ -84,7 +84,6 @@ $.prototype = {
     },
 
     value: function (val) {
-        var v;
         if (this.hasCheck) {
             if (_.isDefined(val)) {
                 if (val) {
@@ -93,22 +92,21 @@ $.prototype = {
                     this.$.removeAttribute('checked');
                 }
             } else {
-                v = this.$.checked;
+                return this.$.checked;
             }
         } else if (this.isInput) {
             if (_.isDefined(val)) {
                 this.$.value = val;
             } else {
-                v = this.$.value;
+                return this.$.value;
             }
         } else {
-            v = this.text(val);
+            return this.text(val);
         }
-        return v;
+        return null;
     },
 
     text: function (text) {
-        var v = null;
         if (_.isDefined(text)) {
             if (this.isInput) {
                 if (this.textEl == null) {
@@ -121,12 +119,12 @@ $.prototype = {
             }
         } else {
             if (this.isInput) {
-                v = this.$.nextSibling.textContent || '';
+                return this.$.nextSibling.textContent || '';
             } else {
-                v = this.$.textContent || '';
+                return this.$.textContent || '';
             }
         }
-        return v;
+        return null;
     },
 
     remove: function () {

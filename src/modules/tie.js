@@ -39,14 +39,16 @@ tie.prototype = {
 
     wrapFunction: function (fn) {
         return {
-            attrs: []._({
+            attrs: {
                 value: fn
-            })
+            }
         }
     },
 
     wrapArray: function (array) {
+        _.debug("Array wrap start");
         var checked = this.checkArray(array);
+        _.debug("Array wrap finish");
         return {
             values: checked,
             attrs: ['value']
@@ -54,12 +56,18 @@ tie.prototype = {
     },
 
     checkArray: function (array) {
+        if(array._ready) {
+            return array;
+        }
         var checked = [];
+        _.debug("Array check start");
         _.forEach(array, function (item) {
             var o = this.check(item);
             o._id = _.uid();
             checked.push(o);
         }, this);
+        _.debug("Array check finish");
+        checked._ready = true;
         return checked;
     },
 
@@ -84,7 +92,9 @@ tie.prototype = {
             if (app != null) {
                 obj.routes = app.obj.routes;
             } else {
-                obj.routes = ['/'];
+                obj.routes = {
+                    '/':{}
+                };
             }
         }
         return new model(obj);
@@ -145,12 +155,22 @@ tie.prototype = {
     },
 
     init: function (name, tiedObject, dependencies, ties) {
+        _.debug("Tie " + name);
         var r = new bind(name, dependencies, ties);
+        _.debug("Bind ready");
         r.obj = this.check(tiedObject);
-        r.$ = this.select(name, r);
+        _.debug("Model checked");
         this.resolve(r, dependencies, ties);
+        _.debug("Dependencies resolved");
         r.obj = proxy(r);
-        this.prepare(r, dependencies, ties);
+        _.debug("Model proxy done");
+        var tie = this;
+        r.$load = function() {
+            this.$ = tie.select(name, r);
+            _.debug("Elements selected");
+            tie.prepare(this, dependencies, ties);
+            _.debug("Prepared inner structure");
+        };
         return r;
     }
 };

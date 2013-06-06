@@ -1,5 +1,7 @@
 var _ = {
 
+    debugEnabled: true,
+
     isUndefined: function (value) {
         return value == undefined;
     },
@@ -111,6 +113,12 @@ var _ = {
             this.forIn(source, function (value, prop) {
                 dest[prop] = value;
             });
+        }
+    },
+
+    debug : function(message) {
+        if(this.debugEnabled){
+            console.log(message);
         }
     }
 };

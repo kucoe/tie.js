@@ -1,4 +1,5 @@
 (function (window) {
+    'use strict';
 
     var APP = 'app';
     var VALUE = 'value';
@@ -106,49 +107,49 @@
                 path = path.toLowerCase();
                 this.list[path] = new route(path, r.handler);
             }, this);
+            _.debug("Routes init");
         },
     
         locate: function (ties) {
             var current = window.location.hash.substring(1);
-            if (!current) {
-                current = '/';
-            }
             current = this.find(current);
             if (!current) {
                 this.move('/');
             } else {
-                app.location = function(url) {
-                    if(url){
+                _.debug("Process route" + current.path);
+                app.location = function (url) {
+                    if (url) {
                         this.move(url);
                         return null;
-                    } else {
-                        return {href: window.location.href, route: current};
                     }
+                    return {href: window.location.href, route: current};
                 }.bind(this);
-                if(current.handler) {
+                if (current.handler) {
                     safeCall(current.handler, app.obj, app.$ready());
                 }
                 _.forIn(ties, function (bind) {
-                    bind.obj.$location = app.location;
-                    bind.obj.shown = current.has(bind);
-                    var r = bind.obj.routes[current.path];
-                    if(r && r.handler) {
-                        safeCall(r.handler, bind.obj, bind.$ready());
-                    }
-                    if (!bind.rendered) {
-                        bind.$render();
-                    }
-                })
+                    setTimeout(function(){
+                       this.renderItem(current, bind);
+                    }.bind(this), 50)
+                }, this);
+                _.debug("Processed route" + current.path);
+            }
+        },
+    
+        renderItem : function(route, bind) {
+            if (!bind.rendered) {
+                bind.$render();
+            }
+            bind.obj.$location = app.location;
+            bind.obj.shown = route.has(bind);
+            var r = bind.obj.routes[route.path];
+            if (r && r.handler) {
+                safeCall(r.handler, bind.obj, bind.$ready());
             }
         },
     
         find: function (path) {
             return this.list[path];
-        },
-    
-        stripHash: function (url) {
-            var index = url.indexOf('#');
-            return index == -1 ? url : url.substr(0, index);
         },
     
         move: function (url) {
@@ -266,7 +267,6 @@
         },
     
         value: function (val) {
-            var v;
             if (this.hasCheck) {
                 if (_.isDefined(val)) {
                     if (val) {
@@ -275,22 +275,21 @@
                         this.$.removeAttribute('checked');
                     }
                 } else {
-                    v = this.$.checked;
+                    return this.$.checked;
                 }
             } else if (this.isInput) {
                 if (_.isDefined(val)) {
                     this.$.value = val;
                 } else {
-                    v = this.$.value;
+                    return this.$.value;
                 }
             } else {
-                v = this.text(val);
+                return this.text(val);
             }
-            return v;
+            return null;
         },
     
         text: function (text) {
-            var v = null;
             if (_.isDefined(text)) {
                 if (this.isInput) {
                     if (this.textEl == null) {
@@ -303,12 +302,12 @@
                 }
             } else {
                 if (this.isInput) {
-                    v = this.$.nextSibling.textContent || '';
+                    return this.$.nextSibling.textContent || '';
                 } else {
-                    v = this.$.textContent || '';
+                    return this.$.textContent || '';
                 }
             }
-            return v;
+            return null;
         },
     
         remove: function () {
@@ -350,6 +349,8 @@
     };
     
     var _ = {
+    
+        debugEnabled: true,
     
         isUndefined: function (value) {
             return value == undefined;
@@ -463,6 +464,12 @@
                     dest[prop] = value;
                 });
             }
+        },
+    
+        debug : function(message) {
+            if(this.debugEnabled){
+                console.log(message);
+            }
         }
     };
     
@@ -491,19 +498,18 @@
         var val = this.value;
         var property = this.property;
         if (_.isFunction(val)) {
-            val = safeCall(val, obj, bindReady)
+            return safeCall(val, obj, bindReady)
         } else {
             if (property && _.isUndefined(val)) {
-                val = obj[property];
+                return obj[property];
             }
             if (!name) {
                 throw new Error("Where is your export?")
             }
             if (_.isUndefined(property) && _.isUndefined(val)) {
-                val = obj[name];
+                return obj[name];
             }
         }
-        return val;
     };
     
     var bind = function (name, dependencies, ties) {
@@ -517,7 +523,7 @@
         this.$apply = function () {
             this.applyCount++;
             if (this.applyCount > 10) {
-                console.warn("Too many apply :" + this.name + " - " + this.applyCount);
+                _.debug("Too many apply :" + this.name + " - " + this.applyCount);
             }
             if (this.rendered) {
                 this.$render();
@@ -587,12 +593,11 @@
             }
         },
         $attrValue: function (name, value) {
-            var v = null;
             if (this.obj.attrs) {
                 var attr = this.$attr(name);
                 if (_.isUndefined(value)) {
                     if (attr) {
-                        v = attr.val(this.obj, this.$ready());
+                        return attr.val(this.obj, this.$ready());
                     }
                 } else {
                     if (attr && attr.property) {
@@ -600,7 +605,7 @@
                     }
                 }
             }
-            return v;
+            return null;
         },
         $attr: function (name) {
             if (this.obj.attrs) {
@@ -622,6 +627,10 @@
             });
         },
         $render: function () {
+            _.debug("Render " + this.name);
+            if (!this.rendered) {
+                this.$load();
+            }
             var values = this.obj.values;
             if (values) {
                 _.forEach(values, function (value) {
@@ -650,6 +659,7 @@
             }
             this.$show(this.obj.shown);
             this.rendered = true;
+            _.debug("Rendered " + this.name);
         }
     
     };
@@ -695,14 +705,16 @@
     
         wrapFunction: function (fn) {
             return {
-                attrs: []._({
+                attrs: {
                     value: fn
-                })
+                }
             }
         },
     
         wrapArray: function (array) {
+            _.debug("Array wrap start");
             var checked = this.checkArray(array);
+            _.debug("Array wrap finish");
             return {
                 values: checked,
                 attrs: ['value']
@@ -710,12 +722,18 @@
         },
     
         checkArray: function (array) {
+            if(array._ready) {
+                return array;
+            }
             var checked = [];
+            _.debug("Array check start");
             _.forEach(array, function (item) {
                 var o = this.check(item);
                 o._id = _.uid();
                 checked.push(o);
             }, this);
+            _.debug("Array check finish");
+            checked._ready = true;
             return checked;
         },
     
@@ -740,7 +758,9 @@
                 if (app != null) {
                     obj.routes = app.obj.routes;
                 } else {
-                    obj.routes = ['/'];
+                    obj.routes = {
+                        '/':{}
+                    };
                 }
             }
             return new model(obj);
@@ -801,16 +821,25 @@
         },
     
         init: function (name, tiedObject, dependencies, ties) {
+            _.debug("Tie " + name);
             var r = new bind(name, dependencies, ties);
+            _.debug("Bind ready");
             r.obj = this.check(tiedObject);
-            r.$ = this.select(name, r);
+            _.debug("Model checked");
             this.resolve(r, dependencies, ties);
+            _.debug("Dependencies resolved");
             r.obj = proxy(r);
-            this.prepare(r, dependencies, ties);
+            _.debug("Model proxy done");
+            var tie = this;
+            r.$load = function() {
+                this.$ = tie.select(name, r);
+                _.debug("Elements selected");
+                tie.prepare(this, dependencies, ties);
+                _.debug("Prepared inner structure");
+            };
             return r;
         }
     };
-
     window.tie = tie();
 
 })(window);

@@ -23,19 +23,18 @@ var valueFn = function (obj, bindReady) {
     var val = this.value;
     var property = this.property;
     if (_.isFunction(val)) {
-        val = safeCall(val, obj, bindReady)
+        return safeCall(val, obj, bindReady)
     } else {
         if (property && _.isUndefined(val)) {
-            val = obj[property];
+            return obj[property];
         }
         if (!name) {
             throw new Error("Where is your export?")
         }
         if (_.isUndefined(property) && _.isUndefined(val)) {
-            val = obj[name];
+            return obj[name];
         }
     }
-    return val;
 };
 
 var bind = function (name, dependencies, ties) {
@@ -49,7 +48,7 @@ var bind = function (name, dependencies, ties) {
     this.$apply = function () {
         this.applyCount++;
         if (this.applyCount > 10) {
-            console.warn("Too many apply :" + this.name + " - " + this.applyCount);
+            _.debug("Too many apply :" + this.name + " - " + this.applyCount);
         }
         if (this.rendered) {
             this.$render();
@@ -119,12 +118,11 @@ bind.prototype = {
         }
     },
     $attrValue: function (name, value) {
-        var v = null;
         if (this.obj.attrs) {
             var attr = this.$attr(name);
             if (_.isUndefined(value)) {
                 if (attr) {
-                    v = attr.val(this.obj, this.$ready());
+                    return attr.val(this.obj, this.$ready());
                 }
             } else {
                 if (attr && attr.property) {
@@ -132,7 +130,7 @@ bind.prototype = {
                 }
             }
         }
-        return v;
+        return null;
     },
     $attr: function (name) {
         if (this.obj.attrs) {
@@ -154,6 +152,10 @@ bind.prototype = {
         });
     },
     $render: function () {
+        _.debug("Render " + this.name);
+        if (!this.rendered) {
+            this.$load();
+        }
         var values = this.obj.values;
         if (values) {
             _.forEach(values, function (value) {
@@ -182,6 +184,7 @@ bind.prototype = {
         }
         this.$show(this.obj.shown);
         this.rendered = true;
+        _.debug("Rendered " + this.name);
     }
 
 };

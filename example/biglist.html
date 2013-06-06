@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Big list</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+</head>
+<body>
+<div id="main" data-tie="app">
+    <ul>
+        <li data-tie="data"></li>
+    </ul>
+</div>
+<script src="../src/tie.js"></script>
+<script>
+    tie("app", {});
+    var arr = [];
+    for(var i = 0; i< 5000; i++){
+        arr.push(i);
+    }
+    tie("data", arr);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+</head>
+<body ng-app>
+
+<ul ng-controller="ListCtrl">
+    <li ng-repeat="i in list">{{i}}</li>
+</ul>
+
+<script src = "https://ajax.googleapis.com/ajax/libs/angularjs/1.0.6/angular.js"> </script>
+<script>
+    'use strict';
+
+    function ListCtrl($scope) {
+        var arr = [];
+        for(var i = 0; i< 40000; i++){
+            arr.push(i);
+        }
+        $scope.list = arr;
+    }
+</script>
+
+
+</body>
+</html>

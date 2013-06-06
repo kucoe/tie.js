@@ -8,49 +8,49 @@ var routes = {
             path = path.toLowerCase();
             this.list[path] = new route(path, r.handler);
         }, this);
+        _.debug("Routes init");
     },
 
     locate: function (ties) {
         var current = window.location.hash.substring(1);
-        if (!current) {
-            current = '/';
-        }
         current = this.find(current);
         if (!current) {
             this.move('/');
         } else {
-            app.location = function(url) {
-                if(url){
+            _.debug("Process route" + current.path);
+            app.location = function (url) {
+                if (url) {
                     this.move(url);
                     return null;
-                } else {
-                    return {href: window.location.href, route: current};
                 }
+                return {href: window.location.href, route: current};
             }.bind(this);
-            if(current.handler) {
+            if (current.handler) {
                 safeCall(current.handler, app.obj, app.$ready());
             }
             _.forIn(ties, function (bind) {
-                bind.obj.$location = app.location;
-                bind.obj.shown = current.has(bind);
-                var r = bind.obj.routes[current.path];
-                if(r && r.handler) {
-                    safeCall(r.handler, bind.obj, bind.$ready());
-                }
-                if (!bind.rendered) {
-                    bind.$render();
-                }
-            })
+                setTimeout(function(){
+                   this.renderItem(current, bind);
+                }.bind(this), 50)
+            }, this);
+            _.debug("Processed route" + current.path);
+        }
+    },
+
+    renderItem : function(route, bind) {
+        if (!bind.rendered) {
+            bind.$render();
+        }
+        bind.obj.$location = app.location;
+        bind.obj.shown = route.has(bind);
+        var r = bind.obj.routes[route.path];
+        if (r && r.handler) {
+            safeCall(r.handler, bind.obj, bind.$ready());
         }
     },
 
     find: function (path) {
         return this.list[path];
-    },
-
-    stripHash: function (url) {
-        var index = url.indexOf('#');
-        return index == -1 ? url : url.substr(0, index);
     },
 
     move: function (url) {

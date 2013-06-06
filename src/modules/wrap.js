@@ -1,4 +1,5 @@
 (function (window) {
+    'use strict';
 
     var APP = 'app';
     var VALUE = 'value';
