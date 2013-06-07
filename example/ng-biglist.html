@@ -1,24 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title></title>
+    <title>Big list</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
 </head>
 <body ng-app>
 
-<ul ng-controller="ListCtrl">
-    <li ng-repeat="i in list">{{i}}</li>
-</ul>
+<div ng-controller="ListCtrl">
 
-<script src = "https://ajax.googleapis.com/ajax/libs/angularjs/1.0.6/angular.js"> </script>
+    <button ng-click="add()">Add</button>
+
+    <ul>
+        <li ng-repeat="i in list">{{i}}</li>
+    </ul>
+
+</div>
+
+<script src="http://ajax.googleapis.com/ajax/libs/angularjs/1.0.6/angular.js"></script>
 <script>
     'use strict';
 
     function ListCtrl($scope) {
         var arr = [];
-        for(var i = 0; i< 40000; i++){
+        for (var i = 0; i < 10000; i++) {
             arr.push(i);
         }
         $scope.list = arr;
+
+        $scope.add = function () {
+            $scope.list.push(i++);
+        }
     }
 </script>
 

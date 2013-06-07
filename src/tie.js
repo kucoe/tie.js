@@ -128,23 +128,17 @@
                     safeCall(current.handler, app.obj, app.$ready());
                 }
                 _.forIn(ties, function (bind) {
-                    setTimeout(function(){
-                       this.renderItem(current, bind);
-                    }.bind(this), 50)
-                }, this);
+                    if (!bind.rendered) {
+                        bind.$render();
+                    }
+                    bind.obj.$location = app.location;
+                    bind.obj.shown = current.has(bind);
+                    var r = bind.obj.routes[current.path];
+                    if (r && r.handler) {
+                        safeCall(r.handler, bind.obj, bind.$ready());
+                    }
+                });
                 _.debug("Processed route" + current.path);
-            }
-        },
-    
-        renderItem : function(route, bind) {
-            if (!bind.rendered) {
-                bind.$render();
-            }
-            bind.obj.$location = app.location;
-            bind.obj.shown = route.has(bind);
-            var r = bind.obj.routes[route.path];
-            if (r && r.handler) {
-                safeCall(r.handler, bind.obj, bind.$ready());
             }
         },
     

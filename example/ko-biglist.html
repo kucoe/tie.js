@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Big list</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+</head>
+<body>
+
+<button data-bind="click: add">Add</button>
+
+<ul data-bind="foreach: list">
+    <li data-bind="text: $data"></li>
+</ul>
+
+<script src="http://ajax.aspnetcdn.com/ajax/knockout/knockout-2.2.1.js"></script>
+<script>
+    function AppViewModel() {
+        var self = this;
+        var arr = [];
+        for (var i = 0; i < 10000; i++) {
+            arr.push(i);
+        }
+        self.list = ko.observableArray(arr);
+
+        self.add = function () {
+            self.list.push(i++);
+        };
+    }
+
+    ko.applyBindings(new AppViewModel());
+</script>
+
+
+</body>
+</html>
