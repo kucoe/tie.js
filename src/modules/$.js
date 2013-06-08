@@ -1,3 +1,7 @@
+var INDEX = "data-index";
+var TIE = "data-tie";
+var TIED = "data-tied";
+
 var q = {
     next: function (index, newElements) {
         var parent = index.parentNode;
@@ -45,8 +49,10 @@ var $ = function (el, tied) {
         }
     }
     el.addEventListener('change', listener);
+    var idx = el.getAttribute(INDEX);
     this.$ = el;
     this._id = _.uid();
+    this.index = idx ? parseInt(idx) : -1;
     this.tied = tied;
     this.events = {};
     this.isInput = _.eqi(el.tagName, 'input');

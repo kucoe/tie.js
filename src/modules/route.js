@@ -4,20 +4,38 @@ var routes = {
         if (app == null) {
             throw new Error("App is not ready");
         }
-        _.forIn(app.obj.routes, function (r, path) {
-            path = path.toLowerCase();
-            this.list[path] = new route(path, r.handler);
-        }, this);
-        _.debug("Routes init");
+        if (app.obj.routes) {
+            _.forIn(app.obj.routes, function (r, path) {
+                path = path.toLowerCase();
+                this.list[path] = new route(path, r.handler);
+            }, this);
+            _.debug("Routes init");
+        }
     },
 
     locate: function (ties) {
         var current = window.location.hash.substring(1);
         current = this.find(current);
         if (!current) {
-            this.move('/');
+            if (app.obj.routes) {
+                this.move('/');
+            } else {
+                _.debug("Process default route");
+                _.forIn(ties, function (bind) {
+                    if (!bind.rendered) {
+                        bind.$render();
+                    }
+                    bind.obj.$location = function () {
+                        return{route: {has: function () {
+                            return true
+                        }}}
+                    };
+                    bind.obj.shown = true;
+                });
+                _.debug("Processed default route");
+            }
         } else {
-            _.debug("Process route" + current.path);
+            _.debug("Process route " + current.path);
             app.location = function (url) {
                 if (url) {
                     this.move(url);
@@ -39,7 +57,7 @@ var routes = {
                     safeCall(r.handler, bind.obj, bind.$ready());
                 }
             });
-            _.debug("Processed route" + current.path);
+            _.debug("Processed route " + current.path);
         }
     },
 

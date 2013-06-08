@@ -6,24 +6,17 @@
 </head>
 <body>
 <div id="main" data-tie="app">
-
-    <button data-tie="add">Add</button>
-
     <ul>
         <li data-tie="data"></li>
     </ul>
 </div>
 <script src="../src/tie.js"></script>
 <script>
-    tie("app", {});
     var arr = [];
-    for (var i = 0; i < 5000; i++) {
+    for (var i = 0; i < 100000; i++) {
         arr.push(i);
     }
     tie("data", arr);
-    tie("add", {add: function () {
-        this.$data.values.push(i++);
-    }, attrs: {click: '#add'}}, ['data']);
 </script>
 
 </body>

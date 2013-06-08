@@ -24,8 +24,7 @@
     };
 
     var proxy = function (tie) {
-        var obj = tie.obj;
-        var observe = function (desc, prop, dependency) {
+        var observe = function (obj, desc, prop, dependency) {
             if (desc && desc._proxyMark) {
                 return; //proxy already set
             }
@@ -67,33 +66,45 @@
             });
         };
     
-        var props = [];
-    
-        for (var prop in obj) {
-            if (obj.hasOwnProperty(prop)) {
-                props.push(prop);
-                if ('prototype' == prop) {
-                    continue; // skip prototype
+        var explore = function (obj) {
+            for (var prop in obj) {
+                if (obj.hasOwnProperty(prop)) {
+                    props.push(prop);
+                    if ('prototype' == prop) {
+                        continue; // skip prototype
+                    }
+                    var desc = Object.getOwnPropertyDescriptor(obj, prop);
+                    if (desc._proxyMark) {
+                        continue; //skip already processed
+                    }
+                    if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
+                        continue; // skip readonly
+                    }
+                    var dep = prop.charAt(0) === '$' && tie.depends.indexOf(prop.substring(1)) != -1;
+                    var val = obj[prop];
+                    if (_.isObject(val) && !dep) {
+                        explore(val);
+                    }
+                    observe(obj, desc, prop, dep);
                 }
-                var desc = Object.getOwnPropertyDescriptor(obj, prop);
-                if (desc._proxyMark) {
-                    continue; //skip already processed
-                }
-                if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
-                    continue; // skip readonly
-                }
-                var dep = prop.charAt(0) === '$' && tie.depends.indexOf(prop.substring(1)) != -1;
-                observe(desc, prop, dep);
             }
-        }
-        if (obj.attrs) {
-            _.forIn(obj.attrs, function (attr, prop) {
-                if (props.indexOf(prop) == -1 || attr.property || attr.value) {
-                    observe(null, prop);
-                }
-                props.push(prop);
-            }, this);
-        }
+            if (obj.attrs) {
+                _.forIn(obj.attrs, function (attr, prop) {
+                    if (props.indexOf(prop) == -1 || attr.property || attr.value) {
+                        if (_.isObject(val)) {
+                            explore(val);
+                        }
+                        observe(obj, null, prop);
+                    }
+                    props.push(prop);
+                }, this);
+            }
+        };
+    
+        var obj = tie.obj;
+        var props = [];
+        explore(obj);
+    
         return obj;
     };
     
@@ -103,20 +114,38 @@
             if (app == null) {
                 throw new Error("App is not ready");
             }
-            _.forIn(app.obj.routes, function (r, path) {
-                path = path.toLowerCase();
-                this.list[path] = new route(path, r.handler);
-            }, this);
-            _.debug("Routes init");
+            if (app.obj.routes) {
+                _.forIn(app.obj.routes, function (r, path) {
+                    path = path.toLowerCase();
+                    this.list[path] = new route(path, r.handler);
+                }, this);
+                _.debug("Routes init");
+            }
         },
     
         locate: function (ties) {
             var current = window.location.hash.substring(1);
             current = this.find(current);
             if (!current) {
-                this.move('/');
+                if (app.obj.routes) {
+                    this.move('/');
+                } else {
+                    _.debug("Process default route");
+                    _.forIn(ties, function (bind) {
+                        if (!bind.rendered) {
+                            bind.$render();
+                        }
+                        bind.obj.$location = function () {
+                            return{route: {has: function () {
+                                return true
+                            }}}
+                        };
+                        bind.obj.shown = true;
+                    });
+                    _.debug("Processed default route");
+                }
             } else {
-                _.debug("Process route" + current.path);
+                _.debug("Process route " + current.path);
                 app.location = function (url) {
                     if (url) {
                         this.move(url);
@@ -138,7 +167,7 @@
                         safeCall(r.handler, bind.obj, bind.$ready());
                     }
                 });
-                _.debug("Processed route" + current.path);
+                _.debug("Processed route " + current.path);
             }
         },
     
@@ -174,6 +203,10 @@
         }
     };
     
+    
+    var INDEX = "data-index";
+    var TIE = "data-tie";
+    var TIED = "data-tied";
     
     var q = {
         next: function (index, newElements) {
@@ -222,8 +255,10 @@
             }
         }
         el.addEventListener('change', listener);
+        var idx = el.getAttribute(INDEX);
         this.$ = el;
         this._id = _.uid();
+        this.index = idx ? parseInt(idx) : -1;
         this.tied = tied;
         this.events = {};
         this.isInput = _.eqi(el.tagName, 'input');
@@ -487,22 +522,32 @@
         return res;
     };
     
-    var valueFn = function (obj, bindReady) {
+    var valueFn = function (obj, idx, bindReady) {
         var name = this.name;
         var val = this.value;
         var property = this.property;
+        var values = obj.values;
+    
+        var findProperty = function (name) {
+            if (idx >= 0 && values && _.isDefined(values[idx][name])) {
+                return values[idx][name];
+            }
+            if (idx >= 0 && values && VALUE == name) {
+                return values[idx];
+            }
+            return obj[name]
+        };
+    
         if (_.isFunction(val)) {
             return safeCall(val, obj, bindReady)
         } else {
             if (property && _.isUndefined(val)) {
-                return obj[property];
+                return findProperty(property);
             }
             if (!name) {
-                throw new Error("Where is your export?")
+                throw new Error("Where is your property?")
             }
-            if (_.isUndefined(property) && _.isUndefined(val)) {
-                return obj[name];
-            }
+            return findProperty(name);
         }
     };
     
@@ -512,6 +557,8 @@
         this.values = {};
         this.depends = dependencies || [];
         this.rendered = false;
+        this.loaded = false;
+        this.selected = false;
         this.applyCount = 0;
         this.timeout = null;
         this.$apply = function () {
@@ -591,7 +638,7 @@
                 var attr = this.$attr(name);
                 if (_.isUndefined(value)) {
                     if (attr) {
-                        return attr.val(this.obj, this.$ready());
+                        return attr.val(this.obj, -1, this.$ready());
                     }
                 } else {
                     if (attr && attr.property) {
@@ -609,47 +656,38 @@
         },
         $attrs: function (elements, attr) {
             _.forEach(elements, function (el) {
-                el.setAttribute(attr.name, attr.value);
+                var val = attr.value;
+                if (_.isFunction(val)) {
+                    val = val(el.index);
+                }
+                el.setAttribute(attr.name, val);
             });
         },
         $show: function (shown) {
             _.forEach(this.$, function (el) {
                 el.show(shown);
             }, this);
-            _.forIn(this.values, function (value) {
-                value.$show(shown);
-            });
         },
         $render: function () {
             _.debug("Render " + this.name);
-            if (!this.rendered) {
+            if (!this.loaded) {
                 this.$load();
             }
-            var values = this.obj.values;
-            if (values) {
-                _.forEach(values, function (value) {
-                    var r = this.values[value._id];
-                    if (r) {
-                        var oldName = r.name;
-                        r.name = this.name;
-                        r.$render();
-                        r.name = oldName;
+            var attrs = this.obj.attrs;
+            if (attrs) {
+                var ready = this.$ready();
+                _.forIn(attrs, function (attr) {
+                    attr.val = valueFn;
+                    this.$attrs(this.$, {name: attr.name, value: function (idx) {
+                        return attr.val(this.obj, idx, ready);
+                    }.bind(this)});
+                }, this);
+                this.$attrs(this.$, {name: TIED});
+                _.forEach(this.$, function (el) {
+                    if (el.isInput) {
+                        el.setAttribute('name', this.name);
                     }
-                }, this)
-            } else {
-                var attrs = this.obj.attrs;
-                if (attrs) {
-                    _.forIn(attrs, function (attr) {
-                        attr.val = valueFn;
-                        this.$attrs(this.$, {name: attr.name, value: attr.val(this.obj, this.$ready())});
-                    }, this);
-                    this.$attrs(this.$, {name: 'data-tied'});
-                    _.forEach(this.$, function (el) {
-                        if (el.isInput) {
-                            el.setAttribute('name', this.name);
-                        }
-                    }, this);
-                }
+                }, this);
             }
             this.$show(this.obj.shown);
             this.rendered = true;
@@ -664,7 +702,7 @@
         var ties = {};
         return function (name, tiedObject, dependencies) {
             if (name != APP && ties[APP] == null) {
-                throw new Error('Please define your app tie first');
+                window.tie(APP, {});
             }
             var r = tie.prototype.init(name, tiedObject, dependencies, ties);
             tie.prototype.define(name, r, ties);
@@ -681,14 +719,14 @@
     tie.prototype = {
     
         select: function (tieName, tied) {
-            var nodes = window.document.querySelectorAll('[data-tie="' + tieName + '"]');
+            var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
             var res = [];
             _.forEach(nodes, function (el) {
                 res.push(new $(el, tied));
             });
+            tied.selected = true;
             return res;
         },
-    
     
         wrapPrimitive: function (obj) {
             return {
@@ -706,29 +744,10 @@
         },
     
         wrapArray: function (array) {
-            _.debug("Array wrap start");
-            var checked = this.checkArray(array);
-            _.debug("Array wrap finish");
             return {
-                values: checked,
+                values: array,
                 attrs: ['value']
             };
-        },
-    
-        checkArray: function (array) {
-            if(array._ready) {
-                return array;
-            }
-            var checked = [];
-            _.debug("Array check start");
-            _.forEach(array, function (item) {
-                var o = this.check(item);
-                o._id = _.uid();
-                checked.push(o);
-            }, this);
-            _.debug("Array check finish");
-            checked._ready = true;
-            return checked;
         },
     
         check: function (obj) {
@@ -739,9 +758,6 @@
             } else if (_.isArray(obj)) {
                 obj = this.wrapArray(obj);
             }
-            if (_.isDefined(obj.values)) {
-                obj.values = this.checkArray(obj.values);
-            }
             if (_.isUndefined(obj.shown)) {
                 obj.shown = true;
             }
@@ -749,42 +765,49 @@
                 obj.attrs = {};
             }
             if (_.isUndefined(obj.routes)) {
-                if (app != null) {
+                if (app != null && app.obj.routes) {
                     obj.routes = app.obj.routes;
-                } else {
-                    obj.routes = {
-                        '/':{}
-                    };
                 }
             }
             return new model(obj);
         },
     
-        prepare: function (bind, dependencies, ties) {
+        prepare: function (bind) {
             bind.$prepareAttrs();
             bind.$prepareRoutes();
             var values = bind.obj.values;
-            var lastNodes = {};
+            var newElements = {};
             if (values) {
                 _.forEach(values, function (value, i) {
-                    var name = bind.name + "_" + i;
                     _.forEach(bind.$, function (el) {
+                        if(el.index >=0) {
+                            el.remove();
+                        }
                         var node = el.$;
-                        node.style.display = 'none';
-                        var lastNode = lastNodes[el._id];
-                        if (!lastNode) {
-                            lastNode = node;
+                        var newEls = newElements[el._id];
+                        if (!newEls) {
+                            newElements[el._id] = newEls = [];
                         }
                         var newElement = node.cloneNode(true);
-                        newElement.setAttribute('data-tie', name);
-                        newElement.style.display = null;
-                        q.next(lastNode, newElement);
-                        lastNodes[el._id] = newElement;
+                        newElement.setAttribute(INDEX, i);
+                        newEls.push(newElement);
                     });
-                    _.extend(value.attrs, bind.obj.attrs);
-                    bind.values[value._id] = this.init(name, value, dependencies, ties);
                 }, this);
+                _.forEach(bind.$, function (el) {
+                    var node = el.$;
+                    node.style.display = 'none';
+                    q.next(node, newElements[el._id]);
+                });
+                bind.selected = false;
             }
+        },
+    
+        prepareDependency: function (bind) {
+            var obj = _.extend({}, bind.obj);
+            _.forEach(bind.depends, function (dep) {
+                delete obj['$' + dep];
+            });
+            return obj;
         },
     
         resolve: function (bind, dependencies, ties) {
@@ -825,15 +848,23 @@
             r.obj = proxy(r);
             _.debug("Model proxy done");
             var tie = this;
-            r.$load = function() {
-                this.$ = tie.select(name, r);
-                _.debug("Elements selected");
-                tie.prepare(this, dependencies, ties);
+            r.$load = function () {
+                if (!this.selected) {
+                    this.$ = tie.select(name, r);
+                    _.debug("Elements selected: " + this.$.length);
+                }
+                tie.prepare(this);
                 _.debug("Prepared inner structure");
+                if (!this.selected) {
+                    this.$ = tie.select(name, r);
+                    _.debug("Elements reselected: " + this.$.length);
+                }
+                this.loaded = true;
             };
             return r;
         }
     };
+
     window.tie = tie();
 
 })(window);

@@ -7,9 +7,6 @@
 <body ng-app>
 
 <div ng-controller="ListCtrl">
-
-    <button ng-click="add()">Add</button>
-
     <ul>
         <li ng-repeat="i in list">{{i}}</li>
     </ul>
@@ -26,10 +23,6 @@
             arr.push(i);
         }
         $scope.list = arr;
-
-        $scope.add = function () {
-            $scope.list.push(i++);
-        }
     }
 </script>
 

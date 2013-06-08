@@ -4,7 +4,7 @@ var tie = function () {
     var ties = {};
     return function (name, tiedObject, dependencies) {
         if (name != APP && ties[APP] == null) {
-            throw new Error('Please define your app tie first');
+            window.tie(APP, {});
         }
         var r = tie.prototype.init(name, tiedObject, dependencies, ties);
         tie.prototype.define(name, r, ties);
@@ -21,14 +21,14 @@ var tie = function () {
 tie.prototype = {
 
     select: function (tieName, tied) {
-        var nodes = window.document.querySelectorAll('[data-tie="' + tieName + '"]');
+        var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
         var res = [];
         _.forEach(nodes, function (el) {
             res.push(new $(el, tied));
         });
+        tied.selected = true;
         return res;
     },
-
 
     wrapPrimitive: function (obj) {
         return {
@@ -46,29 +46,10 @@ tie.prototype = {
     },
 
     wrapArray: function (array) {
-        _.debug("Array wrap start");
-        var checked = this.checkArray(array);
-        _.debug("Array wrap finish");
         return {
-            values: checked,
+            values: array,
             attrs: ['value']
         };
-    },
-
-    checkArray: function (array) {
-        if(array._ready) {
-            return array;
-        }
-        var checked = [];
-        _.debug("Array check start");
-        _.forEach(array, function (item) {
-            var o = this.check(item);
-            o._id = _.uid();
-            checked.push(o);
-        }, this);
-        _.debug("Array check finish");
-        checked._ready = true;
-        return checked;
     },
 
     check: function (obj) {
@@ -79,9 +60,6 @@ tie.prototype = {
         } else if (_.isArray(obj)) {
             obj = this.wrapArray(obj);
         }
-        if (_.isDefined(obj.values)) {
-            obj.values = this.checkArray(obj.values);
-        }
         if (_.isUndefined(obj.shown)) {
             obj.shown = true;
         }
@@ -89,42 +67,49 @@ tie.prototype = {
             obj.attrs = {};
         }
         if (_.isUndefined(obj.routes)) {
-            if (app != null) {
+            if (app != null && app.obj.routes) {
                 obj.routes = app.obj.routes;
-            } else {
-                obj.routes = {
-                    '/':{}
-                };
             }
         }
         return new model(obj);
     },
 
-    prepare: function (bind, dependencies, ties) {
+    prepare: function (bind) {
         bind.$prepareAttrs();
         bind.$prepareRoutes();
         var values = bind.obj.values;
-        var lastNodes = {};
+        var newElements = {};
         if (values) {
             _.forEach(values, function (value, i) {
-                var name = bind.name + "_" + i;
                 _.forEach(bind.$, function (el) {
+                    if(el.index >=0) {
+                        el.remove();
+                    }
                     var node = el.$;
-                    node.style.display = 'none';
-                    var lastNode = lastNodes[el._id];
-                    if (!lastNode) {
-                        lastNode = node;
+                    var newEls = newElements[el._id];
+                    if (!newEls) {
+                        newElements[el._id] = newEls = [];
                     }
                     var newElement = node.cloneNode(true);
-                    newElement.setAttribute('data-tie', name);
-                    newElement.style.display = null;
-                    q.next(lastNode, newElement);
-                    lastNodes[el._id] = newElement;
+                    newElement.setAttribute(INDEX, i);
+                    newEls.push(newElement);
                 });
-                _.extend(value.attrs, bind.obj.attrs);
-                bind.values[value._id] = this.init(name, value, dependencies, ties);
             }, this);
+            _.forEach(bind.$, function (el) {
+                var node = el.$;
+                node.style.display = 'none';
+                q.next(node, newElements[el._id]);
+            });
+            bind.selected = false;
         }
+    },
+
+    prepareDependency: function (bind) {
+        var obj = _.extend({}, bind.obj);
+        _.forEach(bind.depends, function (dep) {
+            delete obj['$' + dep];
+        });
+        return obj;
     },
 
     resolve: function (bind, dependencies, ties) {
@@ -165,11 +150,18 @@ tie.prototype = {
         r.obj = proxy(r);
         _.debug("Model proxy done");
         var tie = this;
-        r.$load = function() {
-            this.$ = tie.select(name, r);
-            _.debug("Elements selected");
-            tie.prepare(this, dependencies, ties);
+        r.$load = function () {
+            if (!this.selected) {
+                this.$ = tie.select(name, r);
+                _.debug("Elements selected: " + this.$.length);
+            }
+            tie.prepare(this);
             _.debug("Prepared inner structure");
+            if (!this.selected) {
+                this.$ = tie.select(name, r);
+                _.debug("Elements reselected: " + this.$.length);
+            }
+            this.loaded = true;
         };
         return r;
     }

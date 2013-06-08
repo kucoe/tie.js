@@ -18,22 +18,32 @@ var safeCall = function (fn, fnThis, bindReady) {
     return res;
 };
 
-var valueFn = function (obj, bindReady) {
+var valueFn = function (obj, idx, bindReady) {
     var name = this.name;
     var val = this.value;
     var property = this.property;
+    var values = obj.values;
+
+    var findProperty = function (name) {
+        if (idx >= 0 && values && _.isDefined(values[idx][name])) {
+            return values[idx][name];
+        }
+        if (idx >= 0 && values && VALUE == name) {
+            return values[idx];
+        }
+        return obj[name]
+    };
+
     if (_.isFunction(val)) {
         return safeCall(val, obj, bindReady)
     } else {
         if (property && _.isUndefined(val)) {
-            return obj[property];
+            return findProperty(property);
         }
         if (!name) {
-            throw new Error("Where is your export?")
+            throw new Error("Where is your property?")
         }
-        if (_.isUndefined(property) && _.isUndefined(val)) {
-            return obj[name];
-        }
+        return findProperty(name);
     }
 };
 
@@ -43,6 +53,8 @@ var bind = function (name, dependencies, ties) {
     this.values = {};
     this.depends = dependencies || [];
     this.rendered = false;
+    this.loaded = false;
+    this.selected = false;
     this.applyCount = 0;
     this.timeout = null;
     this.$apply = function () {
@@ -122,7 +134,7 @@ bind.prototype = {
             var attr = this.$attr(name);
             if (_.isUndefined(value)) {
                 if (attr) {
-                    return attr.val(this.obj, this.$ready());
+                    return attr.val(this.obj, -1, this.$ready());
                 }
             } else {
                 if (attr && attr.property) {
@@ -140,47 +152,38 @@ bind.prototype = {
     },
     $attrs: function (elements, attr) {
         _.forEach(elements, function (el) {
-            el.setAttribute(attr.name, attr.value);
+            var val = attr.value;
+            if (_.isFunction(val)) {
+                val = val(el.index);
+            }
+            el.setAttribute(attr.name, val);
         });
     },
     $show: function (shown) {
         _.forEach(this.$, function (el) {
             el.show(shown);
         }, this);
-        _.forIn(this.values, function (value) {
-            value.$show(shown);
-        });
     },
     $render: function () {
         _.debug("Render " + this.name);
-        if (!this.rendered) {
+        if (!this.loaded) {
             this.$load();
         }
-        var values = this.obj.values;
-        if (values) {
-            _.forEach(values, function (value) {
-                var r = this.values[value._id];
-                if (r) {
-                    var oldName = r.name;
-                    r.name = this.name;
-                    r.$render();
-                    r.name = oldName;
+        var attrs = this.obj.attrs;
+        if (attrs) {
+            var ready = this.$ready();
+            _.forIn(attrs, function (attr) {
+                attr.val = valueFn;
+                this.$attrs(this.$, {name: attr.name, value: function (idx) {
+                    return attr.val(this.obj, idx, ready);
+                }.bind(this)});
+            }, this);
+            this.$attrs(this.$, {name: TIED});
+            _.forEach(this.$, function (el) {
+                if (el.isInput) {
+                    el.setAttribute('name', this.name);
                 }
-            }, this)
-        } else {
-            var attrs = this.obj.attrs;
-            if (attrs) {
-                _.forIn(attrs, function (attr) {
-                    attr.val = valueFn;
-                    this.$attrs(this.$, {name: attr.name, value: attr.val(this.obj, this.$ready())});
-                }, this);
-                this.$attrs(this.$, {name: 'data-tied'});
-                _.forEach(this.$, function (el) {
-                    if (el.isInput) {
-                        el.setAttribute('name', this.name);
-                    }
-                }, this);
-            }
+            }, this);
         }
         this.$show(this.obj.shown);
         this.rendered = true;
