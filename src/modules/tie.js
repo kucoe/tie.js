@@ -84,12 +84,13 @@ tie.prototype = {
             _.forEach(values, function (value, i) {
                 _.forEach(bind.$, function (el) {
                     var id = el._id;
+                    var node = nodes[id];
+                    if(!node) {
+                        nodes[id] = node = el.$;
+                    }
                     if(el.index >=0) {
                         el.remove();
-                    } else {
-                        nodes[ id] = el.$;
                     }
-                    var node = nodes[id];
                     var newEls = newElements[id];
                     if (!newEls) {
                         newElements[id] = newEls = [];
