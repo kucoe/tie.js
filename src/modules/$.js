@@ -136,7 +136,7 @@ $.prototype = {
     remove: function () {
         var element = this.$;
         var array = this.tied.$;
-        delete array[array.indexOf(this)];
+        array.splice(array.indexOf(this), 1);
         delete this.$;
         delete this.tied;
         delete this._id;

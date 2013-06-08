@@ -63,7 +63,7 @@ var _ = {
         return this.lowercase(val1) === this.lowercase(val2);
     },
 
-    forEach: function (collection, callback, thisArg) {
+    forEach: function (collection, callback, thisArg, safe) {
         if (!thisArg) {
             thisArg = this;
         }
@@ -71,9 +71,17 @@ var _ = {
             if (this.isCollection(collection)) {
                 var index = -1;
                 var length = collection.length;
-
+                var coll = [];
+                if (safe) {
+                    while (++index < length) {
+                        coll.push(collection[index]);
+                    }
+                    index = -1;
+                } else {
+                    coll = collection;
+                }
                 while (++index < length) {
-                    if (callback.call(thisArg, collection[index], index, collection) === false) {
+                    if (callback.call(thisArg, coll[index], index, collection) === false) {
                         break;
                     }
                 }
@@ -116,8 +124,8 @@ var _ = {
         }
     },
 
-    debug : function(message) {
-        if(this.debugEnabled){
+    debug: function (message) {
+        if (this.debugEnabled) {
             console.log(message);
         }
     }

@@ -342,7 +342,7 @@
         remove: function () {
             var element = this.$;
             var array = this.tied.$;
-            delete array[array.indexOf(this)];
+            array.splice(array.indexOf(this), 1);
             delete this.$;
             delete this.tied;
             delete this._id;
@@ -442,7 +442,7 @@
             return this.lowercase(val1) === this.lowercase(val2);
         },
     
-        forEach: function (collection, callback, thisArg) {
+        forEach: function (collection, callback, thisArg, safe) {
             if (!thisArg) {
                 thisArg = this;
             }
@@ -450,9 +450,17 @@
                 if (this.isCollection(collection)) {
                     var index = -1;
                     var length = collection.length;
-    
+                    var coll = [];
+                    if (safe) {
+                        while (++index < length) {
+                            coll.push(collection[index]);
+                        }
+                        index = -1;
+                    } else {
+                        coll = collection;
+                    }
                     while (++index < length) {
-                        if (callback.call(thisArg, collection[index], index, collection) === false) {
+                        if (callback.call(thisArg, coll[index], index, collection) === false) {
                             break;
                         }
                     }
@@ -495,8 +503,8 @@
             }
         },
     
-        debug : function(message) {
-            if(this.debugEnabled){
+        debug: function (message) {
+            if (this.debugEnabled) {
                 console.log(message);
             }
         }
@@ -558,6 +566,7 @@
         this.depends = dependencies || [];
         this.rendered = false;
         this.loaded = false;
+        this.loading = false;
         this.selected = false;
         this.applyCount = 0;
         this.timeout = null;
@@ -670,7 +679,7 @@
         },
         $render: function () {
             _.debug("Render " + this.name);
-            if (!this.loaded) {
+            if (!this.loaded && !this.loading) {
                 this.$load();
             }
             var attrs = this.obj.attrs;
@@ -779,6 +788,11 @@
             var newElements = {};
             var nodes = {};
             if (values) {
+                _.forEach(bind.$, function (el) {
+                    if(el.index >=0) {
+                        el.remove();
+                    }
+                }, this, true);
                 _.forEach(values, function (value, i) {
                     _.forEach(bind.$, function (el) {
                         var id = el._id;
@@ -786,14 +800,12 @@
                         if(!node) {
                             nodes[id] = node = el.$;
                         }
-                        if(el.index >=0) {
-                            el.remove();
-                        }
                         var newEls = newElements[id];
                         if (!newEls) {
                             newElements[id] = newEls = [];
                         }
                         var newElement = node.cloneNode(true);
+                        node.style.display = '';
                         newElement.setAttribute(INDEX, i);
                         newEls.push(newElement);
                     });
@@ -854,6 +866,7 @@
             _.debug("Model proxy done");
             var tie = this;
             r.$load = function () {
+                this.loading = true
                 if (!this.selected) {
                     this.$ = tie.select(name, r);
                     _.debug("Elements selected: " + this.$.length);
@@ -865,6 +878,7 @@
                     _.debug("Elements reselected: " + this.$.length);
                 }
                 this.loaded = true;
+                this.loading = false;
             };
             return r;
         }

@@ -81,6 +81,11 @@ tie.prototype = {
         var newElements = {};
         var nodes = {};
         if (values) {
+            _.forEach(bind.$, function (el) {
+                if(el.index >=0) {
+                    el.remove();
+                }
+            }, this, true);
             _.forEach(values, function (value, i) {
                 _.forEach(bind.$, function (el) {
                     var id = el._id;
@@ -88,14 +93,12 @@ tie.prototype = {
                     if(!node) {
                         nodes[id] = node = el.$;
                     }
-                    if(el.index >=0) {
-                        el.remove();
-                    }
                     var newEls = newElements[id];
                     if (!newEls) {
                         newElements[id] = newEls = [];
                     }
                     var newElement = node.cloneNode(true);
+                    node.style.display = '';
                     newElement.setAttribute(INDEX, i);
                     newEls.push(newElement);
                 });
@@ -156,6 +159,7 @@ tie.prototype = {
         _.debug("Model proxy done");
         var tie = this;
         r.$load = function () {
+            this.loading = true
             if (!this.selected) {
                 this.$ = tie.select(name, r);
                 _.debug("Elements selected: " + this.$.length);
@@ -167,6 +171,7 @@ tie.prototype = {
                 _.debug("Elements reselected: " + this.$.length);
             }
             this.loaded = true;
+            this.loading = false;
         };
         return r;
     }

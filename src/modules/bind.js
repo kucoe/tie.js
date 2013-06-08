@@ -54,6 +54,7 @@ var bind = function (name, dependencies, ties) {
     this.depends = dependencies || [];
     this.rendered = false;
     this.loaded = false;
+    this.loading = false;
     this.selected = false;
     this.applyCount = 0;
     this.timeout = null;
@@ -166,7 +167,7 @@ bind.prototype = {
     },
     $render: function () {
         _.debug("Render " + this.name);
-        if (!this.loaded) {
+        if (!this.loaded && !this.loading) {
             this.$load();
         }
         var attrs = this.obj.attrs;
