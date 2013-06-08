@@ -4,19 +4,18 @@
     <title>Big list</title>
     <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
 </head>
-<body ng-app>
+<body>
 
-<div ng-controller="ListCtrl">
-    <ul>
-        <li ng-repeat="i in list">{{i}}</li>
-    </ul>
-
+<div ng-app>
+    <div ng-controller="ListCtrl">
+        <ul>
+            <li ng-repeat="i in list">{{i}}</li>
+        </ul>
+    </div>
 </div>
 
 <script src="http://ajax.googleapis.com/ajax/libs/angularjs/1.0.6/angular.js"></script>
 <script>
-    'use strict';
-
     function ListCtrl($scope) {
         var arr = [];
         for (var i = 0; i < 10000; i++) {

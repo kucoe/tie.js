@@ -777,16 +777,20 @@
             bind.$prepareRoutes();
             var values = bind.obj.values;
             var newElements = {};
+            var nodes = {};
             if (values) {
                 _.forEach(values, function (value, i) {
                     _.forEach(bind.$, function (el) {
+                        var id = el._id;
                         if(el.index >=0) {
                             el.remove();
+                        } else {
+                            nodes[ id] = el.$;
                         }
-                        var node = el.$;
-                        var newEls = newElements[el._id];
+                        var node = nodes[id];
+                        var newEls = newElements[id];
                         if (!newEls) {
-                            newElements[el._id] = newEls = [];
+                            newElements[id] = newEls = [];
                         }
                         var newElement = node.cloneNode(true);
                         newElement.setAttribute(INDEX, i);
