@@ -132,7 +132,7 @@
                 } else {
                     _.debug("Process default route");
                     _.forIn(ties, function (bind) {
-                        if (!bind.rendered) {
+                        if (!bind. rendered) {
                             bind.$render();
                         }
                         bind.obj.$location = function () {
@@ -204,11 +204,63 @@
     };
     
     
+    var pipes = {};
+    
+    var pipe = function (str) {
+        var split = str.split(':');
+        this.name = split[0];
+        this.params = [];
+        if (split.length > 1) {
+            this.params = split[1].split(',');
+        }
+    
+    };
+    
+    pipe.prototype = {
+        process: function (bind, ties) {
+            var tie = ties[this.name];
+            if (!tie) {
+                throw new Error('Pipe ' + this.name + ' not found');
+            }
+            var value = tie.$attrValue(VALUE);
+            var params = [];
+            if (this.params.length > 0) {
+                _.forEach(this.params, function (param) {
+                    var res = _.convert(param);
+                    if (bind.$attrValue(param)) {
+                        res = bind.$attrValue(param);
+                    } else if (pipes[param]) {
+                        res = pipes[param];
+                    }
+                    params.push(res);
+                });
+            }
+            var res = bind.obj;
+            if (value && _.isFunction(value)) {
+                return safeCall(value, tie, tie.$ready(), res, params);
+            }
+            return res;
+        }
+    };
+    
+    
     var INDEX = "data-index";
     var TIE = "data-tie";
     var TIED = "data-tied";
     
+    /**
+     * @description
+     * DOM manipulations
+     */
     var q = {
+    
+        /**
+         * @description
+         * Appends list of elements to the index element
+         *
+         * @param {Node} index index node after which new elements will go.
+         * @param {Node|Array} newElements one or more elements
+         */
         next: function (index, newElements) {
             var parent = index.parentNode;
             _.forEach(newElements, function (node) {
@@ -217,11 +269,26 @@
             });
         },
     
+        /**
+         * @description
+         * Removes element
+         *
+         * @param {Node} element element to remove.
+         */
         remove: function (element) {
             var parent = element.parentNode;
             if (parent) parent.removeChild(element);
         },
     
+        /**
+         * @description
+         * Adds on load on hash change listener with callback specified.
+         *
+         * Note: callback will be called when document loaded or instantly if document is already loaded
+         * and every time when hash is changed.
+         *
+         * @param {Function} fn function to call.
+         */
         ready: function (fn) {
             // check if document already is loaded
             if (document.readyState === 'complete') {
@@ -233,13 +300,21 @@
         }
     };
     
-    var $ = function (el, tied) {
+    /**
+     * @description
+     * DOM element wrapper
+     *
+     * @param {Node} el DOM element.
+     * @param {bind} bind element bound tie
+     * @returns wrapper.
+     */
+    var $ = function (el, bind) {
         var listener = function () {
             var value = this.value();
             value = _.trim(value);
     
-            if (tied.obj[VALUE] !== value) {
-                tied.obj[VALUE] = value;
+            if (bind.$attrValue(VALUE) !== value) {
+                bind.$attrValue(VALUE, value);
             }
         }.bind(this);
         if (_.isDefined(el.value)) {
@@ -259,30 +334,48 @@
         this.$ = el;
         this._id = _.uid();
         this.index = idx ? parseInt(idx) : -1;
-        this.tied = tied;
+        this.tie = el.getAttribute(TIE).replace(/\.([^.|1-9]+)/g,'|property:"$1"');
+        this.bind = bind;
         this.events = {};
         this.isInput = _.eqi(el.tagName, 'input');
         this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
         this.display = el.style.display;
         this.shown = true;
         this.textEl = null;
+        var pipes = this.tie.match(/[^|]+/g);
+        this.pipes = [];
+        _.forEach(pipes, function (string) {
+            this.pipes.push(new pipe(string));
+        }, this);
     };
     
     $.prototype = {
+    
+        /**
+         * @description
+         * Apply element attribute. Has polymorphic behavior.
+         * For attribute "value" calls this {$.value},
+         * for attribute "text" calls this {$.text},
+         * for function value adds event handler
+         * else simple set attributes element.
+         *
+         * @param {string} name attribute name.
+         * @param {*} value attribute value.
+         */
         setAttribute: function (name, value) {
             if (VALUE === name) {
                 this.value(value);
             } else if (TEXT === name) {
                 this.text(value);
             } else if (_.isFunction(value)) {
-                var obj = this.tied.obj;
-                var tied = this.tied;
+                var obj = this.bind.obj;
+                var bind = this.bind;
                 var handler = this.events[name];
                 if (handler) {
                     this.$.removeEventListener(name, handler);
                 }
                 handler = function (event) {
-                    safeCall(value, obj, tied.$ready(), event);
+                    safeCall(value, obj, bind.$ready(), event);
                 };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -295,6 +388,15 @@
             }
         },
     
+        /**
+         * @description
+         * Apply elements value or return current value if parameter is empty. Has polymorphic behavior.
+         * For input that has check checked attribute will be used,
+         * for other inputs value attribute will be used,
+         * else {$.text} will be called.
+         *
+         * @param {*} val value.
+         */
         value: function (val) {
             if (this.hasCheck) {
                 if (_.isDefined(val)) {
@@ -318,6 +420,14 @@
             return null;
         },
     
+        /**
+         * @description
+         * Apply elements text content or return current text content if parameter is empty. Has polymorphic behavior.
+         * For input next sibling text node will be used,
+         * else underlying element text content will be used.
+         *
+         * @param {string} text value.
+         */
         text: function (text) {
             if (_.isDefined(text)) {
                 if (this.isInput) {
@@ -339,12 +449,16 @@
             return null;
         },
     
+        /**
+         * @description
+         * Removes underlying element from document and utilize current object from bind.
+         */
         remove: function () {
             var element = this.$;
-            var array = this.tied.$;
+            var array = this.bind.$;
             array.splice(array.indexOf(this), 1);
             delete this.$;
-            delete this.tied;
+            delete this.bind;
             delete this._id;
             delete this.isInput;
             delete this.hasCheck;
@@ -352,11 +466,23 @@
             q.remove(element);
         },
     
+        /**
+         * @description
+         * Appends list of elements to current element
+         *
+         * @param {Node|Array} newElements one or more elements
+         */
         next: function (newElements) {
             var index = this.$;
             q.next(index, newElements);
         },
     
+        /**
+         * @description
+         * Show/hide current element. Uses style display property. Stores last display value to use it for restoring.
+         *
+         * @param {boolean} show
+         */
         show: function (show) {
             if (this.shown === show) {
                 return;
@@ -374,6 +500,22 @@
                 }
             }
             this.shown = show;
+        },
+    
+        /**
+         * @description
+         * Processes pipes of current element
+         *
+         * @returns new bind object according to pipes
+         */
+        pipe: function (ties) {
+            var res = this.bind;
+            if (this.pipes) {
+                _.forEach(this.pipes, function (pipe) {
+                    res = pipe.process(res, ties);
+                })
+            }
+            return res;
         }
     };
     
@@ -440,6 +582,24 @@
     
         eqi: function (val1, val2) {
             return this.lowercase(val1) === this.lowercase(val2);
+        },
+    
+        convert: function(string) {
+            var res = string;
+            if ('tree' === string) {
+                res = true
+            } else if ('false' === string) {
+                res = false
+            } else if (string.match(/\d/)) {
+                if (param.indexOf('.') != -1) {
+                    res = parseFloat(string);
+                } else {
+                    res = parseInt(string);
+                }
+            } else if(string.charAt(0) == '"' || string.charAt(0) == "'") {
+                res = string.substring(1, string.length -1);
+            }
+            return res;
         },
     
         forEach: function (collection, callback, thisArg, safe) {
@@ -652,6 +812,8 @@
                 } else {
                     if (attr && attr.property) {
                         this.obj[attr.property] = value;
+                    } else if(attr) {
+                        this.obj[name] = value;
                     }
                 }
             }
@@ -727,20 +889,28 @@
     };
     tie.prototype = {
     
-        select: function (tieName, tied) {
+        select: function (tieName, bind) {
             var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
             var res = [];
             _.forEach(nodes, function (el) {
-                res.push(new $(el, tied));
+                res.push(new $(el, bind));
             });
-            tied.selected = true;
+            nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '|"]');
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, bind));
+            });
+            nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '."]');
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, bind));
+            });
+            bind.selected = true;
             return res;
         },
     
         wrapPrimitive: function (obj) {
             return {
                 value: obj,
-                attrs: ['value']
+                attrs: [VALUE]
             }
         },
     
@@ -755,7 +925,7 @@
         wrapArray: function (array) {
             return {
                 values: array,
-                attrs: ['value']
+                attrs: [VALUE]
             };
         },
     
@@ -885,5 +1055,6 @@
     };
 
     window.tie = tie();
+    window.tie.pipes = pipes;
 
 })(window);

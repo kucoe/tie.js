@@ -20,20 +20,28 @@ var tie = function () {
 };
 tie.prototype = {
 
-    select: function (tieName, tied) {
+    select: function (tieName, bind) {
         var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
         var res = [];
         _.forEach(nodes, function (el) {
-            res.push(new $(el, tied));
+            res.push(new $(el, bind));
         });
-        tied.selected = true;
+        nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '|"]');
+        _.forEach(nodes, function (el) {
+            res.push(new $(el, bind));
+        });
+        nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '."]');
+        _.forEach(nodes, function (el) {
+            res.push(new $(el, bind));
+        });
+        bind.selected = true;
         return res;
     },
 
     wrapPrimitive: function (obj) {
         return {
             value: obj,
-            attrs: ['value']
+            attrs: [VALUE]
         }
     },
 
@@ -48,7 +56,7 @@ tie.prototype = {
     wrapArray: function (array) {
         return {
             values: array,
-            attrs: ['value']
+            attrs: [VALUE]
         };
     },
 

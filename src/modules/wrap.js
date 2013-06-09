@@ -25,5 +25,6 @@
 
 //INSERT
     window.tie = tie();
+    window.tie.pipes = pipes;
 
 })(window);

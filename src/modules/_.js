@@ -63,6 +63,24 @@ var _ = {
         return this.lowercase(val1) === this.lowercase(val2);
     },
 
+    convert: function(string) {
+        var res = string;
+        if ('tree' === string) {
+            res = true
+        } else if ('false' === string) {
+            res = false
+        } else if (string.match(/\d/)) {
+            if (param.indexOf('.') != -1) {
+                res = parseFloat(string);
+            } else {
+                res = parseInt(string);
+            }
+        } else if(string.charAt(0) == '"' || string.charAt(0) == "'") {
+            res = string.substring(1, string.length -1);
+        }
+        return res;
+    },
+
     forEach: function (collection, callback, thisArg, safe) {
         if (!thisArg) {
             thisArg = this;

@@ -22,7 +22,7 @@ var routes = {
             } else {
                 _.debug("Process default route");
                 _.forIn(ties, function (bind) {
-                    if (!bind.rendered) {
+                    if (!bind. rendered) {
                         bind.$render();
                     }
                     bind.obj.$location = function () {

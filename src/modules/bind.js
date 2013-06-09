@@ -140,6 +140,8 @@ bind.prototype = {
             } else {
                 if (attr && attr.property) {
                     this.obj[attr.property] = value;
+                } else if(attr) {
+                    this.obj[name] = value;
                 }
             }
         }
