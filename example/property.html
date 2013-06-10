@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tie property example</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+</head>
+<body>
+<div data-tie="person">
+    Name:
+    <input type="text" data-tie="person.name"/>
+    Age:
+    <input type="text" data-tie="person.age"/>
+    <br/>
+    Show: <input type="checkbox" data-tie="person.shown"/>
+</div>
+<script src="../src/tie.js"></script>
+<script>
+    tie("person", {
+        style: 'color:blue',
+        name: 'John',
+        age: 25,
+        attrs: ['style']
+    });
+</script>
+
+</body>
+</html>

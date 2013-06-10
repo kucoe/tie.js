@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tie bindings example</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+</head>
+<body>
+<div>
+    <input id="text" type="text" data-tie="text"/>
+    <input type="button" data-tie="trigger"/>
+    <span data-tie="text"></span>
+    <br/>
+    <span data-tie="label"></span>
+    <label for="text" data-tie="label2"></label>
+</div>
+<script src="../src/tie.js"></script>
+<script>
+    tie("label", {
+        style: 'color:red',
+        routes: ['labels'],
+        attrs: ['style']._({
+            value: function () {
+                return this.$text.value
+            }
+        })
+    }, ['text']);
+    tie("label2", function () {
+        if (this.isUndefined(this.$label.value)) {
+            return 0;
+        }
+        return this.$label.value.length;
+    }, ['label']);
+    tie("text", 'test');
+    tie("trigger", {
+        float: function (evt) {
+            if (evt.type === 'mouseover') {
+                this.value = 'Over';
+                this.$label.style = 'color:green';
+            } else {
+                this.value = 'Out';
+                this.$label.style = 'color:red';
+            }
+        },
+        trigger: function () {
+            tie('text', 'changed');
+        },
+        value: 'Out',
+        attrs: ['value']._({
+            mouseover: '#float',
+            mouseout: '#float',
+            click: '#trigger'
+
+        })
+    }, ['label']);
+</script>
+
+</body>
+</html>

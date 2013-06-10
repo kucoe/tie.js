@@ -1,15 +1,11 @@
-var INDEX = "data-index";
-var TIE = "data-tie";
-var TIED = "data-tied";
-
 /**
- * @description
- * DOM manipulations
+ * DOM manipulations functions
+ *
+ * @namespace q
  */
 var q = {
 
     /**
-     * @description
      * Appends list of elements to the index element
      *
      * @param {Node} index index node after which new elements will go.
@@ -24,7 +20,6 @@ var q = {
     },
 
     /**
-     * @description
      * Removes element
      *
      * @param {Node} element element to remove.
@@ -35,9 +30,8 @@ var q = {
     },
 
     /**
-     * @description
      * Adds on load on hash change listener with callback specified.
-     *
+     * <br>
      * Note: callback will be called when document loaded or instantly if document is already loaded
      * and every time when hash is changed.
      *
@@ -55,12 +49,13 @@ var q = {
 };
 
 /**
- * @description
  * DOM element wrapper
  *
+ * @constructor
+ * @class $
+ * @this $
  * @param {Node} el DOM element.
  * @param {bind} bind element bound tie
- * @returns wrapper.
  */
 var $ = function (el, bind) {
     var listener = function () {
@@ -88,7 +83,7 @@ var $ = function (el, bind) {
     this.$ = el;
     this._id = _.uid();
     this.index = idx ? parseInt(idx) : -1;
-    this.tie = el.getAttribute(TIE).replace(/\.([^.|1-9]+)/g,'|property:"$1"');
+    this.tie = el.getAttribute(TIE);
     this.bind = bind;
     this.events = {};
     this.isInput = _.eqi(el.tagName, 'input');
@@ -96,7 +91,7 @@ var $ = function (el, bind) {
     this.display = el.style.display;
     this.shown = true;
     this.textEl = null;
-    var pipes = this.tie.match(/[^|]+/g);
+    var pipes = this.tie.replace(/\.([^.|1-9]+)/g, '|property:"$1"').match(/[^|]+/g).splice(1);
     this.pipes = [];
     _.forEach(pipes, function (string) {
         this.pipes.push(new pipe(string));
@@ -106,15 +101,17 @@ var $ = function (el, bind) {
 $.prototype = {
 
     /**
-     * @description
-     * Apply element attribute. Has polymorphic behavior.
-     * For attribute "value" calls this {$.value},
-     * for attribute "text" calls this {$.text},
-     * for function value adds event handler
-     * else simple set attributes element.
+     * Apply element attribute. Has polymorphic behavior.<br>
+     *  <ul>
+     *      <li>For attribute "value" calls this {@link $#value},
+     *      <li>for attribute "text" calls this {@link $#text},
+     *      <li>for function value adds event handler
+     *      <li>else simple set attributes element.
+     *  </ul>
      *
+     * @this $
      * @param {string} name attribute name.
-     * @param {*} value attribute value.
+     * @param {*} [value] attribute value.
      */
     setAttribute: function (name, value) {
         if (VALUE === name) {
@@ -122,15 +119,15 @@ $.prototype = {
         } else if (TEXT === name) {
             this.text(value);
         } else if (_.isFunction(value)) {
-            var obj = this.bind.obj;
-            var bind = this.bind;
             var handler = this.events[name];
             if (handler) {
                 this.$.removeEventListener(name, handler);
             }
             handler = function (event) {
-                safeCall(value, obj, bind.$ready(), event);
-            };
+                event.index = this.index;
+                event.tie = this.tie;
+                safeCall(value, this.bind.obj, this.bind.$ready(), event);
+            }.bind(this);
             this.events[name] = handler;
             this.$.addEventListener(name, handler);
         } else {
@@ -143,13 +140,14 @@ $.prototype = {
     },
 
     /**
-     * @description
-     * Apply elements value or return current value if parameter is empty. Has polymorphic behavior.
-     * For input that has check checked attribute will be used,
-     * for other inputs value attribute will be used,
-     * else {$.text} will be called.
-     *
-     * @param {*} val value.
+     * Apply elements value or return current value if parameter is empty. Has polymorphic behavior.<br>
+     *  <ul>
+     *     <li>For input that has check checked attribute will be used,
+     *     <li>for other inputs value attribute will be used,
+     *     <li>else {@link $#text} will be called.
+     *  </ul>
+     * @this $
+     * @param {*} [val] value.
      */
     value: function (val) {
         if (this.hasCheck) {
@@ -175,12 +173,13 @@ $.prototype = {
     },
 
     /**
-     * @description
-     * Apply elements text content or return current text content if parameter is empty. Has polymorphic behavior.
-     * For input next sibling text node will be used,
-     * else underlying element text content will be used.
-     *
-     * @param {string} text value.
+     * Apply elements text content or return current text content if parameter is empty. Has polymorphic behavior.<br>
+     *  <ul>
+     *     <li>For input next sibling text node will be used,
+     *     <li>else underlying element text content will be used.
+     *  </ul>
+     * @this $
+     * @param {string} [text] value.
      */
     text: function (text) {
         if (_.isDefined(text)) {
@@ -204,8 +203,9 @@ $.prototype = {
     },
 
     /**
-     * @description
      * Removes underlying element from document and utilize current object from bind.
+     *
+     * @this $
      */
     remove: function () {
         var element = this.$;
@@ -221,9 +221,9 @@ $.prototype = {
     },
 
     /**
-     * @description
      * Appends list of elements to current element
      *
+     * @this $
      * @param {Node|Array} newElements one or more elements
      */
     next: function (newElements) {
@@ -232,9 +232,9 @@ $.prototype = {
     },
 
     /**
-     * @description
      * Show/hide current element. Uses style display property. Stores last display value to use it for restoring.
      *
+     * @this $
      * @param {boolean} show
      */
     show: function (show) {
@@ -257,10 +257,10 @@ $.prototype = {
     },
 
     /**
-     * @description
      * Processes pipes of current element
      *
-     * @returns new bind object according to pipes
+     * @this $
+     * @returns {model} new object according to pipes
      */
     pipe: function (ties) {
         var res = this.bind;

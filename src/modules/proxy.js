@@ -1,4 +1,19 @@
-var proxy = function (tie) {
+/**
+ * Properties watcher proxy. Inspects object own properties and attributes from bind and define watching property.
+ *
+ * @namespace proxy
+ * @param {bind} bind element bound tie
+ */
+var proxy = function (bind) {
+
+    /**
+     * Defines new watcher property
+     *
+     * @param {model} obj inspected object
+     * @param {Object} desc property descriptor if any
+     * @param {string} prop property name
+     * @param {boolean} [dependency] whether the property refers to dependent tie
+     */
     var observe = function (obj, desc, prop, dependency) {
         if (desc && desc._proxyMark) {
             return; //proxy already set
@@ -10,7 +25,7 @@ var proxy = function (tie) {
                 }
                 return desc.value;
             }
-            return tie.$attrValue(prop);
+            return bind.$attrValue(prop);
         };
         var newSet = function (val) {
             if (desc) {
@@ -21,14 +36,14 @@ var proxy = function (tie) {
                 }
             }
             if (prop == SHOWN) {
-                tie.$show(val);
+                bind.$show(val);
             } else {
                 if (prop == ATTRS) {
-                    tie.$prepareAttrs();
+                    bind.$prepareAttrs();
                 } else if (prop == ROUTES) {
-                    tie.$prepareRoutes();
+                    bind.$prepareRoutes();
                 }
-                tie.$apply();
+                bind.$apply();
             }
         };
         var enumerable = desc ? desc.enumerable : false;
@@ -41,6 +56,13 @@ var proxy = function (tie) {
         });
     };
 
+    /**
+     * Visits object own properties and attributes and add watchers.
+     *
+     * Note: will recursively observe property of {Object} type
+     *
+     * @param {model} obj inspected object
+     */
     var explore = function (obj) {
         for (var prop in obj) {
             if (obj.hasOwnProperty(prop)) {
@@ -55,9 +77,9 @@ var proxy = function (tie) {
                 if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
                     continue; // skip readonly
                 }
-                var dep = prop.charAt(0) === '$' && tie.depends.indexOf(prop.substring(1)) != -1;
+                var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
                 var val = obj[prop];
-                if (_.isObject(val) && !dep) {
+                if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES) {
                     explore(val);
                 }
                 observe(obj, desc, prop, dep);
@@ -76,7 +98,7 @@ var proxy = function (tie) {
         }
     };
 
-    var obj = tie.obj;
+    var obj = bind.obj;
     var props = [];
     explore(obj);
 

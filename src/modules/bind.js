@@ -1,9 +1,25 @@
+/**
+ * Model object wrapper. In fact is created to extend originally passed object with utilities.
+ *
+ * @constructor
+ * @class model
+ * @this model
+ * @param {Object} obj
+ */
 var model = function (obj) {
     _.extend(this, obj);
 };
 
 model.prototype = _;
 
+/**
+ * Execute function in try catch and returns call result or undefined.
+ *
+ * @param {Function} fn
+ * @param {Object} fnThis object that form this reference in function context.
+ * @param {boolean} bindReady whether bind on which function is called is ready.
+ * @returns Object|undefined
+ */
 var safeCall = function (fn, fnThis, bindReady) {
     var res;
     try {
@@ -18,6 +34,14 @@ var safeCall = function (fn, fnThis, bindReady) {
     return res;
 };
 
+/**
+ * Function that calculates attribute value.
+ *
+ * @param {Object} obj object that from this reference in function context.
+ * @param {number} idx element index or -1.
+ * @param {boolean} bindReady whether bind on which function is called is ready.
+ * @returns Object|undefined
+ */
 var valueFn = function (obj, idx, bindReady) {
     var name = this.name;
     var val = this.value;
@@ -47,6 +71,17 @@ var valueFn = function (obj, idx, bindReady) {
     }
 };
 
+
+/**
+ * Bound object wrapper. Represents data manipulation layer and general access to dynamic bindings.
+ *
+ * @constructor
+ * @class bind
+ * @this bind
+ * @param {string} name tie name
+ * @param {Array} dependencies tie dependencies
+ * @param {Object} ties already registered ties dictionary
+ */
 var bind = function (name, dependencies, ties) {
     this.name = name;
     this.touch = [];
@@ -58,6 +93,12 @@ var bind = function (name, dependencies, ties) {
     this.selected = false;
     this.applyCount = 0;
     this.timeout = null;
+
+    /**
+     * Apply model changes. It renders current bind and updates dependencies.
+     *
+     * @this bind
+     */
     this.$apply = function () {
         this.applyCount++;
         if (this.applyCount > 10) {
@@ -79,9 +120,28 @@ var bind = function (name, dependencies, ties) {
             }.bind(this), 3000);
         }
     };
+
+    this.$attrs = function (elements, attr) {
+        _.forEach(elements, function (el) {
+            var val = attr.value;
+            if (_.isFunction(val)) {
+                var obj = el.pipe(ties);
+                val = val(obj, el.index);
+            }
+            el.setAttribute(attr.name, val);
+        });
+    };
+
 };
 
 bind.prototype = {
+
+    /**
+     * Returns whether bind is ready. I.e. all dependencies are resolved.
+     *
+     * @this bind
+     * @returns boolean
+     */
     $ready: function () {
         var ready = true;
         _.forEach(this.depends, function (dep) {
@@ -94,6 +154,12 @@ bind.prototype = {
         }, this);
         return ready;
     },
+
+    /**
+     * Internally checks and updates routes information on current bind.
+     *
+     * @this bind
+     */
     $prepareRoutes: function () {
         var routes = this.obj.routes;
         if (routes) {
@@ -110,6 +176,12 @@ bind.prototype = {
             }, this);
         }
     },
+
+    /**
+     * Internally checks and updates attributes information on current bind.
+     *
+     * @this bind
+     */
     $prepareAttrs: function () {
         var attrs = this.obj.attrs;
         if (attrs) {
@@ -130,6 +202,8 @@ bind.prototype = {
             }, this);
         }
     },
+
+
     $attrValue: function (name, value) {
         if (this.obj.attrs) {
             var attr = this.$attr(name);
@@ -140,33 +214,48 @@ bind.prototype = {
             } else {
                 if (attr && attr.property) {
                     this.obj[attr.property] = value;
-                } else if(attr) {
+                } else if (attr) {
                     this.obj[name] = value;
                 }
             }
         }
         return null;
     },
+
+    /**
+     * Find attribute by name.
+     *
+     * @this bind
+     * @param {string} name
+     * @returns Object|null attribute
+     */
     $attr: function (name) {
         if (this.obj.attrs) {
             return this.obj.attrs[name];
         }
         return null;
     },
-    $attrs: function (elements, attr) {
-        _.forEach(elements, function (el) {
-            var val = attr.value;
-            if (_.isFunction(val)) {
-                val = val(el.index);
-            }
-            el.setAttribute(attr.name, val);
-        });
-    },
+
+    /**
+     * Show/hide elements of current bind.
+     *
+     * @this bind
+     * @param {boolean} shown
+     */
     $show: function (shown) {
         _.forEach(this.$, function (el) {
             el.show(shown);
         }, this);
     },
+
+    /**
+     * Renders all elements of current bind. <br>
+     * Rendering means particularly check whether bind is loaded and load it if needed, <br>
+     * set value for every element attribute and show element if needed.
+     *
+     * TODO: check whether we can skip attributes value change if element will not be shown.
+     *
+     */
     $render: function () {
         _.debug("Render " + this.name);
         if (!this.loaded && !this.loading) {
@@ -177,8 +266,8 @@ bind.prototype = {
             var ready = this.$ready();
             _.forIn(attrs, function (attr) {
                 attr.val = valueFn;
-                this.$attrs(this.$, {name: attr.name, value: function (idx) {
-                    return attr.val(this.obj, idx, ready);
+                this.$attrs(this.$, {name: attr.name, value: function (obj, idx) {
+                    return attr.val(obj, idx, ready);
                 }.bind(this)});
             }, this);
             this.$attrs(this.$, {name: TIED});

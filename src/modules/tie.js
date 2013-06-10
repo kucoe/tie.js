@@ -138,7 +138,7 @@ tie.prototype = {
                 found = {name: dep, touch: [], obj: {_empty: true}};
                 this.define(dep, found, ties);
             }
-            bind.obj['$' + dep] = found.obj;
+            bind.obj['$' + dep] = this.prepareDependency(found);
             if (found.touch.indexOf(bind.name) == -1) {
                 found.touch.push(bind.name);
             }
@@ -167,7 +167,7 @@ tie.prototype = {
         _.debug("Model proxy done");
         var tie = this;
         r.$load = function () {
-            this.loading = true
+            this.loading = true;
             if (!this.selected) {
                 this.$ = tie.select(name, r);
                 _.debug("Elements selected: " + this.$.length);
