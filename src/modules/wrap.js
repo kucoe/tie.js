@@ -12,6 +12,7 @@
      */
     var APP = 'app';
     var VALUE = 'value';
+    var CALLBACK = 'callback';
     var VALUES = 'values';
     var TEXT = 'text';
     var SHOWN = 'shown';
@@ -71,6 +72,7 @@
                 obj[prop] = value;
             }
         }
+        return obj;
     });
 
 })(window);

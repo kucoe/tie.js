@@ -30,29 +30,29 @@ pipe.prototype = {
      * Process model from bind and returns new model after pipe execution
      *
      * @this pipe
-     * @param {bind} bind tied object
+     * @param {model} obj tied model
      * @param {Object} ties named ties object
      */
-    process: function (bind, ties) {
+    process: function (obj, ties) {
         var tie = ties[this.name];
         if (!tie) {
             throw new Error('Pipe ' + this.name + ' not found');
         }
-        var value = tie.$attrValue(VALUE);
+        var value = tie.obj[CALLBACK];
         var params = [];
         if (this.params.length > 0) {
             _.forEach(this.params, function (param) {
                 param = _.trim(param);
                 var res = _.convert(param);
-                if (bind.$attrValue(param)) {
-                    res = bind.$attrValue(param);
+                if (obj[param]) {
+                    res = obj[param];
                 } else if (pipes[param]) {
                     res = pipes[param];
                 }
                 params.push(res);
             });
         }
-        var res = _.clone(bind.obj);
+        var res = _.clone(obj);
         if (value && _.isFunction(value)) {
             res = safeCall(value, tie, tie.$ready(), res, params);
         }

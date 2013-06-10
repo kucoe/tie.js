@@ -120,18 +120,6 @@ var bind = function (name, dependencies, ties) {
             }.bind(this), 3000);
         }
     };
-
-    this.$attrs = function (elements, attr) {
-        _.forEach(elements, function (el) {
-            var val = attr.value;
-            if (_.isFunction(val)) {
-                var obj = el.pipe(ties);
-                val = val(obj, el.index);
-            }
-            el.setAttribute(attr.name, val);
-        });
-    };
-
 };
 
 bind.prototype = {
@@ -222,6 +210,17 @@ bind.prototype = {
         return null;
     },
 
+    $renderAttr: function (elements, attr) {
+        _.forEach(elements, function (el) {
+            var val = attr.value;
+            if (_.isFunction(val)) {
+                var obj = el.pipeline();
+                val = val(obj, el.index);
+            }
+            el.setAttribute(attr.name, val);
+        });
+    },
+
     /**
      * Find attribute by name.
      *
@@ -266,11 +265,11 @@ bind.prototype = {
             var ready = this.$ready();
             _.forIn(attrs, function (attr) {
                 attr.val = valueFn;
-                this.$attrs(this.$, {name: attr.name, value: function (obj, idx) {
+                this.$renderAttr(this.$, {name: attr.name, value: function (obj, idx) {
                     return attr.val(obj, idx, ready);
                 }.bind(this)});
             }, this);
-            this.$attrs(this.$, {name: TIED});
+            this.$renderAttr(this.$, {name: TIED});
             _.forEach(this.$, function (el) {
                 if (el.isInput) {
                     el.setAttribute('name', this.name);

@@ -56,14 +56,15 @@ var q = {
  * @this $
  * @param {Node} el DOM element.
  * @param {bind} bind element bound tie
+ * @param {Object} ties already registered ties dictionary
  */
-var $ = function (el, bind) {
+var $ = function (el, bind, ties) {
     var listener = function () {
         var value = this.value();
         value = _.trim(value);
 
-        if (bind.$attrValue(VALUE) !== value) {
-            bind.$attrValue(VALUE, value);
+        if (bind.obj[VALUE] !== value) {
+            bind.obj[VALUE] = value;
         }
     }.bind(this);
     if (_.isDefined(el.value)) {
@@ -96,6 +97,22 @@ var $ = function (el, bind) {
     _.forEach(pipes, function (string) {
         this.pipes.push(new pipe(string));
     }, this);
+
+    /**
+     * Processes pipelines of current element
+     *
+     * @this $
+     * @returns {model} new object according to pipes
+     */
+    this.pipeline = function () {
+        var res = this.bind.obj;
+        if (this.pipes) {
+            _.forEach(this.pipes, function (pipe) {
+                res = pipe.process(res, ties);
+            })
+        }
+        return res;
+    }
 };
 
 $.prototype = {
@@ -254,21 +271,5 @@ $.prototype = {
             }
         }
         this.shown = show;
-    },
-
-    /**
-     * Processes pipes of current element
-     *
-     * @this $
-     * @returns {model} new object according to pipes
-     */
-    pipe: function (ties) {
-        var res = this.bind;
-        if (this.pipes) {
-            _.forEach(this.pipes, function (pipe) {
-                res = pipe.process(res, ties);
-            })
-        }
-        return res;
     }
 };

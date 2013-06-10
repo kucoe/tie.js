@@ -34,6 +34,8 @@ var proxy = function (bind) {
                 } else {
                     desc.value = val;
                 }
+            } else {
+                bind.$attrValue(prop, val);
             }
             if (prop == SHOWN) {
                 bind.$show(val);

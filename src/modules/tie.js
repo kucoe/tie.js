@@ -20,19 +20,19 @@ var tie = function () {
 };
 tie.prototype = {
 
-    select: function (tieName, bind) {
+    select: function (tieName, bind, ties) {
         var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
         var res = [];
         _.forEach(nodes, function (el) {
-            res.push(new $(el, bind));
+            res.push(new $(el, bind, ties));
         });
         nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '|"]');
         _.forEach(nodes, function (el) {
-            res.push(new $(el, bind));
+            res.push(new $(el, bind, ties));
         });
         nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '."]');
         _.forEach(nodes, function (el) {
-            res.push(new $(el, bind));
+            res.push(new $(el, bind, ties));
         });
         bind.selected = true;
         return res;
@@ -47,6 +47,7 @@ tie.prototype = {
 
     wrapFunction: function (fn) {
         return {
+            callback:fn,
             attrs: {
                 value: fn
             }
@@ -169,13 +170,13 @@ tie.prototype = {
         r.$load = function () {
             this.loading = true;
             if (!this.selected) {
-                this.$ = tie.select(name, r);
+                this.$ = tie.select(name, r, ties);
                 _.debug("Elements selected: " + this.$.length);
             }
             tie.prepare(this);
             _.debug("Prepared inner structure");
             if (!this.selected) {
-                this.$ = tie.select(name, r);
+                this.$ = tie.select(name, r, ties);
                 _.debug("Elements reselected: " + this.$.length);
             }
             this.loaded = true;

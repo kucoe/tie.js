@@ -12,6 +12,7 @@
      */
     var APP = 'app';
     var VALUE = 'value';
+    var CALLBACK = 'callback';
     var VALUES = 'values';
     var TEXT = 'text';
     var SHOWN = 'shown';
@@ -85,6 +86,8 @@
                     } else {
                         desc.value = val;
                     }
+                } else {
+                    bind.$attrValue(prop, val);
                 }
                 if (prop == SHOWN) {
                     bind.$show(val);
@@ -284,29 +287,29 @@
          * Process model from bind and returns new model after pipe execution
          *
          * @this pipe
-         * @param {bind} bind tied object
+         * @param {model} obj tied model
          * @param {Object} ties named ties object
          */
-        process: function (bind, ties) {
+        process: function (obj, ties) {
             var tie = ties[this.name];
             if (!tie) {
                 throw new Error('Pipe ' + this.name + ' not found');
             }
-            var value = tie.$attrValue(VALUE);
+            var value = tie.obj[CALLBACK];
             var params = [];
             if (this.params.length > 0) {
                 _.forEach(this.params, function (param) {
                     param = _.trim(param);
                     var res = _.convert(param);
-                    if (bind.$attrValue(param)) {
-                        res = bind.$attrValue(param);
+                    if (obj[param]) {
+                        res = obj[param];
                     } else if (pipes[param]) {
                         res = pipes[param];
                     }
                     params.push(res);
                 });
             }
-            var res = _.clone(bind.obj);
+            var res = _.clone(obj);
             if (value && _.isFunction(value)) {
                 res = safeCall(value, tie, tie.$ready(), res, params);
             }
@@ -373,14 +376,15 @@
      * @this $
      * @param {Node} el DOM element.
      * @param {bind} bind element bound tie
+     * @param {Object} ties already registered ties dictionary
      */
-    var $ = function (el, bind) {
+    var $ = function (el, bind, ties) {
         var listener = function () {
             var value = this.value();
             value = _.trim(value);
     
-            if (bind.$attrValue(VALUE) !== value) {
-                bind.$attrValue(VALUE, value);
+            if (bind.obj[VALUE] !== value) {
+                bind.obj[VALUE] = value;
             }
         }.bind(this);
         if (_.isDefined(el.value)) {
@@ -413,6 +417,22 @@
         _.forEach(pipes, function (string) {
             this.pipes.push(new pipe(string));
         }, this);
+    
+        /**
+         * Processes pipelines of current element
+         *
+         * @this $
+         * @returns {model} new object according to pipes
+         */
+        this.pipeline = function () {
+            var res = this.bind.obj;
+            if (this.pipes) {
+                _.forEach(this.pipes, function (pipe) {
+                    res = pipe.process(res, ties);
+                })
+            }
+            return res;
+        }
     };
     
     $.prototype = {
@@ -571,22 +591,6 @@
                 }
             }
             this.shown = show;
-        },
-    
-        /**
-         * Processes pipes of current element
-         *
-         * @this $
-         * @returns {model} new object according to pipes
-         */
-        pipe: function (ties) {
-            var res = this.bind;
-            if (this.pipes) {
-                _.forEach(this.pipes, function (pipe) {
-                    res = pipe.process(res, ties);
-                })
-            }
-            return res;
         }
     };
     
@@ -1075,18 +1079,6 @@
                 }.bind(this), 3000);
             }
         };
-    
-        this.$attrs = function (elements, attr) {
-            _.forEach(elements, function (el) {
-                var val = attr.value;
-                if (_.isFunction(val)) {
-                    var obj = el.pipe(ties);
-                    val = val(obj, el.index);
-                }
-                el.setAttribute(attr.name, val);
-            });
-        };
-    
     };
     
     bind.prototype = {
@@ -1177,6 +1169,17 @@
             return null;
         },
     
+        $renderAttr: function (elements, attr) {
+            _.forEach(elements, function (el) {
+                var val = attr.value;
+                if (_.isFunction(val)) {
+                    var obj = el.pipeline();
+                    val = val(obj, el.index);
+                }
+                el.setAttribute(attr.name, val);
+            });
+        },
+    
         /**
          * Find attribute by name.
          *
@@ -1221,11 +1224,11 @@
                 var ready = this.$ready();
                 _.forIn(attrs, function (attr) {
                     attr.val = valueFn;
-                    this.$attrs(this.$, {name: attr.name, value: function (obj, idx) {
+                    this.$renderAttr(this.$, {name: attr.name, value: function (obj, idx) {
                         return attr.val(obj, idx, ready);
                     }.bind(this)});
                 }, this);
-                this.$attrs(this.$, {name: TIED});
+                this.$renderAttr(this.$, {name: TIED});
                 _.forEach(this.$, function (el) {
                     if (el.isInput) {
                         el.setAttribute('name', this.name);
@@ -1261,19 +1264,19 @@
     };
     tie.prototype = {
     
-        select: function (tieName, bind) {
+        select: function (tieName, bind, ties) {
             var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
             var res = [];
             _.forEach(nodes, function (el) {
-                res.push(new $(el, bind));
+                res.push(new $(el, bind, ties));
             });
             nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '|"]');
             _.forEach(nodes, function (el) {
-                res.push(new $(el, bind));
+                res.push(new $(el, bind, ties));
             });
             nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '."]');
             _.forEach(nodes, function (el) {
-                res.push(new $(el, bind));
+                res.push(new $(el, bind, ties));
             });
             bind.selected = true;
             return res;
@@ -1288,6 +1291,7 @@
     
         wrapFunction: function (fn) {
             return {
+                callback:fn,
                 attrs: {
                     value: fn
                 }
@@ -1410,13 +1414,13 @@
             r.$load = function () {
                 this.loading = true;
                 if (!this.selected) {
-                    this.$ = tie.select(name, r);
+                    this.$ = tie.select(name, r, ties);
                     _.debug("Elements selected: " + this.$.length);
                 }
                 tie.prepare(this);
                 _.debug("Prepared inner structure");
                 if (!this.selected) {
-                    this.$ = tie.select(name, r);
+                    this.$ = tie.select(name, r, ties);
                     _.debug("Elements reselected: " + this.$.length);
                 }
                 this.loaded = true;
@@ -1425,6 +1429,7 @@
             return r;
         }
     };
+
 
     /**
      * Exports
@@ -1446,6 +1451,7 @@
                 obj[prop] = value;
             }
         }
+        return obj;
     });
 
 })(window);
