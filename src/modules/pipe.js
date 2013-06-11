@@ -55,7 +55,7 @@ pipe.prototype = {
         }
         var res = _.isDefined(value) ? obj : _.clone(obj);
         if (callback && _.isFunction(callback)) {
-            res = safeCall(callback, tie, tie.$ready(), res, params, value);
+            res = safeCall(callback, tie, tie.ready(), res, params, value);
         }
         return res;
     }

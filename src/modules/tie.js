@@ -1,5 +1,11 @@
+/**
+ * Application reference.
+ */
 var app = null;
 
+/**
+ * Returns function to apply ties with closure ties dictionary.
+ */
 var tie = function () {
     var ties = {};
     return function (name, tiedObject, dependencies) {
@@ -20,6 +26,13 @@ var tie = function () {
 };
 tie.prototype = {
 
+    /**
+     * Select DOM elements which are bound to current tie. Using 'data-tie' attribute. <br/>
+     *
+     * @param {string} tieName name of current tie
+     * @param {bind} bind current tie bind
+     * @param {Object} ties registered ties
+     */
     select: function (tieName, bind, ties) {
         var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
         var res = [];
@@ -38,6 +51,11 @@ tie.prototype = {
         return res;
     },
 
+    /**
+     * Create object based on primitive value
+     *
+     * @param {Object} obj primitive
+     */
     wrapPrimitive: function (obj) {
         return {
             value: obj,
@@ -45,6 +63,11 @@ tie.prototype = {
         }
     },
 
+    /**
+     * Create object based on function
+     *
+     * @param {Function} fn
+     */
     wrapFunction: function (fn) {
         return {
             callback:fn,
@@ -54,6 +77,11 @@ tie.prototype = {
         }
     },
 
+    /**
+     * Create object based on array
+     *
+     * @param {Array} array
+     */
     wrapArray: function (array) {
         return {
             values: array,
@@ -83,14 +111,6 @@ tie.prototype = {
         return new model(obj);
     },
 
-    prepareDependency: function (bind) {
-        var obj = _.extend({}, bind.obj);
-        _.forEach(bind.depends, function (dep) {
-            delete obj['$' + dep];
-        });
-        return obj;
-    },
-
     resolve: function (bind, dependencies, ties) {
         if (!dependencies) {
             return;
@@ -101,7 +121,7 @@ tie.prototype = {
                 found = {name: dep, touch: [], obj: {_empty: true}};
                 this.define(dep, found, ties);
             }
-            bind.obj['$' + dep] = this.prepareDependency(found);
+            bind.obj['$' + dep] = found.obj;
             if (found.touch.indexOf(bind.name) == -1) {
                 found.touch.push(bind.name);
             }
@@ -114,7 +134,7 @@ tie.prototype = {
         if (old && old.touch) {
             bind.touch = old.touch;
             bind.rendered = old.rendered;
-            bind.$apply();
+            bind.apply();
         }
     },
 
@@ -122,19 +142,19 @@ tie.prototype = {
         _.debug("Tie " + name);
         var r = new bind(name, dependencies, ties);
         r.obj = this.check(tiedObject);
-        r.$prepareAttrs();
-        r.$prepareRoutes();
+        r.prepareAttrs();
+        r.prepareRoutes();
         this.resolve(r, dependencies, ties);
         r.obj = proxy(r);
         _.debug("Bind model ready");
         var tie = this;
-        r.$load = function () {
+        r.load = function () {
             this.loading = true;
             if (!this.selected) {
                 this.$ = tie.select(name, r, ties);
                 _.debug("Elements selected: " + this.$.length);
             }
-            r.$prepareValues();
+            r.prepareValues();
             _.debug("Prepared inner array structure");
             if (!this.selected) {
                 this.$ = tie.select(name, r, ties);

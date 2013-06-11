@@ -102,13 +102,13 @@ var bind = function (name, dependencies, ties) {
      *
      * @this bind
      */
-    this.$apply = function () {
+    this.apply = function () {
         this.applyCount++;
         if (this.applyCount > 10) {
             _.debug("Too many apply :" + this.name + " - " + this.applyCount);
         }
         if (this.rendered) {
-            this.$render();
+            this.render();
         }
         _.forEach(this.touch, function (item) {
             var tie = ties[item];
@@ -133,7 +133,7 @@ bind.prototype = {
      * @this bind
      * @returns boolean
      */
-    $ready: function () {
+    ready: function () {
         var ready = true;
         _.forEach(this.depends, function (dep) {
             var d = this.obj['$' + dep];
@@ -151,7 +151,7 @@ bind.prototype = {
      *
      * @this bind
      */
-    $prepareRoutes: function () {
+    prepareRoutes: function () {
         var routes = this.obj.routes;
         if (routes) {
             if (_.isArray(routes)) {
@@ -173,7 +173,7 @@ bind.prototype = {
      *
      * @this bind
      */
-    $prepareAttrs: function () {
+    prepareAttrs: function () {
         var attrs = this.obj.attrs;
         if (attrs) {
             if (_.isArray(attrs)) {
@@ -199,7 +199,7 @@ bind.prototype = {
      *
      * @this bind
      */
-    $prepareValues: function () {
+    prepareValues: function () {
         var values = this.obj.values;
         if (values) {
             var newElements = {};
@@ -242,12 +242,12 @@ bind.prototype = {
      * @param {string} name attribute object
      * @param {*} value attribute object
      */
-    $attrValue: function (name, value) {
+    attrValue: function (name, value) {
         if (this.obj.attrs) {
-            var attr = this.$attr(name);
+            var attr = this.attr(name);
             if (_.isUndefined(value)) {
                 if (attr) {
-                    return attr.val(this.obj, -1, this.$ready());
+                    return attr.val(this.obj, -1, this.ready());
                 }
             } else {
                 if (attr && attr.property) {
@@ -267,7 +267,7 @@ bind.prototype = {
      * @param {string} name attribute object
      * @param {*} [value] attribute object
      */
-    $renderAttr: function (name, value) {
+    renderAttr: function (name, value) {
         _.forEach(this.$, function (el) {
             var val = value;
             if (_.isFunction(value)) {
@@ -285,7 +285,7 @@ bind.prototype = {
      * @param {string} name
      * @returns Object|null attribute
      */
-    $attr: function (name) {
+    attr: function (name) {
         if (this.obj.attrs) {
             return this.obj.attrs[name];
         }
@@ -298,7 +298,7 @@ bind.prototype = {
      * @this bind
      * @param {boolean} shown
      */
-    $show: function (shown) {
+    show: function (shown) {
         _.forEach(this.$, function (el) {
             el.show(shown);
         }, this);
@@ -312,28 +312,31 @@ bind.prototype = {
      * TODO: check whether we can skip attributes value change if element will not be shown.
      *
      */
-    $render: function () {
+    render: function () {
+        if(!this.obj.shown) {
+            return;
+        }
         _.debug("Render " + this.name);
         if (!this.loaded && !this.loading) {
-            this.$load();
+            this.load();
         }
         var attrs = this.obj.attrs;
         if (attrs) {
-            var ready = this.$ready();
+            var ready = this.ready();
             _.forIn(attrs, function (attr) {
                 attr.val = valueFn;
-                this.$renderAttr(attr.name, function (obj, idx) {
+                this.renderAttr(attr.name, function (obj, idx) {
                     return attr.val(obj, idx, ready);
                 }.bind(this));
             }, this);
-            this.$renderAttr(TIED);
+            this.renderAttr(TIED);
             _.forEach(this.$, function (el) {
                 if (el.isInput) {
                     el.setAttribute('name', this.name);
                 }
             }, this);
         }
-        this.$show(this.obj.shown);
+        this.show(this.obj.shown);
         this.rendered = true;
         _.debug("Rendered " + this.name);
     }

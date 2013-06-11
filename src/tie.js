@@ -77,7 +77,7 @@
                     }
                     return desc.value;
                 }
-                return bind.$attrValue(prop);
+                return bind.attrValue(prop);
             };
             var newSet = function (val) {
                 if (desc) {
@@ -87,17 +87,19 @@
                         desc.value = val;
                     }
                 } else {
-                    bind.$attrValue(prop, val);
+                    bind.attrValue(prop, val);
                 }
                 if (prop == SHOWN) {
-                    bind.$show(val);
+                    bind.show(val);
                 } else {
                     if (prop == ATTRS) {
-                        bind.$prepareAttrs();
+                        bind.prepareAttrs();
                     } else if (prop == ROUTES) {
-                        bind.$prepareRoutes();
+                        bind.prepareRoutes();
+                    } else if (prop == VALUES) {
+                        bind.prepareValues();
                     }
-                    bind.$apply();
+                    bind.apply();
                 }
             };
             var enumerable = desc ? desc.enumerable : false;
@@ -108,7 +110,6 @@
                 enumerable: enumerable,
                 _proxyMark: true
             });
-            _.debug("Observing " + prop);
         };
     
         /**
@@ -138,6 +139,7 @@
                         _.debug("Exploring " + prop);
                         explore(val);
                     }
+                    _.debug("Observing " + prop);
                     observe(obj, desc, prop, dep);
                 }
             }
@@ -145,6 +147,7 @@
                 _.forIn(obj.attrs, function (attr, prop) {
                     // do not override real properties from object and only when attributes have something to change.
                     if (props.indexOf(prop) == -1 && (attr.property || attr.value)) {
+                        _.debug("Observing attribute " + prop);
                         observe(obj, null, prop);
                         props.push(prop);
                     }
@@ -184,8 +187,8 @@
                 } else {
                     _.debug("Process default route");
                     _.forIn(ties, function (bind) {
-                        if (!bind. rendered) {
-                            bind.$render();
+                        if (!bind.rendered) {
+                            bind.render();
                         }
                         bind.obj.$location = function () {
                             return{route: {has: function () {
@@ -206,17 +209,20 @@
                     return {href: window.location.href, route: current};
                 }.bind(this);
                 if (current.handler) {
-                    safeCall(current.handler, app.obj, app.$ready());
+                    safeCall(current.handler, app.obj, app.ready());
                 }
                 _.forIn(ties, function (bind) {
                     if (!bind.rendered) {
-                        bind.$render();
+                        bind.render();
                     }
                     bind.obj.$location = app.location;
                     bind.obj.shown = current.has(bind);
-                    var r = bind.obj.routes[current.path];
-                    if (r && r.handler) {
-                        safeCall(r.handler, bind.obj, bind.$ready());
+                    var bindRoutes = bind.obj.routes;
+                    if (bindRoutes && bind.obj.shown) {
+                        var r = bindRoutes[current.path];
+                        if (r && r.handler) {
+                            safeCall(r.handler, bind.obj, bind.ready());
+                        }
                     }
                 });
                 _.debug("Processed route " + current.path);
@@ -242,16 +248,19 @@
     route.prototype = {
         has: function (bind) {
             var routes = bind.obj.routes;
-            var exclude = routes['-'] != null;
-            var contains = false;
-            _.forIn(routes, function (route, path) {
-                if (path.toLowerCase() == this.path) {
-                    contains = true;
-                    return false;
-                }
-                return true;
-            }, this);
-            return exclude != contains;
+            if (routes) {
+                var exclude = routes['-'] != null;
+                var contains = false;
+                _.forIn(routes, function (route, path) {
+                    if (path.toLowerCase() == this.path) {
+                        contains = true;
+                        return false;
+                    }
+                    return true;
+                }, this);
+                return exclude != contains;
+            }
+            return false;
         }
     };
     
@@ -313,7 +322,7 @@
             }
             var res = _.isDefined(value) ? obj : _.clone(obj);
             if (callback && _.isFunction(callback)) {
-                res = safeCall(callback, tie, tie.$ready(), res, params, value);
+                res = safeCall(callback, tie, tie.ready(), res, params, value);
             }
             return res;
         }
@@ -385,7 +394,7 @@
             var value = this.value();
             value = _.trim(value);
     
-            if (this.pipes) {
+            if (this.pipes.length > 0) {
                 this.pipeline(value);
             } else {
                 if (bind.obj[VALUE] !== value) {
@@ -428,12 +437,12 @@
          * Processes pipelines of current element
          *
          * @this $
-         * @param {*} value
+         * @param {*} value value to use in pipeline
          * @returns {model} new object according to pipes
          */
         this.pipeline = function (value) {
             var res = this.bind.obj;
-            if (this.pipes) {
+            if (this.pipes.length > 0) {
                 _.forEach(this.pipes, function (pipe) {
                     if (_.isDefined(value)) {
                         res = pipe.process(res, ties, value);
@@ -474,7 +483,7 @@
                 handler = function (event) {
                     event.index = this.index;
                     event.tie = this.tie;
-                    safeCall(value, this.bind.obj, this.bind.$ready(), event);
+                    safeCall(value, this.bind.obj, this.bind.ready(), event);
                 }.bind(this);
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -1072,13 +1081,13 @@
          *
          * @this bind
          */
-        this.$apply = function () {
+        this.apply = function () {
             this.applyCount++;
             if (this.applyCount > 10) {
                 _.debug("Too many apply :" + this.name + " - " + this.applyCount);
             }
             if (this.rendered) {
-                this.$render();
+                this.render();
             }
             _.forEach(this.touch, function (item) {
                 var tie = ties[item];
@@ -1103,7 +1112,7 @@
          * @this bind
          * @returns boolean
          */
-        $ready: function () {
+        ready: function () {
             var ready = true;
             _.forEach(this.depends, function (dep) {
                 var d = this.obj['$' + dep];
@@ -1121,7 +1130,7 @@
          *
          * @this bind
          */
-        $prepareRoutes: function () {
+        prepareRoutes: function () {
             var routes = this.obj.routes;
             if (routes) {
                 if (_.isArray(routes)) {
@@ -1143,7 +1152,7 @@
          *
          * @this bind
          */
-        $prepareAttrs: function () {
+        prepareAttrs: function () {
             var attrs = this.obj.attrs;
             if (attrs) {
                 if (_.isArray(attrs)) {
@@ -1169,7 +1178,7 @@
          *
          * @this bind
          */
-        $prepareValues: function () {
+        prepareValues: function () {
             var values = this.obj.values;
             if (values) {
                 var newElements = {};
@@ -1212,12 +1221,12 @@
          * @param {string} name attribute object
          * @param {*} value attribute object
          */
-        $attrValue: function (name, value) {
+        attrValue: function (name, value) {
             if (this.obj.attrs) {
-                var attr = this.$attr(name);
+                var attr = this.attr(name);
                 if (_.isUndefined(value)) {
                     if (attr) {
-                        return attr.val(this.obj, -1, this.$ready());
+                        return attr.val(this.obj, -1, this.ready());
                     }
                 } else {
                     if (attr && attr.property) {
@@ -1237,7 +1246,7 @@
          * @param {string} name attribute object
          * @param {*} [value] attribute object
          */
-        $renderAttr: function (name, value) {
+        renderAttr: function (name, value) {
             _.forEach(this.$, function (el) {
                 var val = value;
                 if (_.isFunction(value)) {
@@ -1255,7 +1264,7 @@
          * @param {string} name
          * @returns Object|null attribute
          */
-        $attr: function (name) {
+        attr: function (name) {
             if (this.obj.attrs) {
                 return this.obj.attrs[name];
             }
@@ -1268,7 +1277,7 @@
          * @this bind
          * @param {boolean} shown
          */
-        $show: function (shown) {
+        show: function (shown) {
             _.forEach(this.$, function (el) {
                 el.show(shown);
             }, this);
@@ -1282,36 +1291,45 @@
          * TODO: check whether we can skip attributes value change if element will not be shown.
          *
          */
-        $render: function () {
+        render: function () {
+            if(!this.obj.shown) {
+                return;
+            }
             _.debug("Render " + this.name);
             if (!this.loaded && !this.loading) {
-                this.$load();
+                this.load();
             }
             var attrs = this.obj.attrs;
             if (attrs) {
-                var ready = this.$ready();
+                var ready = this.ready();
                 _.forIn(attrs, function (attr) {
                     attr.val = valueFn;
-                    this.$renderAttr(attr.name, function (obj, idx) {
+                    this.renderAttr(attr.name, function (obj, idx) {
                         return attr.val(obj, idx, ready);
                     }.bind(this));
                 }, this);
-                this.$renderAttr(TIED);
+                this.renderAttr(TIED);
                 _.forEach(this.$, function (el) {
                     if (el.isInput) {
                         el.setAttribute('name', this.name);
                     }
                 }, this);
             }
-            this.$show(this.obj.shown);
+            this.show(this.obj.shown);
             this.rendered = true;
             _.debug("Rendered " + this.name);
         }
     
     };
     
+    /**
+     * Application reference.
+     */
     var app = null;
     
+    /**
+     * Returns function to apply ties with closure ties dictionary.
+     */
     var tie = function () {
         var ties = {};
         return function (name, tiedObject, dependencies) {
@@ -1332,6 +1350,13 @@
     };
     tie.prototype = {
     
+        /**
+         * Select DOM elements which are bound to current tie. Using 'data-tie' attribute. <br/>
+         *
+         * @param {string} tieName name of current tie
+         * @param {bind} bind current tie bind
+         * @param {Object} ties registered ties
+         */
         select: function (tieName, bind, ties) {
             var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
             var res = [];
@@ -1350,6 +1375,11 @@
             return res;
         },
     
+        /**
+         * Create object based on primitive value
+         *
+         * @param {Object} obj primitive
+         */
         wrapPrimitive: function (obj) {
             return {
                 value: obj,
@@ -1357,6 +1387,11 @@
             }
         },
     
+        /**
+         * Create object based on function
+         *
+         * @param {Function} fn
+         */
         wrapFunction: function (fn) {
             return {
                 callback:fn,
@@ -1366,6 +1401,11 @@
             }
         },
     
+        /**
+         * Create object based on array
+         *
+         * @param {Array} array
+         */
         wrapArray: function (array) {
             return {
                 values: array,
@@ -1395,14 +1435,6 @@
             return new model(obj);
         },
     
-        prepareDependency: function (bind) {
-            var obj = _.extend({}, bind.obj);
-            _.forEach(bind.depends, function (dep) {
-                delete obj['$' + dep];
-            });
-            return obj;
-        },
-    
         resolve: function (bind, dependencies, ties) {
             if (!dependencies) {
                 return;
@@ -1413,7 +1445,7 @@
                     found = {name: dep, touch: [], obj: {_empty: true}};
                     this.define(dep, found, ties);
                 }
-                bind.obj['$' + dep] = this.prepareDependency(found);
+                bind.obj['$' + dep] = found.obj;
                 if (found.touch.indexOf(bind.name) == -1) {
                     found.touch.push(bind.name);
                 }
@@ -1426,7 +1458,7 @@
             if (old && old.touch) {
                 bind.touch = old.touch;
                 bind.rendered = old.rendered;
-                bind.$apply();
+                bind.apply();
             }
         },
     
@@ -1434,19 +1466,19 @@
             _.debug("Tie " + name);
             var r = new bind(name, dependencies, ties);
             r.obj = this.check(tiedObject);
-            r.$prepareAttrs();
-            r.$prepareRoutes();
+            r.prepareAttrs();
+            r.prepareRoutes();
             this.resolve(r, dependencies, ties);
             r.obj = proxy(r);
             _.debug("Bind model ready");
             var tie = this;
-            r.$load = function () {
+            r.load = function () {
                 this.loading = true;
                 if (!this.selected) {
                     this.$ = tie.select(name, r, ties);
                     _.debug("Elements selected: " + this.$.length);
                 }
-                r.$prepareValues();
+                r.prepareValues();
                 _.debug("Prepared inner array structure");
                 if (!this.selected) {
                     this.$ = tie.select(name, r, ties);
@@ -1459,43 +1491,28 @@
         }
     };
 
+
     /**
      * Exports
      */
     window.tie = tie();
     window.tie.pipes = pipes;
 
-
-    /**
-     * Property pipeline definition
-     */
-    window.tie("property", function (obj, params, value) {
-        if (params) {
-            var prop = params[0];
-            var target = params.length > 1 ? params[1] : VALUE;
-            if (_.isUndefined(value)) {
-                obj[target] = obj[prop];
-            } else {
-                obj[prop] = value;
-            }
+    var getAccessor = function(obj, split) {
+        var res = obj;
+        var i = 1;
+        var length = split.length;
+        while (i < length) {
+            res = res[split[i-1]];
+            i++;
         }
-        return obj;
-    });
+        return res;
+    };
 
     /**
      * Property pipeline definition
      */
     window.tie("property", function (obj, params, value) {
-        var getAccessor = function(obj, split) {
-            var res = obj;
-            var i = 1;
-            var length = split.length;
-            while (i < length) {
-                res = res[split[i-1]];
-                i++;
-            }
-            return res;
-        };
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -1518,16 +1535,6 @@
      * Value pipeline definition
      */
     window.tie("value", function (obj, params, value) {
-        var getAccessor = function(obj, split) {
-            var res = obj;
-            var i = 1;
-            var length = split.length;
-            while (i < length) {
-                res = res[split[i-1]];
-                i++;
-            }
-            return res;
-        };
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;

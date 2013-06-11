@@ -25,7 +25,7 @@ var proxy = function (bind) {
                 }
                 return desc.value;
             }
-            return bind.$attrValue(prop);
+            return bind.attrValue(prop);
         };
         var newSet = function (val) {
             if (desc) {
@@ -35,17 +35,19 @@ var proxy = function (bind) {
                     desc.value = val;
                 }
             } else {
-                bind.$attrValue(prop, val);
+                bind.attrValue(prop, val);
             }
             if (prop == SHOWN) {
-                bind.$show(val);
+                bind.show(val);
             } else {
                 if (prop == ATTRS) {
-                    bind.$prepareAttrs();
+                    bind.prepareAttrs();
                 } else if (prop == ROUTES) {
-                    bind.$prepareRoutes();
+                    bind.prepareRoutes();
+                } else if (prop == VALUES) {
+                    bind.prepareValues();
                 }
-                bind.$apply();
+                bind.apply();
             }
         };
         var enumerable = desc ? desc.enumerable : false;
@@ -56,7 +58,6 @@ var proxy = function (bind) {
             enumerable: enumerable,
             _proxyMark: true
         });
-        _.debug("Observing " + prop);
     };
 
     /**
@@ -86,6 +87,7 @@ var proxy = function (bind) {
                     _.debug("Exploring " + prop);
                     explore(val);
                 }
+                _.debug("Observing " + prop);
                 observe(obj, desc, prop, dep);
             }
         }
@@ -93,6 +95,7 @@ var proxy = function (bind) {
             _.forIn(obj.attrs, function (attr, prop) {
                 // do not override real properties from object and only when attributes have something to change.
                 if (props.indexOf(prop) == -1 && (attr.property || attr.value)) {
+                    _.debug("Observing attribute " + prop);
                     observe(obj, null, prop);
                     props.push(prop);
                 }

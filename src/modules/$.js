@@ -63,7 +63,7 @@ var $ = function (el, bind, ties) {
         var value = this.value();
         value = _.trim(value);
 
-        if (this.pipes) {
+        if (this.pipes.length > 0) {
             this.pipeline(value);
         } else {
             if (bind.obj[VALUE] !== value) {
@@ -106,12 +106,12 @@ var $ = function (el, bind, ties) {
      * Processes pipelines of current element
      *
      * @this $
-     * @param {*} value
+     * @param {*} value value to use in pipeline
      * @returns {model} new object according to pipes
      */
     this.pipeline = function (value) {
         var res = this.bind.obj;
-        if (this.pipes) {
+        if (this.pipes.length > 0) {
             _.forEach(this.pipes, function (pipe) {
                 if (_.isDefined(value)) {
                     res = pipe.process(res, ties, value);
@@ -152,7 +152,7 @@ $.prototype = {
             handler = function (event) {
                 event.index = this.index;
                 event.tie = this.tie;
-                safeCall(value, this.bind.obj, this.bind.$ready(), event);
+                safeCall(value, this.bind.obj, this.bind.ready(), event);
             }.bind(this);
             this.events[name] = handler;
             this.$.addEventListener(name, handler);

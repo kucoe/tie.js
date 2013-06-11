@@ -58,37 +58,21 @@
     window.tie = tie();
     window.tie.pipes = pipes;
 
-
-    /**
-     * Property pipeline definition
-     */
-    window.tie("property", function (obj, params, value) {
-        if (params) {
-            var prop = params[0];
-            var target = params.length > 1 ? params[1] : VALUE;
-            if (_.isUndefined(value)) {
-                obj[target] = obj[prop];
-            } else {
-                obj[prop] = value;
-            }
+    var getAccessor = function(obj, split) {
+        var res = obj;
+        var i = 1;
+        var length = split.length;
+        while (i < length) {
+            res = res[split[i-1]];
+            i++;
         }
-        return obj;
-    });
+        return res;
+    };
 
     /**
      * Property pipeline definition
      */
     window.tie("property", function (obj, params, value) {
-        var getAccessor = function(obj, split) {
-            var res = obj;
-            var i = 1;
-            var length = split.length;
-            while (i < length) {
-                res = res[split[i-1]];
-                i++;
-            }
-            return res;
-        };
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -111,16 +95,6 @@
      * Value pipeline definition
      */
     window.tie("value", function (obj, params, value) {
-        var getAccessor = function(obj, split) {
-            var res = obj;
-            var i = 1;
-            var length = split.length;
-            while (i < length) {
-                res = res[split[i-1]];
-                i++;
-            }
-            return res;
-        };
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;

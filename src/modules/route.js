@@ -22,8 +22,8 @@ var routes = {
             } else {
                 _.debug("Process default route");
                 _.forIn(ties, function (bind) {
-                    if (!bind. rendered) {
-                        bind.$render();
+                    if (!bind.rendered) {
+                        bind.render();
                     }
                     bind.obj.$location = function () {
                         return{route: {has: function () {
@@ -44,17 +44,20 @@ var routes = {
                 return {href: window.location.href, route: current};
             }.bind(this);
             if (current.handler) {
-                safeCall(current.handler, app.obj, app.$ready());
+                safeCall(current.handler, app.obj, app.ready());
             }
             _.forIn(ties, function (bind) {
                 if (!bind.rendered) {
-                    bind.$render();
+                    bind.render();
                 }
                 bind.obj.$location = app.location;
                 bind.obj.shown = current.has(bind);
-                var r = bind.obj.routes[current.path];
-                if (r && r.handler) {
-                    safeCall(r.handler, bind.obj, bind.$ready());
+                var bindRoutes = bind.obj.routes;
+                if (bindRoutes && bind.obj.shown) {
+                    var r = bindRoutes[current.path];
+                    if (r && r.handler) {
+                        safeCall(r.handler, bind.obj, bind.ready());
+                    }
                 }
             });
             _.debug("Processed route " + current.path);
@@ -80,15 +83,18 @@ var route = function (path, handler) {
 route.prototype = {
     has: function (bind) {
         var routes = bind.obj.routes;
-        var exclude = routes['-'] != null;
-        var contains = false;
-        _.forIn(routes, function (route, path) {
-            if (path.toLowerCase() == this.path) {
-                contains = true;
-                return false;
-            }
-            return true;
-        }, this);
-        return exclude != contains;
+        if (routes) {
+            var exclude = routes['-'] != null;
+            var contains = false;
+            _.forIn(routes, function (route, path) {
+                if (path.toLowerCase() == this.path) {
+                    contains = true;
+                    return false;
+                }
+                return true;
+            }, this);
+            return exclude != contains;
+        }
+        return false;
     }
 };

@@ -60,7 +60,7 @@
         ],
         routes: {
             sex: function () {
-                this.$location('labels');
+                //this.$location('labels');
                 this.$trigger.attrs = {
                     value: '#value',
                     mouseover: '#float',
@@ -76,10 +76,10 @@
         float: function (evt) {
             if (evt.type === 'mouseover') {
                 this.value = 'Over';
-                this.$label2.style = 'color:green';
+                this.$label.style = 'color:green';
             } else {
                 this.value = 'Out';
-                this.$label2.style = 'color:red';
+                this.$label.style = 'color:red';
             }
         },
         trigger: function () {
@@ -92,7 +92,7 @@
             click: '#trigger'
 
         })
-    }, ['label2']);
+    }, ['label']);
 </script>
 
 </body>
