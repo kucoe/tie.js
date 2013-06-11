@@ -55,7 +55,10 @@ var valueFn = function (obj, idx, bindReady) {
         if (idx >= 0 && values && VALUE == name) {
             return values[idx];
         }
-        return obj[name]
+        if(obj.hasOwnProperty(name)) {
+            return obj[name]
+        }
+        return null;
     };
 
     if (_.isFunction(val)) {
@@ -191,7 +194,54 @@ bind.prototype = {
         }
     },
 
+    /**
+     * Internally checks and updates values array current bind.
+     *
+     * @this bind
+     */
+    $prepareValues: function () {
+        var values = this.obj.values;
+        if (values) {
+            var newElements = {};
+            var nodes = {};
+            _.forEach(this.$, function (el) {
+                if (el.index >= 0) {
+                    el.remove();
+                }
+            }, this, true);
+            _.forEach(values, function (value, i) {
+                _.forEach(this.$, function (el) {
+                    var id = el._id;
+                    var node = nodes[id];
+                    if (!node) {
+                        nodes[id] = node = el.$;
+                    }
+                    var newEls = newElements[id];
+                    if (!newEls) {
+                        newElements[id] = newEls = [];
+                    }
+                    var newElement = node.cloneNode(true);
+                    node.style.display = '';
+                    newElement.setAttribute(INDEX, i);
+                    newEls.push(newElement);
+                });
+            }, this);
+            _.forEach(this.$, function (el) {
+                var node = el.$;
+                node.style.display = 'none';
+                q.next(node, newElements[el._id]);
+            });
+            this.selected = false;
+        }
+    },
 
+    /**
+     * Return or override attribute value on current bound
+     *
+     * @this bind
+     * @param {string} name attribute object
+     * @param {*} value attribute object
+     */
     $attrValue: function (name, value) {
         if (this.obj.attrs) {
             var attr = this.$attr(name);
@@ -210,14 +260,21 @@ bind.prototype = {
         return null;
     },
 
-    $renderAttr: function (elements, attr) {
-        _.forEach(elements, function (el) {
-            var val = attr.value;
-            if (_.isFunction(val)) {
+    /**
+     * Set attributes over all bound elements
+     *
+     * @this bind
+     * @param {string} name attribute object
+     * @param {*} [value] attribute object
+     */
+    $renderAttr: function (name, value) {
+        _.forEach(this.$, function (el) {
+            var val = value;
+            if (_.isFunction(value)) {
                 var obj = el.pipeline();
-                val = val(obj, el.index);
+                val = value(obj, el.index);
             }
-            el.setAttribute(attr.name, val);
+            el.setAttribute(name, val);
         });
     },
 
@@ -265,11 +322,11 @@ bind.prototype = {
             var ready = this.$ready();
             _.forIn(attrs, function (attr) {
                 attr.val = valueFn;
-                this.$renderAttr(this.$, {name: attr.name, value: function (obj, idx) {
+                this.$renderAttr(attr.name, function (obj, idx) {
                     return attr.val(obj, idx, ready);
-                }.bind(this)});
+                }.bind(this));
             }, this);
-            this.$renderAttr(this.$, {name: TIED});
+            this.$renderAttr(TIED);
             _.forEach(this.$, function (el) {
                 if (el.isInput) {
                     el.setAttribute('name', this.name);

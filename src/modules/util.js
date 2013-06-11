@@ -215,7 +215,7 @@ var _ = {
             res = true
         } else if ('false' === string) {
             res = false
-        } else if (string.match(/\d/)) {
+        } else if (/^\d*$/.test(string)) {
             if (string.indexOf('.') != -1) {
                 res = this.toFloat(string);
             } else {

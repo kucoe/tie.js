@@ -32,13 +32,14 @@ pipe.prototype = {
      * @this pipe
      * @param {model} obj tied model
      * @param {Object} ties named ties object
+     * @param {Object} [value] new object value
      */
-    process: function (obj, ties) {
+    process: function (obj, ties, value) {
         var tie = ties[this.name];
         if (!tie) {
             throw new Error('Pipe ' + this.name + ' not found');
         }
-        var value = tie.obj[CALLBACK];
+        var callback = tie.obj[CALLBACK];
         var params = [];
         if (this.params.length > 0) {
             _.forEach(this.params, function (param) {
@@ -52,9 +53,9 @@ pipe.prototype = {
                 params.push(res);
             });
         }
-        var res = _.clone(obj);
-        if (value && _.isFunction(value)) {
-            res = safeCall(value, tie, tie.$ready(), res, params);
+        var res = _.isDefined(value) ? obj : _.clone(obj);
+        if (callback && _.isFunction(callback)) {
+            res = safeCall(callback, tie, tie.$ready(), res, params, value);
         }
         return res;
     }

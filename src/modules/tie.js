@@ -83,44 +83,6 @@ tie.prototype = {
         return new model(obj);
     },
 
-    prepare: function (bind) {
-        bind.$prepareAttrs();
-        bind.$prepareRoutes();
-        var values = bind.obj.values;
-        var newElements = {};
-        var nodes = {};
-        if (values) {
-            _.forEach(bind.$, function (el) {
-                if(el.index >=0) {
-                    el.remove();
-                }
-            }, this, true);
-            _.forEach(values, function (value, i) {
-                _.forEach(bind.$, function (el) {
-                    var id = el._id;
-                    var node = nodes[id];
-                    if(!node) {
-                        nodes[id] = node = el.$;
-                    }
-                    var newEls = newElements[id];
-                    if (!newEls) {
-                        newElements[id] = newEls = [];
-                    }
-                    var newElement = node.cloneNode(true);
-                    node.style.display = '';
-                    newElement.setAttribute(INDEX, i);
-                    newEls.push(newElement);
-                });
-            }, this);
-            _.forEach(bind.$, function (el) {
-                var node = el.$;
-                node.style.display = 'none';
-                q.next(node, newElements[el._id]);
-            });
-            bind.selected = false;
-        }
-    },
-
     prepareDependency: function (bind) {
         var obj = _.extend({}, bind.obj);
         _.forEach(bind.depends, function (dep) {
@@ -159,13 +121,12 @@ tie.prototype = {
     init: function (name, tiedObject, dependencies, ties) {
         _.debug("Tie " + name);
         var r = new bind(name, dependencies, ties);
-        _.debug("Bind ready");
         r.obj = this.check(tiedObject);
-        _.debug("Model checked");
+        r.$prepareAttrs();
+        r.$prepareRoutes();
         this.resolve(r, dependencies, ties);
-        _.debug("Dependencies resolved");
         r.obj = proxy(r);
-        _.debug("Model proxy done");
+        _.debug("Bind model ready");
         var tie = this;
         r.$load = function () {
             this.loading = true;
@@ -173,8 +134,8 @@ tie.prototype = {
                 this.$ = tie.select(name, r, ties);
                 _.debug("Elements selected: " + this.$.length);
             }
-            tie.prepare(this);
-            _.debug("Prepared inner structure");
+            r.$prepareValues();
+            _.debug("Prepared inner array structure");
             if (!this.selected) {
                 this.$ = tie.select(name, r, ties);
                 _.debug("Elements reselected: " + this.$.length);

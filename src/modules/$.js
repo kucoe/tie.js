@@ -63,8 +63,12 @@ var $ = function (el, bind, ties) {
         var value = this.value();
         value = _.trim(value);
 
-        if (bind.obj[VALUE] !== value) {
-            bind.obj[VALUE] = value;
+        if (this.pipes) {
+            this.pipeline(value);
+        } else {
+            if (bind.obj[VALUE] !== value) {
+                bind.obj[VALUE] = value;
+            }
         }
     }.bind(this);
     if (_.isDefined(el.value)) {
@@ -92,7 +96,7 @@ var $ = function (el, bind, ties) {
     this.display = el.style.display;
     this.shown = true;
     this.textEl = null;
-    var pipes = this.tie.replace(/\.([^.|1-9]+)/g, '|property:"$1"').match(/[^|]+/g).splice(1);
+    var pipes = this.tie.replace(/\.([^.|]+(\.[^.|]+)*)/g, '|property:"$1"').match(/[^|]+/g).splice(1);
     this.pipes = [];
     _.forEach(pipes, function (string) {
         this.pipes.push(new pipe(string));
@@ -102,13 +106,18 @@ var $ = function (el, bind, ties) {
      * Processes pipelines of current element
      *
      * @this $
+     * @param {*} value
      * @returns {model} new object according to pipes
      */
-    this.pipeline = function () {
+    this.pipeline = function (value) {
         var res = this.bind.obj;
         if (this.pipes) {
             _.forEach(this.pipes, function (pipe) {
-                res = pipe.process(res, ties);
+                if (_.isDefined(value)) {
+                    res = pipe.process(res, ties, value);
+                } else {
+                    res = pipe.process(res, ties);
+                }
             })
         }
         return res;

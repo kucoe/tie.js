@@ -75,4 +75,65 @@
         return obj;
     });
 
+    /**
+     * Property pipeline definition
+     */
+    window.tie("property", function (obj, params, value) {
+        var getAccessor = function(obj, split) {
+            var res = obj;
+            var i = 1;
+            var length = split.length;
+            while (i < length) {
+                res = res[split[i-1]];
+                i++;
+            }
+            return res;
+        };
+        if (params) {
+            var prop = params[0];
+            var target = params.length > 1 ? params[1] : VALUE;
+            var splitP = prop.split('.');
+            var splitT = target.split('.');
+            var res = getAccessor(obj, splitP);
+            var trg = getAccessor(obj, splitT);
+            var lastP = splitP[splitP.length-1];
+            var lastT = splitT[splitT.length-1];
+            if (_.isUndefined(value)) {
+                trg[lastT] = res[lastP];
+            } else {
+                res[lastP] = value;
+            }
+        }
+        return obj;
+    });
+
+    /**
+     * Value pipeline definition
+     */
+    window.tie("value", function (obj, params, value) {
+        var getAccessor = function(obj, split) {
+            var res = obj;
+            var i = 1;
+            var length = split.length;
+            while (i < length) {
+                res = res[split[i-1]];
+                i++;
+            }
+            return res;
+        };
+        if (params) {
+            var prop = params[0];
+            var val = params.length > 1 ? params[1] : null;
+            var splitP = prop.split('.');
+            var res = getAccessor(obj, splitP);
+            var lastP = splitP[splitP.length-1];
+            if (_.isUndefined(value)) {
+                res[lastP] = val;
+            } else {
+                res[lastP] = value;
+            }
+        }
+        return obj;
+    });
+
 })(window);

@@ -56,6 +56,7 @@ var proxy = function (bind) {
             enumerable: enumerable,
             _proxyMark: true
         });
+        _.debug("Observing " + prop);
     };
 
     /**
@@ -82,6 +83,7 @@ var proxy = function (bind) {
                 var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
                 var val = obj[prop];
                 if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES) {
+                    _.debug("Exploring " + prop);
                     explore(val);
                 }
                 observe(obj, desc, prop, dep);
@@ -89,19 +91,18 @@ var proxy = function (bind) {
         }
         if (obj.attrs) {
             _.forIn(obj.attrs, function (attr, prop) {
-                if (props.indexOf(prop) == -1 || attr.property || attr.value) {
-                    if (_.isObject(val)) {
-                        explore(val);
-                    }
+                // do not override real properties from object and only when attributes have something to change.
+                if (props.indexOf(prop) == -1 && (attr.property || attr.value)) {
                     observe(obj, null, prop);
+                    props.push(prop);
                 }
-                props.push(prop);
             }, this);
         }
     };
 
     var obj = bind.obj;
     var props = [];
+    _.debug("Exploring " + bind.name);
     explore(obj);
 
     return obj;

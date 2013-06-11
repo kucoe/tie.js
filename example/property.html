@@ -8,18 +8,26 @@
 <div data-tie="person">
     Name:
     <input type="text" data-tie="person.name"/>
+    Name length:
+    <input type="text" data-tie="person.name.length"/>
     Age:
     <input type="text" data-tie="person.age"/>
     <br/>
     Show: <input type="checkbox" data-tie="person.shown"/>
+    Style:
+    <input type="text" data-tie="person.color|value:'color','red'"/>
 </div>
 <script src="../src/tie.js"></script>
 <script>
     tie("person", {
-        style: 'color:blue',
+        color: 'blue',
         name: 'John',
         age: 25,
-        attrs: ['value', 'style']
+        attrs: ['value']._({
+            style: function() {
+                return 'color:' + this.color;
+            }
+        })
     });
 </script>
 
