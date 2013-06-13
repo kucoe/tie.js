@@ -261,6 +261,33 @@ bind.prototype = {
     },
 
     /**
+     * Return or override property value on current bound
+     *
+     * @this bind
+     * @param {string} name property object like "name.length"
+     * @param {*} value property object
+     */
+    propertyValue: function (name, value) {
+        if (this.obj) {
+            var res = this.obj;
+            var split = name.split('.');
+            var i = 1;
+            var length = split.length;
+            while (i < length) {
+                res = res[split[i-1]];
+                i++;
+            }
+            var last = split[length-1];
+            if (_.isUndefined(value)) {
+                return res[last];
+            } else {
+                res[last] = value;
+            }
+        }
+        return null;
+    },
+
+    /**
      * Set attributes over all bound elements
      *
      * @this bind
@@ -313,7 +340,7 @@ bind.prototype = {
      *
      */
     render: function () {
-        if(!this.obj.shown) {
+        if(!this.obj.$shown) {
             return;
         }
         _.debug("Render " + this.name);
@@ -336,7 +363,7 @@ bind.prototype = {
                 }
             }, this);
         }
-        this.show(this.obj.shown);
+        this.show(this.obj.$shown);
         this.rendered = true;
         _.debug("Rendered " + this.name);
     }

@@ -15,7 +15,7 @@
     var CALLBACK = 'callback';
     var VALUES = 'values';
     var TEXT = 'text';
-    var SHOWN = 'shown';
+    var SHOWN = '$shown';
     var ATTRS = 'attrs';
     var ROUTES = 'routes';
     var ITEM_NAME = '_item_name';
@@ -77,7 +77,7 @@
                     }
                     return desc.value;
                 }
-                return bind.attrValue(prop);
+                return obj.$attr(prop);
             };
             var newSet = function (val) {
                 if (desc) {
@@ -87,7 +87,7 @@
                         desc.value = val;
                     }
                 } else {
-                    bind.attrValue(prop, val);
+                    obj.$attr(prop, val);
                 }
                 if (prop == SHOWN) {
                     bind.show(val);
@@ -195,7 +195,7 @@
                                 return true
                             }}}
                         };
-                        bind.obj.shown = true;
+                        bind.obj.$shown = true;
                     });
                     _.debug("Processed default route");
                 }
@@ -216,9 +216,9 @@
                         bind.render();
                     }
                     bind.obj.$location = app.location;
-                    bind.obj.shown = current.has(bind);
+                    bind.obj.$shown = current.has(bind);
                     var bindRoutes = bind.obj.routes;
-                    if (bindRoutes && bind.obj.shown) {
+                    if (bindRoutes && bind.obj.$shown) {
                         var r = bindRoutes[current.path];
                         if (r && r.handler) {
                             safeCall(r.handler, bind.obj, bind.ready());
@@ -1240,6 +1240,33 @@
         },
     
         /**
+         * Return or override property value on current bound
+         *
+         * @this bind
+         * @param {string} name property object like "name.length"
+         * @param {*} value property object
+         */
+        propertyValue: function (name, value) {
+            if (this.obj) {
+                var res = this.obj;
+                var split = name.split('.');
+                var i = 1;
+                var length = split.length;
+                while (i < length) {
+                    res = res[split[i-1]];
+                    i++;
+                }
+                var last = split[length-1];
+                if (_.isUndefined(value)) {
+                    return res[last];
+                } else {
+                    res[last] = value;
+                }
+            }
+            return null;
+        },
+    
+        /**
          * Set attributes over all bound elements
          *
          * @this bind
@@ -1292,7 +1319,7 @@
          *
          */
         render: function () {
-            if(!this.obj.shown) {
+            if(!this.obj.$shown) {
                 return;
             }
             _.debug("Render " + this.name);
@@ -1315,7 +1342,7 @@
                     }
                 }, this);
             }
-            this.show(this.obj.shown);
+            this.show(this.obj.$shown);
             this.rendered = true;
             _.debug("Rendered " + this.name);
         }
@@ -1421,8 +1448,8 @@
             } else if (_.isArray(obj)) {
                 obj = this.wrapArray(obj);
             }
-            if (_.isUndefined(obj.shown)) {
-                obj.shown = true;
+            if (_.isUndefined(obj.$shown)) {
+                obj.$shown = true;
             }
             if (_.isUndefined(obj.attrs)) {
                 obj.attrs = {};
@@ -1470,6 +1497,12 @@
             r.prepareRoutes();
             this.resolve(r, dependencies, ties);
             r.obj = proxy(r);
+            r.obj.$attr = function(name, value) {
+                return r.attrValue(name, value);
+            };
+            r.obj.$prop = function(name, value) {
+                return r.propertyValue(name, value);
+            };
             _.debug("Bind model ready");
             var tie = this;
             r.load = function () {
@@ -1491,23 +1524,11 @@
         }
     };
 
-
     /**
      * Exports
      */
     window.tie = tie();
     window.tie.pipes = pipes;
-
-    var getAccessor = function(obj, split) {
-        var res = obj;
-        var i = 1;
-        var length = split.length;
-        while (i < length) {
-            res = res[split[i-1]];
-            i++;
-        }
-        return res;
-    };
 
     /**
      * Property pipeline definition
@@ -1516,16 +1537,10 @@
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
-            var splitP = prop.split('.');
-            var splitT = target.split('.');
-            var res = getAccessor(obj, splitP);
-            var trg = getAccessor(obj, splitT);
-            var lastP = splitP[splitP.length-1];
-            var lastT = splitT[splitT.length-1];
             if (_.isUndefined(value)) {
-                trg[lastT] = res[lastP];
+                obj.$prop(target, obj.$prop(prop))
             } else {
-                res[lastP] = value;
+                obj.$prop(prop, value);
             }
         }
         return obj;
@@ -1538,13 +1553,10 @@
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
-            var splitP = prop.split('.');
-            var res = getAccessor(obj, splitP);
-            var lastP = splitP[splitP.length-1];
             if (_.isUndefined(value)) {
-                res[lastP] = val;
+                obj.$prop(prop, val);
             } else {
-                res[lastP] = value;
+                obj.$prop(prop, value);
             }
         }
         return obj;

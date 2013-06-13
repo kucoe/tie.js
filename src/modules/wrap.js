@@ -15,7 +15,7 @@
     var CALLBACK = 'callback';
     var VALUES = 'values';
     var TEXT = 'text';
-    var SHOWN = 'shown';
+    var SHOWN = '$shown';
     var ATTRS = 'attrs';
     var ROUTES = 'routes';
     var ITEM_NAME = '_item_name';
@@ -58,17 +58,6 @@
     window.tie = tie();
     window.tie.pipes = pipes;
 
-    var getAccessor = function(obj, split) {
-        var res = obj;
-        var i = 1;
-        var length = split.length;
-        while (i < length) {
-            res = res[split[i-1]];
-            i++;
-        }
-        return res;
-    };
-
     /**
      * Property pipeline definition
      */
@@ -76,16 +65,10 @@
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
-            var splitP = prop.split('.');
-            var splitT = target.split('.');
-            var res = getAccessor(obj, splitP);
-            var trg = getAccessor(obj, splitT);
-            var lastP = splitP[splitP.length-1];
-            var lastT = splitT[splitT.length-1];
             if (_.isUndefined(value)) {
-                trg[lastT] = res[lastP];
+                obj.$prop(target, obj.$prop(prop))
             } else {
-                res[lastP] = value;
+                obj.$prop(prop, value);
             }
         }
         return obj;
@@ -98,13 +81,10 @@
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
-            var splitP = prop.split('.');
-            var res = getAccessor(obj, splitP);
-            var lastP = splitP[splitP.length-1];
             if (_.isUndefined(value)) {
-                res[lastP] = val;
+                obj.$prop(prop, val);
             } else {
-                res[lastP] = value;
+                obj.$prop(prop, value);
             }
         }
         return obj;

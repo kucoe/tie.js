@@ -97,8 +97,8 @@ tie.prototype = {
         } else if (_.isArray(obj)) {
             obj = this.wrapArray(obj);
         }
-        if (_.isUndefined(obj.shown)) {
-            obj.shown = true;
+        if (_.isUndefined(obj.$shown)) {
+            obj.$shown = true;
         }
         if (_.isUndefined(obj.attrs)) {
             obj.attrs = {};
@@ -146,6 +146,12 @@ tie.prototype = {
         r.prepareRoutes();
         this.resolve(r, dependencies, ties);
         r.obj = proxy(r);
+        r.obj.$attr = function(name, value) {
+            return r.attrValue(name, value);
+        };
+        r.obj.$prop = function(name, value) {
+            return r.propertyValue(name, value);
+        };
         _.debug("Bind model ready");
         var tie = this;
         r.load = function () {

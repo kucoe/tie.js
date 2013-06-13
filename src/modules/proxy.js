@@ -25,7 +25,7 @@ var proxy = function (bind) {
                 }
                 return desc.value;
             }
-            return bind.attrValue(prop);
+            return obj.$attr(prop);
         };
         var newSet = function (val) {
             if (desc) {
@@ -35,7 +35,7 @@ var proxy = function (bind) {
                     desc.value = val;
                 }
             } else {
-                bind.attrValue(prop, val);
+                obj.$attr(prop, val);
             }
             if (prop == SHOWN) {
                 bind.show(val);

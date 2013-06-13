@@ -30,7 +30,7 @@ var routes = {
                             return true
                         }}}
                     };
-                    bind.obj.shown = true;
+                    bind.obj.$shown = true;
                 });
                 _.debug("Processed default route");
             }
@@ -51,9 +51,9 @@ var routes = {
                     bind.render();
                 }
                 bind.obj.$location = app.location;
-                bind.obj.shown = current.has(bind);
+                bind.obj.$shown = current.has(bind);
                 var bindRoutes = bind.obj.routes;
-                if (bindRoutes && bind.obj.shown) {
+                if (bindRoutes && bind.obj.$shown) {
                     var r = bindRoutes[current.path];
                     if (r && r.handler) {
                         safeCall(r.handler, bind.obj, bind.ready());
