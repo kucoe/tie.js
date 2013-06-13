@@ -16,6 +16,7 @@
     var VALUES = 'values';
     var TEXT = 'text';
     var SHOWN = '$shown';
+    var DEPS = '$deps';
     var ATTRS = 'attrs';
     var ROUTES = 'routes';
     var ITEM_NAME = '_item_name';
@@ -61,7 +62,7 @@
     /**
      * Property pipeline definition
      */
-    window.tie("property", function (obj, params, value) {
+    var p = window.tie("property", function (obj, params, value) {
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -73,19 +74,16 @@
         }
         return obj;
     });
+    p.callback.canWrite = true;
 
     /**
      * Value pipeline definition
      */
-    window.tie("value", function (obj, params, value) {
+    window.tie("value", function (obj, params) {
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
-            if (_.isUndefined(value)) {
-                obj.$prop(prop, val);
-            } else {
-                obj.$prop(prop, value);
-            }
+            obj.$prop(prop, val);
         }
         return obj;
     });

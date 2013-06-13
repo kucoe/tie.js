@@ -53,7 +53,7 @@ pipe.prototype = {
                 params.push(res);
             });
         }
-        var res = _.isDefined(value) ? obj : _.clone(obj);
+        var res = _.isDefined(value) && callback.canWrite ? obj : _.clone(obj);
         if (callback && _.isFunction(callback)) {
             res = safeCall(callback, tie.obj, tie.obj.$ready(), res, params, value);
         }

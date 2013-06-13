@@ -16,6 +16,7 @@
     var VALUES = 'values';
     var TEXT = 'text';
     var SHOWN = '$shown';
+    var DEPS = '$deps';
     var ATTRS = 'attrs';
     var ROUTES = 'routes';
     var ITEM_NAME = '_item_name';
@@ -99,6 +100,7 @@
                     } else if (prop == VALUES) {
                         bind.prepareValues();
                     }
+                    _.debug("Calling apply on '" + bind.name + "' after changed property '" + prop + "'");
                     bind.apply();
                 }
             };
@@ -135,7 +137,7 @@
                     }
                     var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
                     var val = obj[prop];
-                    if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES) {
+                    if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS) {
                         _.debug("Exploring " + prop);
                         explore(val);
                     }
@@ -320,7 +322,7 @@
                     params.push(res);
                 });
             }
-            var res = _.isDefined(value) ? obj : _.clone(obj);
+            var res = _.isDefined(value) && callback.canWrite ? obj : _.clone(obj);
             if (callback && _.isFunction(callback)) {
                 res = safeCall(callback, tie.obj, tie.obj.$ready(), res, params, value);
             }
@@ -385,27 +387,30 @@
      * @constructor
      * @class $
      * @this $
-     * @param {Node} el DOM element.
+     * @param {Element} el DOM element.
      * @param {bind} bind element bound tie
      * @param {Object} ties already registered ties dictionary
      */
     var $ = function (el, bind, ties) {
-        var listener = function () {
+        var listener = function (event) {
+            _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
             var value = this.value();
             value = _.trim(value);
     
             if (this.pipes.length > 0) {
                 this.pipeline(value);
             } else {
-                if (bind.obj[VALUE] !== value) {
-                    bind.obj[VALUE] = value;
+                if (bind.obj.value !== value) {
+                    bind.obj.value = value;
                 }
             }
         }.bind(this);
         if (_.isDefined(el.value)) {
             if ('oninput' in el) {
+                _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
                 el.addEventListener('input', listener);
             } else {
+                _.debug("Added keydown listener on '" + bind.name + "' for element " + el.tagName);
                 el.addEventListener('keydown', function (event) {
                     var key = event.keyCode;
                     // ignore command         modifiers                   arrows
@@ -414,7 +419,8 @@
                 });
             }
         }
-        el.addEventListener('change', listener);
+        //_.debug("Added change listener on '" + bind.name + "' for element " + el.tagName);
+        //el.addEventListener('change', listener);
         var idx = el.getAttribute(INDEX);
         this.$ = el;
         this._id = _.uid();
@@ -1073,7 +1079,7 @@
     var safeCall = function (fn, fnThis, bindReady) {
         var res;
         var spliceArgs = 3;
-        if(_.isUndefined(bindReady)) {
+        if (_.isUndefined(bindReady) && _.isFunction(fnThis.$ready)) {
             bindReady = fnThis.$ready();
             spliceArgs = 2;
         }
@@ -1090,9 +1096,31 @@
     };
     
     /**
+     * Function that returns either property from object or from values array.
+     *
+     * @param {model} obj object that used to search for property.
+     * @param {string} name property name.
+     * @param {number} [idx = -1] element index or -1.
+     * @returns Object|undefined
+     */
+    var findProperty = function (obj, name, idx) {
+        if (_.isUndefined(idx)) {
+            idx = -1;
+        }
+        var values = obj.values;
+        if (idx >= 0 && values && _.isDefined(values[idx][name])) {
+            return values[idx][name];
+        }
+        if (idx >= 0 && values && VALUE == name) {
+            return values[idx];
+        }
+        return obj.$prop(name);
+    };
+    
+    /**
      * Function that calculates attribute value.
      *
-     * @param {Object} obj object that from this reference in function context.
+     * @param {model} obj object that from this reference in function context.
      * @param {number} [idx = -1] element index or -1.
      * @param {boolean} [bindReady] whether bind on which function is called is ready.
      * @returns Object|undefined
@@ -1101,39 +1129,21 @@
         var name = this.name;
         var val = this.value;
         var property = this.property;
-        var values = obj.values;
     
-        if(_.isUndefined(bindReady)) {
+        if (_.isUndefined(bindReady)) {
             bindReady = obj.$ready();
         }
-    
-        if(_.isUndefined(idx)) {
-            idx = -1;
-        }
-    
-        var findProperty = function (name) {
-            if (idx >= 0 && values && _.isDefined(values[idx][name])) {
-                return values[idx][name];
-            }
-            if (idx >= 0 && values && VALUE == name) {
-                return values[idx];
-            }
-            if (obj.hasOwnProperty(name)) {
-                return obj[name]
-            }
-            return null;
-        };
     
         if (_.isFunction(val)) {
             return safeCall(val, obj, bindReady)
         } else {
             if (property && _.isUndefined(val)) {
-                return findProperty(property);
+                return findProperty(obj, property, idx);
             }
             if (!name) {
                 throw new Error("Where is your property?")
             }
-            return findProperty(name);
+            return findProperty(obj, name, idx);
         }
     };
     
@@ -1292,6 +1302,7 @@
                 if (_.isFunction(value)) {
                     var obj = el.pipeline();
                     val = value(obj, el.index);
+                    _.debug("Render attribute '" + name + "' with value " + val);
                 }
                 el.setAttribute(name, val);
             });
@@ -1313,9 +1324,6 @@
          * Renders all elements of current bind. <br>
          * Rendering means particularly check whether bind is loaded and load it if needed, <br>
          * set value for every element attribute and show element if needed.
-         *
-         * TODO: check whether we can skip attributes value change if element will not be shown.
-         *
          */
         render: function () {
             if (!this.obj.$shown) {
@@ -1420,7 +1428,7 @@
          */
         wrapFunction: function (fn) {
             return {
-                callback:fn,
+                callback: fn,
                 attrs: {
                     value: fn
                 }
@@ -1484,6 +1492,7 @@
             if (old && old.touch) {
                 bind.touch = old.touch;
                 bind.rendered = old.rendered;
+                _.debug("Calling apply on '" + bind.name + "' after define");
                 bind.apply();
             }
         },
@@ -1495,8 +1504,8 @@
             r.prepareAttrs();
             r.prepareRoutes();
             this.resolve(r, dependencies, ties);
-            r.obj = proxy(r);
             r.obj.$deps = r.depends;
+            r.obj = proxy(r);
             _.debug("Bind model ready");
             var tie = this;
             r.load = function () {
@@ -1528,7 +1537,7 @@
     /**
      * Property pipeline definition
      */
-    window.tie("property", function (obj, params, value) {
+    var p = window.tie("property", function (obj, params, value) {
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -1540,19 +1549,16 @@
         }
         return obj;
     });
+    p.callback.canWrite = true;
 
     /**
      * Value pipeline definition
      */
-    window.tie("value", function (obj, params, value) {
+    window.tie("value", function (obj, params) {
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
-            if (_.isUndefined(value)) {
-                obj.$prop(prop, val);
-            } else {
-                obj.$prop(prop, value);
-            }
+            obj.$prop(prop, val);
         }
         return obj;
     });

@@ -54,27 +54,30 @@ var q = {
  * @constructor
  * @class $
  * @this $
- * @param {Node} el DOM element.
+ * @param {Element} el DOM element.
  * @param {bind} bind element bound tie
  * @param {Object} ties already registered ties dictionary
  */
 var $ = function (el, bind, ties) {
-    var listener = function () {
+    var listener = function (event) {
+        _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
         var value = this.value();
         value = _.trim(value);
 
         if (this.pipes.length > 0) {
             this.pipeline(value);
         } else {
-            if (bind.obj[VALUE] !== value) {
-                bind.obj[VALUE] = value;
+            if (bind.obj.value !== value) {
+                bind.obj.value = value;
             }
         }
     }.bind(this);
     if (_.isDefined(el.value)) {
         if ('oninput' in el) {
+            _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
             el.addEventListener('input', listener);
         } else {
+            _.debug("Added keydown listener on '" + bind.name + "' for element " + el.tagName);
             el.addEventListener('keydown', function (event) {
                 var key = event.keyCode;
                 // ignore command         modifiers                   arrows
@@ -83,7 +86,8 @@ var $ = function (el, bind, ties) {
             });
         }
     }
-    el.addEventListener('change', listener);
+    //_.debug("Added change listener on '" + bind.name + "' for element " + el.tagName);
+    //el.addEventListener('change', listener);
     var idx = el.getAttribute(INDEX);
     this.$ = el;
     this._id = _.uid();

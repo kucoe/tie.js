@@ -47,6 +47,7 @@ var proxy = function (bind) {
                 } else if (prop == VALUES) {
                     bind.prepareValues();
                 }
+                _.debug("Calling apply on '" + bind.name + "' after changed property '" + prop + "'");
                 bind.apply();
             }
         };
@@ -83,7 +84,7 @@ var proxy = function (bind) {
                 }
                 var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
                 var val = obj[prop];
-                if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES) {
+                if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS) {
                     _.debug("Exploring " + prop);
                     explore(val);
                 }

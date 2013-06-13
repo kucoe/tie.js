@@ -70,7 +70,7 @@ tie.prototype = {
      */
     wrapFunction: function (fn) {
         return {
-            callback:fn,
+            callback: fn,
             attrs: {
                 value: fn
             }
@@ -134,6 +134,7 @@ tie.prototype = {
         if (old && old.touch) {
             bind.touch = old.touch;
             bind.rendered = old.rendered;
+            _.debug("Calling apply on '" + bind.name + "' after define");
             bind.apply();
         }
     },
@@ -145,8 +146,8 @@ tie.prototype = {
         r.prepareAttrs();
         r.prepareRoutes();
         this.resolve(r, dependencies, ties);
-        r.obj = proxy(r);
         r.obj.$deps = r.depends;
+        r.obj = proxy(r);
         _.debug("Bind model ready");
         var tie = this;
         r.load = function () {

@@ -93,7 +93,7 @@ model.prototype.$ready = function () {
 var safeCall = function (fn, fnThis, bindReady) {
     var res;
     var spliceArgs = 3;
-    if(_.isUndefined(bindReady)) {
+    if (_.isUndefined(bindReady) && _.isFunction(fnThis.$ready)) {
         bindReady = fnThis.$ready();
         spliceArgs = 2;
     }
@@ -110,9 +110,31 @@ var safeCall = function (fn, fnThis, bindReady) {
 };
 
 /**
+ * Function that returns either property from object or from values array.
+ *
+ * @param {model} obj object that used to search for property.
+ * @param {string} name property name.
+ * @param {number} [idx = -1] element index or -1.
+ * @returns Object|undefined
+ */
+var findProperty = function (obj, name, idx) {
+    if (_.isUndefined(idx)) {
+        idx = -1;
+    }
+    var values = obj.values;
+    if (idx >= 0 && values && _.isDefined(values[idx][name])) {
+        return values[idx][name];
+    }
+    if (idx >= 0 && values && VALUE == name) {
+        return values[idx];
+    }
+    return obj.$prop(name);
+};
+
+/**
  * Function that calculates attribute value.
  *
- * @param {Object} obj object that from this reference in function context.
+ * @param {model} obj object that from this reference in function context.
  * @param {number} [idx = -1] element index or -1.
  * @param {boolean} [bindReady] whether bind on which function is called is ready.
  * @returns Object|undefined
@@ -121,39 +143,21 @@ var valueFn = function (obj, idx, bindReady) {
     var name = this.name;
     var val = this.value;
     var property = this.property;
-    var values = obj.values;
 
-    if(_.isUndefined(bindReady)) {
+    if (_.isUndefined(bindReady)) {
         bindReady = obj.$ready();
     }
-
-    if(_.isUndefined(idx)) {
-        idx = -1;
-    }
-
-    var findProperty = function (name) {
-        if (idx >= 0 && values && _.isDefined(values[idx][name])) {
-            return values[idx][name];
-        }
-        if (idx >= 0 && values && VALUE == name) {
-            return values[idx];
-        }
-        if (obj.hasOwnProperty(name)) {
-            return obj[name]
-        }
-        return null;
-    };
 
     if (_.isFunction(val)) {
         return safeCall(val, obj, bindReady)
     } else {
         if (property && _.isUndefined(val)) {
-            return findProperty(property);
+            return findProperty(obj, property, idx);
         }
         if (!name) {
             throw new Error("Where is your property?")
         }
-        return findProperty(name);
+        return findProperty(obj, name, idx);
     }
 };
 
@@ -312,6 +316,7 @@ bind.prototype = {
             if (_.isFunction(value)) {
                 var obj = el.pipeline();
                 val = value(obj, el.index);
+                _.debug("Render attribute '" + name + "' with value " + val);
             }
             el.setAttribute(name, val);
         });
@@ -333,9 +338,6 @@ bind.prototype = {
      * Renders all elements of current bind. <br>
      * Rendering means particularly check whether bind is loaded and load it if needed, <br>
      * set value for every element attribute and show element if needed.
-     *
-     * TODO: check whether we can skip attributes value change if element will not be shown.
-     *
      */
     render: function () {
         if (!this.obj.$shown) {
