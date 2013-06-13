@@ -44,7 +44,7 @@ var routes = {
                 return {href: window.location.href, route: current};
             }.bind(this);
             if (current.handler) {
-                safeCall(current.handler, app.obj, app.ready());
+                safeCall(current.handler, app.obj);
             }
             _.forIn(ties, function (bind) {
                 if (!bind.rendered) {
@@ -56,7 +56,7 @@ var routes = {
                 if (bindRoutes && bind.obj.$shown) {
                     var r = bindRoutes[current.path];
                     if (r && r.handler) {
-                        safeCall(r.handler, bind.obj, bind.ready());
+                        safeCall(r.handler, bind.obj);
                     }
                 }
             });

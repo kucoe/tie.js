@@ -152,7 +152,7 @@ $.prototype = {
             handler = function (event) {
                 event.index = this.index;
                 event.tie = this.tie;
-                safeCall(value, this.bind.obj, this.bind.ready(), event);
+                safeCall(value, this.bind.obj, this.bind.obj.$ready(), event);
             }.bind(this);
             this.events[name] = handler;
             this.$.addEventListener(name, handler);

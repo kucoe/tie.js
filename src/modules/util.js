@@ -192,7 +192,7 @@ var _ = {
         if (!obj || !this.isObject(obj)) {
             return obj;
         }
-        var newObj = this.isArray(obj) ? [] : {};
+        var newObj = this.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
         newObj = this.extend(newObj, obj, function (item) {
             if (item && this.isObject(item)) {
                 item = this.clone(item);
@@ -284,14 +284,15 @@ var _ = {
      * @param {Object} object
      * @param {Function} callback function
      * @param {Object} [thisArg] this object inside your callback
+     * @param {boolean} [all = false] whether iterate  through all properties
      */
-    forIn: function (object, callback, thisArg) {
+    forIn: function (object, callback, thisArg, all) {
         if (!thisArg) {
             thisArg = this;
         }
         if (callback) {
             for (var prop in object) {
-                if (object.hasOwnProperty(prop)) {
+                if (object.hasOwnProperty(prop) || all) {
                     if (callback.call(thisArg, object[prop], prop, object) === false) {
                         break;
                     }
@@ -344,7 +345,7 @@ var _ = {
                     value = fn(value, prop);
                 }
                 destination[prop] = value;
-            });
+            }, this);
         }
         return destination;
     },

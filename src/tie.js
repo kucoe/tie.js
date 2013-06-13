@@ -209,7 +209,7 @@
                     return {href: window.location.href, route: current};
                 }.bind(this);
                 if (current.handler) {
-                    safeCall(current.handler, app.obj, app.ready());
+                    safeCall(current.handler, app.obj);
                 }
                 _.forIn(ties, function (bind) {
                     if (!bind.rendered) {
@@ -221,7 +221,7 @@
                     if (bindRoutes && bind.obj.$shown) {
                         var r = bindRoutes[current.path];
                         if (r && r.handler) {
-                            safeCall(r.handler, bind.obj, bind.ready());
+                            safeCall(r.handler, bind.obj);
                         }
                     }
                 });
@@ -322,7 +322,7 @@
             }
             var res = _.isDefined(value) ? obj : _.clone(obj);
             if (callback && _.isFunction(callback)) {
-                res = safeCall(callback, tie, tie.ready(), res, params, value);
+                res = safeCall(callback, tie.obj, tie.obj.$ready(), res, params, value);
             }
             return res;
         }
@@ -483,7 +483,7 @@
                 handler = function (event) {
                     event.index = this.index;
                     event.tie = this.tie;
-                    safeCall(value, this.bind.obj, this.bind.ready(), event);
+                    safeCall(value, this.bind.obj, this.bind.obj.$ready(), event);
                 }.bind(this);
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -808,7 +808,7 @@
             if (!obj || !this.isObject(obj)) {
                 return obj;
             }
-            var newObj = this.isArray(obj) ? [] : {};
+            var newObj = this.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
             newObj = this.extend(newObj, obj, function (item) {
                 if (item && this.isObject(item)) {
                     item = this.clone(item);
@@ -900,14 +900,15 @@
          * @param {Object} object
          * @param {Function} callback function
          * @param {Object} [thisArg] this object inside your callback
+         * @param {boolean} [all = false] whether iterate  through all properties
          */
-        forIn: function (object, callback, thisArg) {
+        forIn: function (object, callback, thisArg, all) {
             if (!thisArg) {
                 thisArg = this;
             }
             if (callback) {
                 for (var prop in object) {
-                    if (object.hasOwnProperty(prop)) {
+                    if (object.hasOwnProperty(prop) || all) {
                         if (callback.call(thisArg, object[prop], prop, object) === false) {
                             break;
                         }
@@ -960,7 +961,7 @@
                         value = fn(value, prop);
                     }
                     destination[prop] = value;
-                });
+                }, this);
             }
             return destination;
         },
@@ -992,17 +993,92 @@
     model.prototype = _;
     
     /**
+     * Return or override attribute value on current bound
+     *
+     * @this bind
+     * @param {string} name attribute object
+     * @param {*} value attribute object
+     */
+    model.prototype.$attr = function (name, value) {
+        if (this.attrs) {
+            var attr = this.attrs[name];
+            if (_.isUndefined(value)) {
+                if (attr) {
+                    return attr.val(this);
+                }
+            } else {
+                if (attr && attr.property) {
+                    this[attr.property] = value;
+                } else if (attr) {
+                    this[name] = value;
+                }
+            }
+        }
+        return null;
+    };
+    
+    /**
+     * Return or override property value on current bound
+     *
+     * @this bind
+     * @param {string} name property object like "name.length"
+     * @param {*} value property object
+     */
+    model.prototype.$prop = function (name, value) {
+        var res = this;
+        var split = name.split('.');
+        var i = 1;
+        var length = split.length;
+        while (i < length) {
+            res = res[split[i - 1]];
+            i++;
+        }
+        var last = split[length - 1];
+        if (_.isUndefined(value)) {
+            return res[last];
+        } else {
+            res[last] = value;
+        }
+        return null;
+    };
+    
+    /**
+     * Returns whether bind is ready. I.e. all dependencies are resolved.
+     *
+     * @this bind
+     * @returns boolean
+     */
+    model.prototype.$ready = function () {
+        var ready = true;
+        _.forEach(this.$deps, function (dep) {
+            var d = this['$' + dep];
+            if (d._empty) {
+                ready = false;
+                return false;
+            }
+            return true;
+        }, this);
+        return ready;
+    };
+    
+    
+    /**
      * Execute function in try catch and returns call result or undefined.
      *
      * @param {Function} fn
      * @param {Object} fnThis object that form this reference in function context.
-     * @param {boolean} bindReady whether bind on which function is called is ready.
+     * @param {boolean} [bindReady] whether bind on which function is called is ready.
      * @returns Object|undefined
      */
     var safeCall = function (fn, fnThis, bindReady) {
         var res;
+        var spliceArgs = 3;
+        if(_.isUndefined(bindReady)) {
+            bindReady = fnThis.$ready();
+            spliceArgs = 2;
+        }
         try {
-            var args = Array.prototype.slice.call(arguments, 3);
+            var args = Array.prototype.slice.call(arguments, spliceArgs);
             res = fn.apply(fnThis, args);
         } catch (e) {
             res = undefined;
@@ -1017,8 +1093,8 @@
      * Function that calculates attribute value.
      *
      * @param {Object} obj object that from this reference in function context.
-     * @param {number} idx element index or -1.
-     * @param {boolean} bindReady whether bind on which function is called is ready.
+     * @param {number} [idx = -1] element index or -1.
+     * @param {boolean} [bindReady] whether bind on which function is called is ready.
      * @returns Object|undefined
      */
     var valueFn = function (obj, idx, bindReady) {
@@ -1027,6 +1103,14 @@
         var property = this.property;
         var values = obj.values;
     
+        if(_.isUndefined(bindReady)) {
+            bindReady = obj.$ready();
+        }
+    
+        if(_.isUndefined(idx)) {
+            idx = -1;
+        }
+    
         var findProperty = function (name) {
             if (idx >= 0 && values && _.isDefined(values[idx][name])) {
                 return values[idx][name];
@@ -1034,7 +1118,7 @@
             if (idx >= 0 && values && VALUE == name) {
                 return values[idx];
             }
-            if(obj.hasOwnProperty(name)) {
+            if (obj.hasOwnProperty(name)) {
                 return obj[name]
             }
             return null;
@@ -1105,25 +1189,6 @@
     };
     
     bind.prototype = {
-    
-        /**
-         * Returns whether bind is ready. I.e. all dependencies are resolved.
-         *
-         * @this bind
-         * @returns boolean
-         */
-        ready: function () {
-            var ready = true;
-            _.forEach(this.depends, function (dep) {
-                var d = this.obj['$' + dep];
-                if (d._empty) {
-                    ready = false;
-                    return false;
-                }
-                return true;
-            }, this);
-            return ready;
-        },
     
         /**
          * Internally checks and updates routes information on current bind.
@@ -1215,58 +1280,6 @@
         },
     
         /**
-         * Return or override attribute value on current bound
-         *
-         * @this bind
-         * @param {string} name attribute object
-         * @param {*} value attribute object
-         */
-        attrValue: function (name, value) {
-            if (this.obj.attrs) {
-                var attr = this.attr(name);
-                if (_.isUndefined(value)) {
-                    if (attr) {
-                        return attr.val(this.obj, -1, this.ready());
-                    }
-                } else {
-                    if (attr && attr.property) {
-                        this.obj[attr.property] = value;
-                    } else if (attr) {
-                        this.obj[name] = value;
-                    }
-                }
-            }
-            return null;
-        },
-    
-        /**
-         * Return or override property value on current bound
-         *
-         * @this bind
-         * @param {string} name property object like "name.length"
-         * @param {*} value property object
-         */
-        propertyValue: function (name, value) {
-            if (this.obj) {
-                var res = this.obj;
-                var split = name.split('.');
-                var i = 1;
-                var length = split.length;
-                while (i < length) {
-                    res = res[split[i-1]];
-                    i++;
-                }
-                var last = split[length-1];
-                if (_.isUndefined(value)) {
-                    return res[last];
-                } else {
-                    res[last] = value;
-                }
-            }
-            return null;
-        },
-    
-        /**
          * Set attributes over all bound elements
          *
          * @this bind
@@ -1282,20 +1295,6 @@
                 }
                 el.setAttribute(name, val);
             });
-        },
-    
-        /**
-         * Find attribute by name.
-         *
-         * @this bind
-         * @param {string} name
-         * @returns Object|null attribute
-         */
-        attr: function (name) {
-            if (this.obj.attrs) {
-                return this.obj.attrs[name];
-            }
-            return null;
         },
     
         /**
@@ -1319,7 +1318,7 @@
          *
          */
         render: function () {
-            if(!this.obj.$shown) {
+            if (!this.obj.$shown) {
                 return;
             }
             _.debug("Render " + this.name);
@@ -1328,7 +1327,7 @@
             }
             var attrs = this.obj.attrs;
             if (attrs) {
-                var ready = this.ready();
+                var ready = this.obj.$ready();
                 _.forIn(attrs, function (attr) {
                     attr.val = valueFn;
                     this.renderAttr(attr.name, function (obj, idx) {
@@ -1497,12 +1496,7 @@
             r.prepareRoutes();
             this.resolve(r, dependencies, ties);
             r.obj = proxy(r);
-            r.obj.$attr = function(name, value) {
-                return r.attrValue(name, value);
-            };
-            r.obj.$prop = function(name, value) {
-                return r.propertyValue(name, value);
-            };
+            r.obj.$deps = r.depends;
             _.debug("Bind model ready");
             var tie = this;
             r.load = function () {
@@ -1523,6 +1517,7 @@
             return r;
         }
     };
+
 
     /**
      * Exports

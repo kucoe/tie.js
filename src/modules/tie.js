@@ -146,12 +146,7 @@ tie.prototype = {
         r.prepareRoutes();
         this.resolve(r, dependencies, ties);
         r.obj = proxy(r);
-        r.obj.$attr = function(name, value) {
-            return r.attrValue(name, value);
-        };
-        r.obj.$prop = function(name, value) {
-            return r.propertyValue(name, value);
-        };
+        r.obj.$deps = r.depends;
         _.debug("Bind model ready");
         var tie = this;
         r.load = function () {
