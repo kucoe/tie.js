@@ -405,22 +405,7 @@
                 }
             }
         }.bind(this);
-        if (_.isDefined(el.value)) {
-            if ('oninput' in el) {
-                _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
-                el.addEventListener('input', listener);
-            } else {
-                _.debug("Added keydown listener on '" + bind.name + "' for element " + el.tagName);
-                el.addEventListener('keydown', function (event) {
-                    var key = event.keyCode;
-                    // ignore command         modifiers                   arrows
-                    if (key === 91 || (15 < key && key < 19) || (37 <= key && key <= 40)) return;
-                    listener(event);
-                });
-            }
-        }
-        //_.debug("Added change listener on '" + bind.name + "' for element " + el.tagName);
-        //el.addEventListener('change', listener);
+    
         var idx = el.getAttribute(INDEX);
         this.$ = el;
         this._id = _.uid();
@@ -433,6 +418,27 @@
         this.display = el.style.display;
         this.shown = true;
         this.textEl = null;
+    
+        if(this.isInput) {
+            if (!this.hasCheck) {
+                if ('oninput' in el) {
+                    _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
+                    el.addEventListener('input', listener);
+                } else {
+                    _.debug("Added keydown listener on '" + bind.name + "' for element " + el.tagName);
+                    el.addEventListener('keydown', function (event) {
+                        var key = event.keyCode;
+                        // ignore command         modifiers                   arrows
+                        if (key === 91 || (15 < key && key < 19) || (37 <= key && key <= 40)) return;
+                        listener(event);
+                    });
+                }
+            } else {
+                _.debug("Added change listener on '" + bind.name + "' for element " + el.tagName);
+                el.addEventListener('change', listener);
+            }
+        }
+    
         var pipes = this.tie.replace(/\.([^.|]+(\.[^.|]+)*)/g, '|property:"$1"').match(/[^|]+/g).splice(1);
         this.pipes = [];
         _.forEach(pipes, function (string) {
@@ -1526,7 +1532,6 @@
             return r;
         }
     };
-
 
     /**
      * Exports
