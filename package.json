@@ -9,6 +9,12 @@
     },
     "dependencies": {
     },
+    "devDependencies": {
+        "mocha": "*",
+        "should": "*",
+        "jsdom": "*",
+        "jsdoc": "*"
+    },
     "keywords": ["binding", "tie"],
     "licenses": [
         {

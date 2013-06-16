@@ -18,7 +18,7 @@ var _ = {
      *
      * @property debugEnabled default to true
      */
-    debugEnabled: true,
+    debugEnabled: false,
 
     /**
      * Whether value is undefined
@@ -97,8 +97,10 @@ var _ = {
      * @returns boolean
      */
     isCollection: function (value) {
-        return this.isArray(value) || value instanceof Array || value instanceof NodeList ||
-            value instanceof NamedNodeMap;
+        return this.isArray(value) || value instanceof Array
+            || Object.prototype.toString.apply(value) == '[object NodeList]'
+            || Object.prototype.toString.apply(value) == '[object NamedNodeMap]'
+            || Object.prototype.toString.apply(value) == '[object Arguments]';
     },
 
     /**
@@ -208,9 +210,16 @@ var _ = {
      * Note: supports integer, float, boolean, string. String will be cleaned from quotes.
      *
      * @param {string} string
+     * @param {Object} [context] object to get properties
      */
-    convert: function (string) {
+    convert: function (string, context) {
         var res = string;
+        var reviver = function (k, v) {
+            if (_.isString(v) && v[0] == '#') {
+                return context[v.substring(1)];
+            }
+            return v;
+        };
         if ('true' === string) {
             res = true
         } else if ('false' === string) {
@@ -221,7 +230,13 @@ var _ = {
             } else {
                 res = this.toInt(string);
             }
-        } else if (string.charAt(0) == '"' || string.charAt(0) == "'") {
+        } else if (string[0] == '[' && string[string.length - 1] == "]") {
+            string = string.replace(/'/g, '"');
+            res = JSON.parse(string, reviver);
+        } else if (string[0] == '{' && string[string.length - 1] == "}") {
+            string = string.replace(/'/g, '"');
+            res = JSON.parse(string, reviver);
+        } else if (string[0] == '"' || string[0] == "'") {
             res = string.substring(1, string.length - 1);
         }
         return res;
@@ -354,10 +369,16 @@ var _ = {
      * Writes debug string to console if debug enabled.
      *
      * @param {string} message
+     * @param {string} [group] starts new collapsed group
      */
-    debug: function (message) {
+    debug: function (message, group) {
         if (this.debugEnabled) {
+            if (group) {
+                console.groupEnd();
+                console.groupCollapsed(group);
+            }
             console.log(message);
         }
     }
 };
+module.exports = _;

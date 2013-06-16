@@ -12,16 +12,21 @@ var tie = function () {
         if (name != APP && ties[APP] == null) {
             window.tie(APP, {});
         }
-        var r = tie.prototype.init(name, tiedObject, dependencies, ties);
-        tie.prototype.define(name, r, ties);
-        if (name == APP) {
-            app = r;
-            routes.init();
-            q.ready(function () {
-                routes.locate(ties);
-            });
+        var prev = ties[name];
+        if (prev && !prev.obj._empty && (_.isUndefined(dependencies) || prev.depends === dependencies)) {
+            return tie.prototype.update(prev, tiedObject);
+        } else {
+            var r = tie.prototype.init(name, tiedObject, dependencies, ties);
+            tie.prototype.define(name, r, ties);
+            if (name == APP) {
+                app = r;
+                routes.init();
+                q.ready(function () {
+                    routes.locate(ties);
+                });
+            }
+            return r.obj;
         }
-        return r.obj;
     }
 };
 tie.prototype = {
@@ -31,21 +36,24 @@ tie.prototype = {
      *
      * @param {string} tieName name of current tie
      * @param {bind} bind current tie bind
-     * @param {Object} ties registered ties
      */
-    select: function (tieName, bind, ties) {
+    select: function (tieName, bind) {
         var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
         var res = [];
         _.forEach(nodes, function (el) {
-            res.push(new $(el, bind, ties));
+            res.push(new $(el, bind));
         });
         nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '|"]');
         _.forEach(nodes, function (el) {
-            res.push(new $(el, bind, ties));
+            res.push(new $(el, bind));
+        });
+        nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + ' |"]');
+        _.forEach(nodes, function (el) {
+            res.push(new $(el, bind));
         });
         nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '."]');
         _.forEach(nodes, function (el) {
-            res.push(new $(el, bind, ties));
+            res.push(new $(el, bind));
         });
         bind.selected = true;
         return res;
@@ -70,7 +78,6 @@ tie.prototype = {
      */
     wrapFunction: function (fn) {
         return {
-            callback: fn,
             attrs: {
                 value: fn
             }
@@ -139,8 +146,27 @@ tie.prototype = {
         }
     },
 
+    update: function (bind, tiedObject) {
+        var name = bind.name;
+        _.debug("Update tie " + name, name);
+        _.extend(bind.obj, this.check(tiedObject));
+        bind.prepareAttrs();
+        bind.prepareRoutes();
+        bind.prepareValues();
+        _.debug("Prepared inner array structure");
+        bind.obj = proxy(bind);
+        if (!bind.selected) {
+            this.$ = tie.select(name, bind);
+            _.debug("Elements reselected: " + this.$.length);
+        }
+        if (!bind.rendered) {
+            bind.render();
+        }
+        return prev;
+    },
+
     init: function (name, tiedObject, dependencies, ties) {
-        _.debug("Tie " + name);
+        _.debug("Tie " + name, name);
         var r = new bind(name, dependencies, ties);
         r.obj = this.check(tiedObject);
         r.prepareAttrs();
@@ -153,13 +179,14 @@ tie.prototype = {
         r.load = function () {
             this.loading = true;
             if (!this.selected) {
-                this.$ = tie.select(name, r, ties);
+                this.$ = tie.select(name, r);
+                this.e = this.$.length;
                 _.debug("Elements selected: " + this.$.length);
             }
             r.prepareValues();
             _.debug("Prepared inner array structure");
             if (!this.selected) {
-                this.$ = tie.select(name, r, ties);
+                this.$ = tie.select(name, r);
                 _.debug("Elements reselected: " + this.$.length);
             }
             this.loaded = true;

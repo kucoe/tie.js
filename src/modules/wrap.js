@@ -12,7 +12,6 @@
      */
     var APP = 'app';
     var VALUE = 'value';
-    var CALLBACK = 'callback';
     var VALUES = 'values';
     var TEXT = 'text';
     var SHOWN = '$shown';
@@ -62,7 +61,7 @@
     /**
      * Property pipeline definition
      */
-    var p = window.tie("property", function (obj, params, value) {
+    pipes("property", function (obj, params, value) {
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -73,13 +72,12 @@
             }
         }
         return obj;
-    });
-    p.callback.canWrite = true;
+    }, {canWrite: true});
 
     /**
      * Value pipeline definition
      */
-    window.tie("value", function (obj, params) {
+    pipes("value", function (obj, params) {
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
@@ -87,5 +85,32 @@
         }
         return obj;
     });
+
+    /**
+     * Routes pipeline definition
+     */
+    pipes("routes", function (obj, params) {
+        if (params) {
+            var add = params[0] === '+';
+            var subtract = params[0] === '-';
+            if (add) {
+                params.splice(0, 1);
+                this.forEach(params, function (item) {
+                    obj.routes[item] = {path: item};
+                });
+            } else if (subtract) {
+                params.splice(0, 1);
+                this.forEach(params, function (item) {
+                    delete obj.routes[item];
+                });
+            } else {
+                obj.routes = {};
+                this.forEach(params, function (item) {
+                    obj.routes[item] = {path: item};
+                });
+            }
+        }
+        return obj;
+    }, {changeRoutes: true});
 
 })(window);

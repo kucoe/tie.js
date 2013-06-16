@@ -56,9 +56,8 @@ var q = {
  * @this $
  * @param {Element} el DOM element.
  * @param {bind} bind element bound tie
- * @param {Object} ties already registered ties dictionary
  */
-var $ = function (el, bind, ties) {
+var $ = function (el, bind) {
     var listener = function (event) {
         _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
         var value = this.value();
@@ -124,11 +123,14 @@ var $ = function (el, bind, ties) {
         if (this.pipes.length > 0) {
             _.forEach(this.pipes, function (pipe) {
                 if (_.isDefined(value)) {
-                    res = pipe.process(res, ties, value);
+                    res = pipe.process(res,  value);
                 } else {
-                    res = pipe.process(res, ties);
+                    res = pipe.process(res);
                 }
-            })
+                if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
+                    res.$shown = res.$location().route.has(res);
+                }
+            }, this)
         }
         return res;
     }

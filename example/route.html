@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tie route example</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+</head>
+<body>
+
+<div data-tie="app"></div>
+<div data-tie="one | routes:'one'"></div>
+<div data-tie="two"></div>
+<div data-tie="three | routes:'three'"></div>
+<div data-tie="not on three"></div>
+
+<a href="#/">Home</a>
+<a href="#one">One</a>
+<a href="#two">Two</a>
+<a href="#three">Three</a>
+<script src="../src/tie.js"></script>
+<script>
+    tie("app", {
+        value: 'Select path',
+        routes: ['/', 'one', 'two', 'three']._({
+            three: function(){
+                tie("three","Surprise Three");
+            }
+        }),
+        attrs: ['value']
+    });
+    tie("one","One");
+    tie("two",{
+        value: 'Two',
+        routes: ['two'],
+        attrs: ['value']
+    });
+    tie("three","Three");
+    tie("not on three", {
+        value: 'Not on three',
+        routes: ['-', '/', 'three'],
+        attrs: ['value']
+    });
+</script>
+
+</body>
+</html>

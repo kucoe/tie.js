@@ -12,7 +12,6 @@
      */
     var APP = 'app';
     var VALUE = 'value';
-    var CALLBACK = 'callback';
     var VALUES = 'values';
     var TEXT = 'text';
     var SHOWN = '$shown';
@@ -137,7 +136,7 @@
                     }
                     var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
                     var val = obj[prop];
-                    if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS) {
+                    if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS && prop != VALUES) {
                         _.debug("Exploring " + prop);
                         explore(val);
                     }
@@ -193,9 +192,13 @@
                             bind.render();
                         }
                         bind.obj.$location = function () {
-                            return{route: {has: function () {
-                                return true
-                            }}}
+                            return {
+                                route: {
+                                    has: function () {
+                                        return true
+                                    }
+                                }
+                            }
                         };
                         bind.obj.$shown = true;
                     });
@@ -208,22 +211,28 @@
                         this.move(url);
                         return null;
                     }
-                    return {href: window.location.href, route: current};
+                    return {
+                        href: window.location.href,
+                        route: current
+                    };
                 }.bind(this);
                 if (current.handler) {
                     safeCall(current.handler, app.obj);
                 }
                 _.forIn(ties, function (bind) {
+                    var obj = bind.obj;
+                    obj.$location = app.location;
+                    var shown = current.has(obj);
+                    obj.$shown = shown;
                     if (!bind.rendered) {
                         bind.render();
                     }
-                    bind.obj.$location = app.location;
-                    bind.obj.$shown = current.has(bind);
-                    var bindRoutes = bind.obj.routes;
-                    if (bindRoutes && bind.obj.$shown) {
+                    bind.validateShow();
+                    var bindRoutes = obj.routes;
+                    if (bindRoutes && shown) {
                         var r = bindRoutes[current.path];
                         if (r && r.handler) {
-                            safeCall(r.handler, bind.obj);
+                            safeCall(r.handler, obj);
                         }
                     }
                 });
@@ -248,8 +257,8 @@
     };
     
     route.prototype = {
-        has: function (bind) {
-            var routes = bind.obj.routes;
+        has: function (obj) {
+            var routes = obj.routes;
             if (routes) {
                 var exclude = routes['-'] != null;
                 var contains = false;
@@ -267,10 +276,35 @@
     };
     
     
+    var pipesRegistry = {};
+    
     /**
-     * Pipes helpers. Exported to allow assign pipe parameters.
+     * Pipes helpers. Exported to allow create and access pipes.
+     *
+     * @param {string} name pipe name
+     * @param {Function} [fn] pipe function that will accept. If not defined existed pipe will return.
+     * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs) default to false
      */
-    var pipes = {};
+    var pipes = function (name, fn, opts) {
+        if (_.isUndefined(fn)) {
+            return pipesRegistry[name];
+        }
+        var defOpts = {
+            canWrite: false,
+            changeRoutes: false,
+            changeAttrs: false
+        };
+        if (_.isDefined(opts)) {
+            _.extend(defOpts, opts);
+        }
+        var pipe = {
+            fn: fn,
+            opts: defOpts
+        };
+        var m = new model(pipe);
+        pipesRegistry[name] = m;
+        return m;
+    };
     
     /**
      * Pipe descriptor. Pipe is the way of transforming input model into new model and hijack new values when rendering element
@@ -286,9 +320,12 @@
     var pipe = function (str) {
         var split = str.split(':');
         this.name = _.trim(split[0]);
-        this.params = [];
+        this.params = '';
         if (split.length > 1) {
-            this.params = split[1].split(',');
+            var p = split[1];
+            p = _.trim(p);
+            p = '[' + p + ']';
+            this.params = p;
         }
     
     };
@@ -300,33 +337,278 @@
          *
          * @this pipe
          * @param {model} obj tied model
-         * @param {Object} ties named ties object
          * @param {Object} [value] new object value
          */
-        process: function (obj, ties, value) {
-            var tie = ties[this.name];
-            if (!tie) {
+        process: function (obj, value) {
+            var pipe = pipesRegistry[this.name];
+            if (!pipe) {
                 throw new Error('Pipe ' + this.name + ' not found');
             }
-            var callback = tie.obj[CALLBACK];
+            var fn = pipe.fn;
             var params = [];
             if (this.params.length > 0) {
-                _.forEach(this.params, function (param) {
+                var context = _.extend({}, obj);
+                context = _.extend(context, pipe);
+                var array = _.convert(this.params, context);
+                _.forEach(array, function (param) {
                     param = _.trim(param);
-                    var res = _.convert(param);
-                    if (obj[param]) {
-                        res = obj[param];
-                    } else if (pipes[param]) {
-                        res = pipes[param];
-                    }
-                    params.push(res);
+                    params.push(param);
                 });
             }
-            var res = _.isDefined(value) && callback.canWrite ? obj : _.clone(obj);
-            if (callback && _.isFunction(callback)) {
-                res = safeCall(callback, tie.obj, tie.obj.$ready(), res, params, value);
+            var res = _.isDefined(value) && this.canWrite() ? obj : _.clone(obj);
+            if (fn && _.isFunction(fn)) {
+                res = safeCall(fn, pipe, true, res, params, value);
             }
             return res;
+        },
+    
+        /**
+         * Returns whether this pipe can change object value.
+         *
+         * @this pipe
+         * @return boolean
+         */
+        canWrite: function () {
+            var pipe = pipesRegistry[this.name];
+            return pipe ? pipe.opts.canWrite : false;
+        },
+    
+        /**
+         * Returns whether this pipe can change routes.
+         *
+         * @this pipe
+         * @return boolean
+         */
+        changeRoutes: function () {
+            var pipe = pipesRegistry[this.name];
+            return pipe ? pipe.opts.changeRoutes : false;
+        },
+    
+        /**
+         * Returns whether this pipe can change attributes.
+         *
+         * @this pipe
+         * @return boolean
+         */
+        changeAttrs: function () {
+            var pipe = pipesRegistry[this.name];
+            return pipe ? pipe.opts.changeAttrs : false;
+        }
+    };
+    
+    
+    var defaults = {
+        type: "GET",
+        mime: "json"
+    };
+    var mimeTypes = {
+        script: "text/javascript, application/javascript",
+        json: "application/json",
+        xml: "application/xml, text/xml",
+        html: "text/html",
+        text: "text/plain"
+    };
+    
+    var connect = function (options) {
+        if (options) {
+            _.extend(this, options);
+        }
+    };
+    
+    var params = function (params, url) {
+        var sign = "";
+        if (url) {
+            sign = url.indexOf("?") + 1 ? "&" : "?";
+        }
+        var res = sign;
+        _.forIn(params, function (param, name) {
+            if (res !== sign) {
+                res += "&";
+            }
+            res += name + "=" + param;
+        });
+        if (res === sign) {
+            return "";
+        }
+        return res;
+    };
+    
+    var status = function (xhr, dataType, fn) {
+        var status = xhr.status;
+        if ((status >= 200 && status < 300) || status === 0) {
+            callback(response(xhr, dataType, fn), null, fn);
+        } else {
+            callback(xhr.responseText, status, fn);
+        }
+    };
+    
+    var callback = function (response, error, fn) {
+        safeCall(fn, obj, true, response, error);
+    };
+    
+    var headers = function (xhr, headers, dataType, contentType) {
+        if (contentType) {
+            headers["Content-Type"] = contentType;
+        }
+        if (dataType) {
+            headers["Accept"] = mimeTypes[dataType];
+        }
+        _.forIn(headers, function (header, name) {
+            xhr.setRequestHeader(name, header);
+        });
+    };
+    
+    var response = function (xhr, dataType, fn) {
+        var response;
+        response = xhr.responseText;
+        if (response) {
+            if (dataType === defaults.mime) {
+                try {
+                    response = JSON.parse(response);
+                } catch (error) {
+                    callback(response, error, fn);
+                }
+            } else {
+                if (dataType === "xml") {
+                    response = xhr.responseXML;
+                }
+            }
+        }
+        return response;
+    };
+    
+    var thisOrApp = function (obj, property, defaultValue) {
+        if (obj[property]) {
+            return obj[property];
+        }
+        if (app && app.connect && app.connect[property]) {
+            return app.connect[property];
+        }
+        return defaultValue;
+    };
+    
+    var apply = function (obj, opts) {
+        _.forIn(opts, function (value, prop) {
+            if (value) {
+                obj[prop] = value;
+            }
+        });
+    };
+    
+    connect.prototype = {
+    
+        ajax: function () {
+            var type = this.getType();
+            var url = this.getUrl();
+            var data = this.getData();
+            var dataType = this.getDataType();
+            var contentType = this.getContentType();
+            var heads = this.getHeaders();
+            var fn = this.getCallback();
+            if (type === defaults.type) {
+                url += params(data, url);
+            } else {
+                data = params(data);
+            }
+            if (/=\$JSONP/ig.test(url)) {
+                return this.jsonp(url, data, fn);
+            }
+            var xhr = new window.XMLHttpRequest();
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    return status(xhr, dataType, fn);
+                }
+                return null;
+            };
+            xhr.open(type, url);
+            headers(xhr, heads, contentType, dataType);
+            try {
+                xhr.send(data);
+            } catch (error) {
+                xhr = error;
+                callback(null, error, fn);
+            }
+            return xhr;
+        },
+        jsonp: function (url, data, callback) {
+            var head = window.document.getElementsByTagName("head")[0];
+            var script = window.document.createElement("script");
+            url += this.params(data, url);
+    
+            var callbackName = "jsonp" + _.uid();
+            window[callbackName] = function (response) {
+                head.removeChild(script);
+                delete window[callbackName];
+                return callback(response);
+            };
+    
+            script.type = "text/javascript";
+            script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
+            head.appendChild(script);
+        },
+        get: function (url, data, dataType, callback) {
+            apply(this, {
+                type: defaults.type,
+                url: url,
+                data: data,
+                callback: callback,
+                dataType: dataType
+            });
+            return this.ajax();
+        },
+        post: function (url, data, dataType, callback) {
+            return this.form("POST", url, data, dataType, callback);
+        },
+        put: function (url, data, dataType, callback) {
+            return this.form("PUT", url, data, dataType, callback);
+        },
+        del: function (url, data, dataType, callback) {
+            return this.form("DELETE", url, data, dataType, callback);
+        },
+        delete: function (url, data, dataType, callback) {
+            return this.form("DELETE", url, data, dataType, callback);
+        },
+        form: function (method, url, data, dataType, callback) {
+            apply(this, {
+                type: method,
+                url: url,
+                data: data,
+                callback: callback,
+                dataType: dataType,
+                contentType: "application/x-www-form-urlencoded"
+            });
+            return this.ajax();
+        },
+    
+        getUrl: function () {
+            var url = thisOrApp(this, 'url', '');
+            if (!url) {
+                throw new Error("URL is not defined");
+            }
+        },
+    
+        getData: function () {
+            return thisOrApp(this, 'data', {});
+        },
+    
+        getType: function () {
+            return thisOrApp(this, 'type', defaults.type);
+        },
+    
+        getContentType: function () {
+            return thisOrApp(this, 'contentType', null);
+        },
+    
+        getDataType: function () {
+            return thisOrApp(this, 'dataType', defaults.mime);
+        },
+    
+        getHeaders: function () {
+            return thisOrApp(this, 'header', []);
+        },
+    
+        getCallback: function () {
+            return thisOrApp(this, 'callback', []);
         }
     };
     
@@ -389,9 +671,8 @@
      * @this $
      * @param {Element} el DOM element.
      * @param {bind} bind element bound tie
-     * @param {Object} ties already registered ties dictionary
      */
-    var $ = function (el, bind, ties) {
+    var $ = function (el, bind) {
         var listener = function (event) {
             _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
             var value = this.value();
@@ -457,11 +738,14 @@
             if (this.pipes.length > 0) {
                 _.forEach(this.pipes, function (pipe) {
                     if (_.isDefined(value)) {
-                        res = pipe.process(res, ties, value);
+                        res = pipe.process(res,  value);
                     } else {
-                        res = pipe.process(res, ties);
+                        res = pipe.process(res);
                     }
-                })
+                    if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
+                        res.$shown = res.$location().route.has(res);
+                    }
+                }, this)
             }
             return res;
         }
@@ -646,7 +930,7 @@
          *
          * @property debugEnabled default to true
          */
-        debugEnabled: true,
+        debugEnabled: false,
     
         /**
          * Whether value is undefined
@@ -725,8 +1009,10 @@
          * @returns boolean
          */
         isCollection: function (value) {
-            return this.isArray(value) || value instanceof Array || value instanceof NodeList ||
-                value instanceof NamedNodeMap;
+            return this.isArray(value) || value instanceof Array
+                || Object.prototype.toString.apply(value) == '[object NodeList]'
+                || Object.prototype.toString.apply(value) == '[object NamedNodeMap]'
+                || Object.prototype.toString.apply(value) == '[object Arguments]';
         },
     
         /**
@@ -836,9 +1122,16 @@
          * Note: supports integer, float, boolean, string. String will be cleaned from quotes.
          *
          * @param {string} string
+         * @param {Object} [context] object to get properties
          */
-        convert: function (string) {
+        convert: function (string, context) {
             var res = string;
+            var reviver = function (k, v) {
+                if (_.isString(v) && v[0] == '#') {
+                    return context[v.substring(1)];
+                }
+                return v;
+            };
             if ('true' === string) {
                 res = true
             } else if ('false' === string) {
@@ -849,7 +1142,13 @@
                 } else {
                     res = this.toInt(string);
                 }
-            } else if (string.charAt(0) == '"' || string.charAt(0) == "'") {
+            } else if (string[0] == '[' && string[string.length - 1] == "]") {
+                string = string.replace(/'/g, '"');
+                res = JSON.parse(string, reviver);
+            } else if (string[0] == '{' && string[string.length - 1] == "}") {
+                string = string.replace(/'/g, '"');
+                res = JSON.parse(string, reviver);
+            } else if (string[0] == '"' || string[0] == "'") {
                 res = string.substring(1, string.length - 1);
             }
             return res;
@@ -982,9 +1281,14 @@
          * Writes debug string to console if debug enabled.
          *
          * @param {string} message
+         * @param {string} [group] starts new collapsed group
          */
-        debug: function (message) {
+        debug: function (message, group) {
             if (this.debugEnabled) {
+                if (group) {
+                    console.groupEnd();
+                    console.groupCollapsed(group);
+                }
                 console.log(message);
             }
         }
@@ -1020,9 +1324,9 @@
                 }
             } else {
                 if (attr && attr.property) {
-                    this[attr.property] = value;
+                    this.$prop(attr.property, value);
                 } else if (attr) {
-                    this[name] = value;
+                    this.$prop(name, value);
                 }
             }
         }
@@ -1095,7 +1399,10 @@
         } catch (e) {
             res = undefined;
             if (bindReady) {
-                console.warn('Is ready and had an error:' + e.message);
+                console.groupCollapsed("User code error");
+                console.error('Is ready and had an error:' + e.message);
+                console.dir(e);
+                console.groupEnd();
             }
         }
         return res;
@@ -1175,6 +1482,7 @@
         this.selected = false;
         this.applyCount = 0;
         this.timeout = null;
+        this.e = 0;
     
         /**
          * Apply model changes. It renders current bind and updates dependencies.
@@ -1262,6 +1570,10 @@
         prepareValues: function () {
             var values = this.obj.values;
             if (values) {
+                if(this.$.length - this.e  == values.length) {
+                    this.rendered = false;
+                    return;
+                }
                 var newElements = {};
                 var nodes = {};
                 _.forEach(this.$, function (el) {
@@ -1304,13 +1616,15 @@
          */
         renderAttr: function (name, value) {
             _.forEach(this.$, function (el) {
-                var val = value;
-                if (_.isFunction(value)) {
-                    var obj = el.pipeline();
-                    val = value(obj, el.index);
-                    _.debug("Render attribute '" + name + "' with value " + val);
+                if (el) {
+                    var val = value;
+                    if (_.isFunction(value)) {
+                        var obj = el.pipeline();
+                        val = value(obj, el.index);
+                        _.debug("Render attribute '" + name + "' with value " + val);
+                    }
+                    el.setAttribute(name, val);
                 }
-                el.setAttribute(name, val);
             });
         },
     
@@ -1321,8 +1635,32 @@
          * @param {boolean} shown
          */
         show: function (shown) {
+            if (this.rendered) {
+                _.forEach(this.$, function (el) {
+                    if (el) {
+                        el.show(shown);
+                    }
+                }, this);
+            }
+        },
+    
+        /**
+         * Check elements show rules
+         *
+         * @this bind
+         */
+        validateShow: function () {
+            if (!this.loaded && !this.loading) {
+                this.load();
+            }
             _.forEach(this.$, function (el) {
-                el.show(shown);
+                if (el) {
+                    var shown = el.pipeline().$shown;
+                    if(shown && !this.rendered) {
+                        this.render();
+                    }
+                    el.show(shown);
+                }
             }, this);
         },
     
@@ -1335,7 +1673,7 @@
             if (!this.obj.$shown) {
                 return;
             }
-            _.debug("Render " + this.name);
+            _.debug("Render " + this.name, this.name + " Render");
             if (!this.loaded && !this.loading) {
                 this.load();
             }
@@ -1376,16 +1714,21 @@
             if (name != APP && ties[APP] == null) {
                 window.tie(APP, {});
             }
-            var r = tie.prototype.init(name, tiedObject, dependencies, ties);
-            tie.prototype.define(name, r, ties);
-            if (name == APP) {
-                app = r;
-                routes.init();
-                q.ready(function () {
-                    routes.locate(ties);
-                });
+            var prev = ties[name];
+            if (prev && !prev.obj._empty && (_.isUndefined(dependencies) || prev.depends === dependencies)) {
+                return tie.prototype.update(prev, tiedObject);
+            } else {
+                var r = tie.prototype.init(name, tiedObject, dependencies, ties);
+                tie.prototype.define(name, r, ties);
+                if (name == APP) {
+                    app = r;
+                    routes.init();
+                    q.ready(function () {
+                        routes.locate(ties);
+                    });
+                }
+                return r.obj;
             }
-            return r.obj;
         }
     };
     tie.prototype = {
@@ -1395,21 +1738,24 @@
          *
          * @param {string} tieName name of current tie
          * @param {bind} bind current tie bind
-         * @param {Object} ties registered ties
          */
-        select: function (tieName, bind, ties) {
+        select: function (tieName, bind) {
             var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
             var res = [];
             _.forEach(nodes, function (el) {
-                res.push(new $(el, bind, ties));
+                res.push(new $(el, bind));
             });
             nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '|"]');
             _.forEach(nodes, function (el) {
-                res.push(new $(el, bind, ties));
+                res.push(new $(el, bind));
+            });
+            nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + ' |"]');
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, bind));
             });
             nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '."]');
             _.forEach(nodes, function (el) {
-                res.push(new $(el, bind, ties));
+                res.push(new $(el, bind));
             });
             bind.selected = true;
             return res;
@@ -1434,7 +1780,6 @@
          */
         wrapFunction: function (fn) {
             return {
-                callback: fn,
                 attrs: {
                     value: fn
                 }
@@ -1503,8 +1848,27 @@
             }
         },
     
+        update: function (bind, tiedObject) {
+            var name = bind.name;
+            _.debug("Update tie " + name, name);
+            _.extend(bind.obj, this.check(tiedObject));
+            bind.prepareAttrs();
+            bind.prepareRoutes();
+            bind.prepareValues();
+            _.debug("Prepared inner array structure");
+            bind.obj = proxy(bind);
+            if (!bind.selected) {
+                this.$ = tie.select(name, bind);
+                _.debug("Elements reselected: " + this.$.length);
+            }
+            if (!bind.rendered) {
+                bind.render();
+            }
+            return prev;
+        },
+    
         init: function (name, tiedObject, dependencies, ties) {
-            _.debug("Tie " + name);
+            _.debug("Tie " + name, name);
             var r = new bind(name, dependencies, ties);
             r.obj = this.check(tiedObject);
             r.prepareAttrs();
@@ -1517,13 +1881,14 @@
             r.load = function () {
                 this.loading = true;
                 if (!this.selected) {
-                    this.$ = tie.select(name, r, ties);
+                    this.$ = tie.select(name, r);
+                    this.e = this.$.length;
                     _.debug("Elements selected: " + this.$.length);
                 }
                 r.prepareValues();
                 _.debug("Prepared inner array structure");
                 if (!this.selected) {
-                    this.$ = tie.select(name, r, ties);
+                    this.$ = tie.select(name, r);
                     _.debug("Elements reselected: " + this.$.length);
                 }
                 this.loaded = true;
@@ -1532,6 +1897,7 @@
             return r;
         }
     };
+
 
     /**
      * Exports
@@ -1542,7 +1908,7 @@
     /**
      * Property pipeline definition
      */
-    var p = window.tie("property", function (obj, params, value) {
+    pipes("property", function (obj, params, value) {
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -1553,13 +1919,12 @@
             }
         }
         return obj;
-    });
-    p.callback.canWrite = true;
+    }, {canWrite: true});
 
     /**
      * Value pipeline definition
      */
-    window.tie("value", function (obj, params) {
+    pipes("value", function (obj, params) {
         if (params) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
@@ -1567,5 +1932,32 @@
         }
         return obj;
     });
+
+    /**
+     * Routes pipeline definition
+     */
+    pipes("routes", function (obj, params) {
+        if (params) {
+            var add = params[0] === '+';
+            var subtract = params[0] === '-';
+            if (add) {
+                params.splice(0, 1);
+                this.forEach(params, function (item) {
+                    obj.routes[item] = {path: item};
+                });
+            } else if (subtract) {
+                params.splice(0, 1);
+                this.forEach(params, function (item) {
+                    delete obj.routes[item];
+                });
+            } else {
+                obj.routes = {};
+                this.forEach(params, function (item) {
+                    obj.routes[item] = {path: item};
+                });
+            }
+        }
+        return obj;
+    }, {changeRoutes: true});
 
 })(window);

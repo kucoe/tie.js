@@ -28,9 +28,9 @@ model.prototype.$attr = function (name, value) {
             }
         } else {
             if (attr && attr.property) {
-                this[attr.property] = value;
+                this.$prop(attr.property, value);
             } else if (attr) {
-                this[name] = value;
+                this.$prop(name, value);
             }
         }
     }
@@ -103,7 +103,10 @@ var safeCall = function (fn, fnThis, bindReady) {
     } catch (e) {
         res = undefined;
         if (bindReady) {
-            console.warn('Is ready and had an error:' + e.message);
+            console.groupCollapsed("User code error");
+            console.error('Is ready and had an error:' + e.message);
+            console.dir(e);
+            console.groupEnd();
         }
     }
     return res;
@@ -183,6 +186,7 @@ var bind = function (name, dependencies, ties) {
     this.selected = false;
     this.applyCount = 0;
     this.timeout = null;
+    this.e = 0;
 
     /**
      * Apply model changes. It renders current bind and updates dependencies.
@@ -270,6 +274,10 @@ bind.prototype = {
     prepareValues: function () {
         var values = this.obj.values;
         if (values) {
+            if(this.$.length - this.e  == values.length) {
+                this.rendered = false;
+                return;
+            }
             var newElements = {};
             var nodes = {};
             _.forEach(this.$, function (el) {
@@ -312,13 +320,15 @@ bind.prototype = {
      */
     renderAttr: function (name, value) {
         _.forEach(this.$, function (el) {
-            var val = value;
-            if (_.isFunction(value)) {
-                var obj = el.pipeline();
-                val = value(obj, el.index);
-                _.debug("Render attribute '" + name + "' with value " + val);
+            if (el) {
+                var val = value;
+                if (_.isFunction(value)) {
+                    var obj = el.pipeline();
+                    val = value(obj, el.index);
+                    _.debug("Render attribute '" + name + "' with value " + val);
+                }
+                el.setAttribute(name, val);
             }
-            el.setAttribute(name, val);
         });
     },
 
@@ -329,8 +339,32 @@ bind.prototype = {
      * @param {boolean} shown
      */
     show: function (shown) {
+        if (this.rendered) {
+            _.forEach(this.$, function (el) {
+                if (el) {
+                    el.show(shown);
+                }
+            }, this);
+        }
+    },
+
+    /**
+     * Check elements show rules
+     *
+     * @this bind
+     */
+    validateShow: function () {
+        if (!this.loaded && !this.loading) {
+            this.load();
+        }
         _.forEach(this.$, function (el) {
-            el.show(shown);
+            if (el) {
+                var shown = el.pipeline().$shown;
+                if(shown && !this.rendered) {
+                    this.render();
+                }
+                el.show(shown);
+            }
         }, this);
     },
 
@@ -343,7 +377,7 @@ bind.prototype = {
         if (!this.obj.$shown) {
             return;
         }
-        _.debug("Render " + this.name);
+        _.debug("Render " + this.name, this.name + " Render");
         if (!this.loaded && !this.loading) {
             this.load();
         }

@@ -26,9 +26,13 @@ var routes = {
                         bind.render();
                     }
                     bind.obj.$location = function () {
-                        return{route: {has: function () {
-                            return true
-                        }}}
+                        return {
+                            route: {
+                                has: function () {
+                                    return true
+                                }
+                            }
+                        }
                     };
                     bind.obj.$shown = true;
                 });
@@ -41,22 +45,28 @@ var routes = {
                     this.move(url);
                     return null;
                 }
-                return {href: window.location.href, route: current};
+                return {
+                    href: window.location.href,
+                    route: current
+                };
             }.bind(this);
             if (current.handler) {
                 safeCall(current.handler, app.obj);
             }
             _.forIn(ties, function (bind) {
+                var obj = bind.obj;
+                obj.$location = app.location;
+                var shown = current.has(obj);
+                obj.$shown = shown;
                 if (!bind.rendered) {
                     bind.render();
                 }
-                bind.obj.$location = app.location;
-                bind.obj.$shown = current.has(bind);
-                var bindRoutes = bind.obj.routes;
-                if (bindRoutes && bind.obj.$shown) {
+                bind.validateShow();
+                var bindRoutes = obj.routes;
+                if (bindRoutes && shown) {
                     var r = bindRoutes[current.path];
                     if (r && r.handler) {
-                        safeCall(r.handler, bind.obj);
+                        safeCall(r.handler, obj);
                     }
                 }
             });
@@ -81,8 +91,8 @@ var route = function (path, handler) {
 };
 
 route.prototype = {
-    has: function (bind) {
-        var routes = bind.obj.routes;
+    has: function (obj) {
+        var routes = obj.routes;
         if (routes) {
             var exclude = routes['-'] != null;
             var contains = false;

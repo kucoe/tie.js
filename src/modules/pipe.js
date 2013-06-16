@@ -1,7 +1,32 @@
+var pipesRegistry = {};
+
 /**
- * Pipes helpers. Exported to allow assign pipe parameters.
+ * Pipes helpers. Exported to allow create and access pipes.
+ *
+ * @param {string} name pipe name
+ * @param {Function} [fn] pipe function that will accept. If not defined existed pipe will return.
+ * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs) default to false
  */
-var pipes = {};
+var pipes = function (name, fn, opts) {
+    if (_.isUndefined(fn)) {
+        return pipesRegistry[name];
+    }
+    var defOpts = {
+        canWrite: false,
+        changeRoutes: false,
+        changeAttrs: false
+    };
+    if (_.isDefined(opts)) {
+        _.extend(defOpts, opts);
+    }
+    var pipe = {
+        fn: fn,
+        opts: defOpts
+    };
+    var m = new model(pipe);
+    pipesRegistry[name] = m;
+    return m;
+};
 
 /**
  * Pipe descriptor. Pipe is the way of transforming input model into new model and hijack new values when rendering element
@@ -17,9 +42,12 @@ var pipes = {};
 var pipe = function (str) {
     var split = str.split(':');
     this.name = _.trim(split[0]);
-    this.params = [];
+    this.params = '';
     if (split.length > 1) {
-        this.params = split[1].split(',');
+        var p = split[1];
+        p = _.trim(p);
+        p = '[' + p + ']';
+        this.params = p;
     }
 
 };
@@ -31,32 +59,61 @@ pipe.prototype = {
      *
      * @this pipe
      * @param {model} obj tied model
-     * @param {Object} ties named ties object
      * @param {Object} [value] new object value
      */
-    process: function (obj, ties, value) {
-        var tie = ties[this.name];
-        if (!tie) {
+    process: function (obj, value) {
+        var pipe = pipesRegistry[this.name];
+        if (!pipe) {
             throw new Error('Pipe ' + this.name + ' not found');
         }
-        var callback = tie.obj[CALLBACK];
+        var fn = pipe.fn;
         var params = [];
         if (this.params.length > 0) {
-            _.forEach(this.params, function (param) {
+            var context = _.extend({}, obj);
+            context = _.extend(context, pipe);
+            var array = _.convert(this.params, context);
+            _.forEach(array, function (param) {
                 param = _.trim(param);
-                var res = _.convert(param);
-                if (obj[param]) {
-                    res = obj[param];
-                } else if (pipes[param]) {
-                    res = pipes[param];
-                }
-                params.push(res);
+                params.push(param);
             });
         }
-        var res = _.isDefined(value) && callback.canWrite ? obj : _.clone(obj);
-        if (callback && _.isFunction(callback)) {
-            res = safeCall(callback, tie.obj, tie.obj.$ready(), res, params, value);
+        var res = _.isDefined(value) && this.canWrite() ? obj : _.clone(obj);
+        if (fn && _.isFunction(fn)) {
+            res = safeCall(fn, pipe, true, res, params, value);
         }
         return res;
+    },
+
+    /**
+     * Returns whether this pipe can change object value.
+     *
+     * @this pipe
+     * @return boolean
+     */
+    canWrite: function () {
+        var pipe = pipesRegistry[this.name];
+        return pipe ? pipe.opts.canWrite : false;
+    },
+
+    /**
+     * Returns whether this pipe can change routes.
+     *
+     * @this pipe
+     * @return boolean
+     */
+    changeRoutes: function () {
+        var pipe = pipesRegistry[this.name];
+        return pipe ? pipe.opts.changeRoutes : false;
+    },
+
+    /**
+     * Returns whether this pipe can change attributes.
+     *
+     * @this pipe
+     * @return boolean
+     */
+    changeAttrs: function () {
+        var pipe = pipesRegistry[this.name];
+        return pipe ? pipe.opts.changeAttrs : false;
     }
 };

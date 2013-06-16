@@ -5,6 +5,7 @@
     <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
 </head>
 <body>
+Show: <input type="checkbox" data-tie="switch"/>
 <div data-tie="person">
     Name:
     <input type="text" data-tie="person.name"/>
@@ -13,7 +14,6 @@
     Age:
     <input type="text" data-tie="person.age"/>
     <br/>
-    Show: <input type="checkbox" data-tie="person.$shown"/>
     Style:
     <input type="text" data-tie="person.color|value:'color','red'"/>
 </div>
@@ -29,6 +29,11 @@
             }
         })
     });
+    tie("switch", {
+        attrs : {
+            value:'#$person.$shown'
+        }
+    }, ['person']);
 </script>
 
 </body>

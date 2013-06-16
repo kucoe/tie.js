@@ -84,7 +84,7 @@ var proxy = function (bind) {
                 }
                 var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
                 var val = obj[prop];
-                if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS) {
+                if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS && prop != VALUES) {
                     _.debug("Exploring " + prop);
                     explore(val);
                 }
