@@ -409,10 +409,11 @@
         text: "text/plain"
     };
     
-    var connect = function (options) {
+    var http = function (options, model) {
         if (options) {
             _.extend(this, options);
         }
+        this.model = model;
     };
     
     var params = function (params, url) {
@@ -433,17 +434,17 @@
         return res;
     };
     
-    var status = function (xhr, dataType, fn) {
+    var status = function (obj, xhr, dataType, fn) {
         var status = xhr.status;
         if ((status >= 200 && status < 300) || status === 0) {
-            callback(response(xhr, dataType, fn), null, fn);
+            callback(obj, response(obj, xhr, dataType, fn), null, fn);
         } else {
-            callback(xhr.responseText, status, fn);
+            callback(obj, xhr.responseText, status, fn);
         }
     };
     
-    var callback = function (response, error, fn) {
-        safeCall(fn, obj, true, response, error);
+    var callback = function (obj, response, error, fn) {
+        safeCall(fn, obj, obj.$ready(), response, error);
     };
     
     var headers = function (xhr, headers, dataType, contentType) {
@@ -458,7 +459,7 @@
         });
     };
     
-    var response = function (xhr, dataType, fn) {
+    var response = function (obj, xhr, dataType, fn) {
         var response;
         response = xhr.responseText;
         if (response) {
@@ -466,7 +467,7 @@
                 try {
                     response = JSON.parse(response);
                 } catch (error) {
-                    callback(response, error, fn);
+                    callback(obj, response, error, fn);
                 }
             } else {
                 if (dataType === "xml") {
@@ -488,14 +489,49 @@
     };
     
     var apply = function (obj, opts) {
+        var cache = false;
+        if (_.isUndefined(obj.cache)) {
+            obj.cache = {};
+            cache = true;
+        }
         _.forIn(opts, function (value, prop) {
             if (value) {
+                if (cache) {
+                    obj.cache[prop] = obj[prop];
+                }
                 obj[prop] = value;
             }
         });
     };
     
-    connect.prototype = {
+    var fromCache = function (obj) {
+        if (_.isDefined(obj.cache)) {
+            _.forIn(obj.cache, function (value, prop) {
+                if (value) {
+                    obj[prop] = value;
+                }
+            });
+            delete  obj.cache;
+        }
+    };
+    
+    var promise = function (obj, xhr) {
+        var p = _.clone(obj);
+        p.cancel = function () {
+            xhr.abort();
+        };
+        p.ok = function () {
+            if (this.fn) {
+                safeCall(this.fn, this, this.$ready());
+            }
+        };
+        p.ready = function (fn) {
+            this.fn = fn;
+        }
+    
+    };
+    
+    http.prototype = {
     
         ajax: function () {
             var type = this.getType();
@@ -514,26 +550,27 @@
                 return this.jsonp(url, data, fn);
             }
             var xhr = new window.XMLHttpRequest();
+            var future = promise(this.model, xhr);
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4) {
-                    return status(xhr, dataType, fn);
+                    return status(future, xhr, dataType, fn);
                 }
                 return null;
-            };
+            }.bind(this);
             xhr.open(type, url);
             headers(xhr, heads, contentType, dataType);
             try {
                 xhr.send(data);
             } catch (error) {
                 xhr = error;
-                callback(null, error, fn);
+                callback(future, null, error, fn);
             }
             return xhr;
         },
         jsonp: function (url, data, callback) {
             var head = window.document.getElementsByTagName("head")[0];
             var script = window.document.createElement("script");
-            url += this.params(data, url);
+            url += this.gatherParams(data, url);
     
             var callbackName = "jsonp" + _.uid();
             window[callbackName] = function (response) {
@@ -547,13 +584,17 @@
             head.appendChild(script);
         },
         get: function (url, data, dataType, callback) {
-            apply(this, {
-                type: defaults.type,
-                url: url,
-                data: data,
-                callback: callback,
-                dataType: dataType
-            });
+            if (arguments.length == 0) {
+                fromCache(this);
+            } else {
+                apply(this, {
+                    type: defaults.type,
+                    url: url,
+                    data: data,
+                    callback: callback,
+                    dataType: dataType
+                });
+            }
             return this.ajax();
         },
         post: function (url, data, dataType, callback) {
@@ -569,14 +610,18 @@
             return this.form("DELETE", url, data, dataType, callback);
         },
         form: function (method, url, data, dataType, callback) {
-            apply(this, {
-                type: method,
-                url: url,
-                data: data,
-                callback: callback,
-                dataType: dataType,
-                contentType: "application/x-www-form-urlencoded"
-            });
+            if (arguments.length == 0) {
+                fromCache(this);
+            } else {
+                apply(this, {
+                    type: method,
+                    url: url,
+                    data: data,
+                    callback: callback,
+                    dataType: dataType,
+                    contentType: "application/x-www-form-urlencoded"
+                });
+            }
             return this.ajax();
         },
     
@@ -608,7 +653,19 @@
         },
     
         getCallback: function () {
-            return thisOrApp(this, 'callback', []);
+            return thisOrApp(this, 'callback', function (response, error) {
+                if (response && this.isObject(response)) {
+                    this.extend(this, response);
+                } else {
+                    this.debug("Response received" + response);
+                }
+                if (error) {
+                    console.error("Error received" + error);
+                }
+                if (this.isFunction(this.ok)) {
+                    this.ok();
+                }
+            });
         }
     };
     
@@ -1553,10 +1610,11 @@
                     } else if (_.isFunction(attr)) {
                         attr = {name: name, value: attr}
                     } else if (attr[ITEM_NAME]) {
-                        attr.name = attr[ITEM_NAME];
+                        attr = {name: attr[ITEM_NAME]};
                     } else {
                         attr = {name: name, value: attr}
                     }
+                    attr.val = valueFn;
                     this.obj.attrs[name] = attr;
                 }, this);
             }
@@ -1570,7 +1628,7 @@
         prepareValues: function () {
             var values = this.obj.values;
             if (values) {
-                if(this.$.length - this.e  == values.length) {
+                if (this.$.length - this.e == values.length) {
                     this.rendered = false;
                     return;
                 }
@@ -1608,27 +1666,6 @@
         },
     
         /**
-         * Set attributes over all bound elements
-         *
-         * @this bind
-         * @param {string} name attribute object
-         * @param {*} [value] attribute object
-         */
-        renderAttr: function (name, value) {
-            _.forEach(this.$, function (el) {
-                if (el) {
-                    var val = value;
-                    if (_.isFunction(value)) {
-                        var obj = el.pipeline();
-                        val = value(obj, el.index);
-                        _.debug("Render attribute '" + name + "' with value " + val);
-                    }
-                    el.setAttribute(name, val);
-                }
-            });
-        },
-    
-        /**
          * Show/hide elements of current bind.
          *
          * @this bind
@@ -1656,7 +1693,7 @@
             _.forEach(this.$, function (el) {
                 if (el) {
                     var shown = el.pipeline().$shown;
-                    if(shown && !this.rendered) {
+                    if (shown && !this.rendered) {
                         this.render();
                     }
                     el.show(shown);
@@ -1677,22 +1714,26 @@
             if (!this.loaded && !this.loading) {
                 this.load();
             }
-            var attrs = this.obj.attrs;
-            if (attrs) {
-                var ready = this.obj.$ready();
-                _.forIn(attrs, function (attr) {
-                    attr.val = valueFn;
-                    this.renderAttr(attr.name, function (obj, idx) {
-                        return attr.val(obj, idx, ready);
-                    }.bind(this));
-                }, this);
-                this.renderAttr(TIED);
-                _.forEach(this.$, function (el) {
-                    if (el.isInput) {
-                        el.setAttribute('name', this.name);
+            _.forEach(this.$, function (el) {
+                if (el) {
+                    var obj = el.pipeline();
+                    var ready = obj.$ready();
+                    var attrs = obj.attrs;
+                    var idx = el.index;
+                    if (attrs) {
+                        _.forIn(attrs, function (attr) {
+                            var val = attr.val(obj, idx, ready);
+                            var name = attr.name;
+                            _.debug("Render attribute '" + name + "' with value " + val);
+                            el.setAttribute(name, val);
+                        });
+                        el.setAttribute(TIED);
+                        if (el.isInput) {
+                            el.setAttribute('name', this.name);
+                        }
                     }
-                }, this);
-            }
+                }
+            }, this);
             this.show(this.obj.$shown);
             this.rendered = true;
             _.debug("Rendered " + this.name);
@@ -1897,7 +1938,6 @@
             return r;
         }
     };
-
 
     /**
      * Exports

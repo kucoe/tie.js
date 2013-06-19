@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tie route example</title>
+    <title>Tie http example</title>
     <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
 </head>
 <body>
@@ -12,10 +12,6 @@
 <div data-tie="three | routes:'three'"></div>
 <div data-tie="not on three"></div>
 
-<a href="#/">Home</a>
-<a href="#one">One</a>
-<a href="#two">Two</a>
-<a href="#three">Three</a>
 <script src="../src/tie.js"></script>
 <script>
     tie("app", {
@@ -29,7 +25,6 @@
     });
     tie("one","One");
     tie("two",{
-        debugEnabled: true,
         value: 'Two',
         routes: ['two'],
         attrs: ['value']

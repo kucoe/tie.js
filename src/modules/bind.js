@@ -257,10 +257,11 @@ bind.prototype = {
                 } else if (_.isFunction(attr)) {
                     attr = {name: name, value: attr}
                 } else if (attr[ITEM_NAME]) {
-                    attr.name = attr[ITEM_NAME];
+                    attr = {name: attr[ITEM_NAME]};
                 } else {
                     attr = {name: name, value: attr}
                 }
+                attr.val = valueFn;
                 this.obj.attrs[name] = attr;
             }, this);
         }
@@ -274,7 +275,7 @@ bind.prototype = {
     prepareValues: function () {
         var values = this.obj.values;
         if (values) {
-            if(this.$.length - this.e  == values.length) {
+            if (this.$.length - this.e == values.length) {
                 this.rendered = false;
                 return;
             }
@@ -312,27 +313,6 @@ bind.prototype = {
     },
 
     /**
-     * Set attributes over all bound elements
-     *
-     * @this bind
-     * @param {string} name attribute object
-     * @param {*} [value] attribute object
-     */
-    renderAttr: function (name, value) {
-        _.forEach(this.$, function (el) {
-            if (el) {
-                var val = value;
-                if (_.isFunction(value)) {
-                    var obj = el.pipeline();
-                    val = value(obj, el.index);
-                    _.debug("Render attribute '" + name + "' with value " + val);
-                }
-                el.setAttribute(name, val);
-            }
-        });
-    },
-
-    /**
      * Show/hide elements of current bind.
      *
      * @this bind
@@ -360,7 +340,7 @@ bind.prototype = {
         _.forEach(this.$, function (el) {
             if (el) {
                 var shown = el.pipeline().$shown;
-                if(shown && !this.rendered) {
+                if (shown && !this.rendered) {
                     this.render();
                 }
                 el.show(shown);
@@ -381,22 +361,26 @@ bind.prototype = {
         if (!this.loaded && !this.loading) {
             this.load();
         }
-        var attrs = this.obj.attrs;
-        if (attrs) {
-            var ready = this.obj.$ready();
-            _.forIn(attrs, function (attr) {
-                attr.val = valueFn;
-                this.renderAttr(attr.name, function (obj, idx) {
-                    return attr.val(obj, idx, ready);
-                }.bind(this));
-            }, this);
-            this.renderAttr(TIED);
-            _.forEach(this.$, function (el) {
-                if (el.isInput) {
-                    el.setAttribute('name', this.name);
+        _.forEach(this.$, function (el) {
+            if (el) {
+                var obj = el.pipeline();
+                var ready = obj.$ready();
+                var attrs = obj.attrs;
+                var idx = el.index;
+                if (attrs) {
+                    _.forIn(attrs, function (attr) {
+                        var val = attr.val(obj, idx, ready);
+                        var name = attr.name;
+                        _.debug("Render attribute '" + name + "' with value " + val);
+                        el.setAttribute(name, val);
+                    });
+                    el.setAttribute(TIED);
+                    if (el.isInput) {
+                        el.setAttribute('name', this.name);
+                    }
                 }
-            }, this);
-        }
+            }
+        }, this);
         this.show(this.obj.$shown);
         this.rendered = true;
         _.debug("Rendered " + this.name);
