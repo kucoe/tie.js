@@ -1,6 +1,8 @@
 var fs = require("fs");
+var ugly = require('uglify-js')
 var sourcePath = "src/modules";
 var dest = "src/tie.js";
+var min = "src/tie.min.js";
 
 var removeLastLine = function (data) {
     var lines = data.split('\n');
@@ -26,4 +28,10 @@ fs.appendFileSync(dest, '    ', 'utf8');
 fs.appendFileSync(dest, all, 'utf8');
 fs.appendFileSync(dest, '\n', 'utf8');
 fs.appendFileSync(dest, wrap.substring(idx + 9), 'utf8');
+
+
+var code = fs.readFileSync(dest, 'utf8');
+code = ugly.minify(code, {fromString: true});
+fs.writeFileSync(min, code.code);
+
 

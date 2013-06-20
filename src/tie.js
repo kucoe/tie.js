@@ -2,7 +2,8 @@
  * Tie.js
  * Smart binding, routes, pipes, properties, templates, resources.
  *
- * @namespace export
+ * Copyright 2013, Wolfgang Bas
+ * Released under the MIT License
  */
 (function (window) {
     'use strict';
