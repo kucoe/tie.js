@@ -1,9 +1,20 @@
+/**
+ * Routes utilities
+ *
+ * @type {{list: {}, init: Function, locate: Function, find: Function, move: Function}}
+ */
 var routes = {
+    /**
+     * List of application defined routes
+     */
     list: {},
-    init: function () {
-        if (app == null) {
-            throw new Error("App is not ready");
-        }
+
+    /**
+     * Initializes list of routes using application info.
+     *
+     * @param {bind} app info
+     */
+    init: function (app) {
         if (app.obj.routes) {
             _.forIn(app.obj.routes, function (r, path) {
                 path = path.toLowerCase();
@@ -13,6 +24,20 @@ var routes = {
         }
     },
 
+    /**
+     * Processes current route using window location hash.<br/>
+     * If application has no routes configured process default route.<br/>
+     * Else tries to find route, if no configured route found moves to default '#/' route.<br/>
+     * When configured route is found, iterates through all registered ties and analyses theirs routes configuration
+     * and show/hide them accordingly.<br/>
+     *
+     * During this processing every tie got a $location utility function available that returns object with properties href
+     * and route, calling $location(my-path) will change window location to '#my-path'.
+     *
+     *
+     *
+     * @param {Object} ties already registered ties dictionary
+     */
     locate: function (ties) {
         var current = window.location.hash.substring(1);
         current = this.find(current);
@@ -74,10 +99,21 @@ var routes = {
         }
     },
 
+    /**
+     * Finds route in configured routes list
+     *
+     * @param path route path
+     * @returns {route}
+     */
     find: function (path) {
         return this.list[path];
     },
 
+    /**
+     * Moves location to route specified.
+     *
+     * @param {string} url will be appended to hash using '#'+url
+     */
     move: function (url) {
         setTimeout(function () {
             window.location.hash = '#' + url;
@@ -85,12 +121,34 @@ var routes = {
     }
 };
 
+/**
+ * Constructs new route
+ *
+ * @constructor
+ * @class route
+ * @this route
+ * @param {string} path route path
+ * @param {Function} handler route handle will be executed every time the location is moved to this route
+ */
 var route = function (path, handler) {
     this.path = path;
     this.handler = handler;
 };
 
+/**
+ * Route prototype
+ *
+ * @type {{has: Function}}
+ */
 route.prototype = {
+
+    /**
+     * Returns whether the model specified has current route among it's routes configuration. <br/>
+     * By default model inherit all application's routes.
+     *
+     * @param {model} obj
+     * @returns {boolean}
+     */
     has: function (obj) {
         var routes = obj.routes;
         if (routes) {

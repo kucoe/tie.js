@@ -5,6 +5,8 @@ var app = null;
 
 /**
  * Returns function to apply ties with closure ties dictionary.
+ *
+ * @return {Function} tie(name, object, [dependencies Array])
  */
 var tie = function () {
     var ties = {};
@@ -20,7 +22,7 @@ var tie = function () {
             tie.prototype.define(name, r, ties);
             if (name == APP) {
                 app = r;
-                routes.init();
+                routes.init(app);
                 q.ready(function () {
                     routes.locate(ties);
                 });
@@ -29,11 +31,16 @@ var tie = function () {
         }
     }
 };
+
+/**
+ * Tie prototype
+ */
 tie.prototype = {
 
     /**
      * Select DOM elements which are bound to current tie. Using 'data-tie' attribute. <br/>
      *
+     * @this tie
      * @param {string} tieName name of current tie
      * @param {bind} bind current tie bind
      */
@@ -62,7 +69,9 @@ tie.prototype = {
     /**
      * Create object based on primitive value
      *
+     * @this tie
      * @param {Object} obj primitive
+     * @return {{value: Object, attrs: Array}}
      */
     wrapPrimitive: function (obj) {
         return {
@@ -74,7 +83,9 @@ tie.prototype = {
     /**
      * Create object based on function
      *
+     * @this tie
      * @param {Function} fn
+     * @return {{attrs: {value: Function}}}
      */
     wrapFunction: function (fn) {
         return {
@@ -87,7 +98,9 @@ tie.prototype = {
     /**
      * Create object based on array
      *
+     * @this tie
      * @param {Array} array
+     * @return {{values: Array, attrs: Array}}
      */
     wrapArray: function (array) {
         return {
@@ -96,6 +109,13 @@ tie.prototype = {
         };
     },
 
+    /**
+     * Checks object and wraps it if necessary. Also specify $shown, attrs and routes properties if empty.
+     *
+     * @this tie
+     * @param {Object|Function|Date|Array|*} obj
+     * @returns {model}
+     */
     check: function (obj) {
         if (_.isFunction(obj)) {
             obj = this.wrapFunction(obj);
@@ -118,6 +138,17 @@ tie.prototype = {
         return new model(obj);
     },
 
+    /**
+     * Resolves dependencies.<br/>
+     * If dependency not yet present, stub will be created and later replaced when dependency is tied.
+     * If not all dependencies are resolved yet bind is presumed as not ready and errors will be skipped.
+     *
+     *
+     * @this tie
+     * @param {bind} bind associated bind
+     * @param {Array} dependencies tie dependencies
+     * @param {Object} ties already registered ties dictionary
+     */
     resolve: function (bind, dependencies, ties) {
         if (!dependencies) {
             return;
@@ -135,6 +166,15 @@ tie.prototype = {
         }, this);
     },
 
+    /**
+     * Defines current bind in the registry and resolves stubs that were created for dependant ties.<br/>
+     * That will also update dependant ties with new dependency.
+     *
+     * @this tie
+     * @param {string} name tie name
+     * @param {bind} bind associated bind
+     * @param {Object} ties already registered ties dictionary
+     */
     define: function (name, bind, ties) {
         var old = ties[name];
         ties[name] = bind;
@@ -146,6 +186,15 @@ tie.prototype = {
         }
     },
 
+    /**
+     * Updates current tie with another tied object
+     *
+     *
+     * @this tie
+     * @param {bind} bind already associated bind
+     * @param {*} tiedObject
+     * @returns {bind}
+     */
     update: function (bind, tiedObject) {
         var name = bind.name;
         _.debug("Update tie " + name, name);
@@ -162,9 +211,20 @@ tie.prototype = {
         if (!bind.rendered) {
             bind.render();
         }
-        return prev;
+        return bind;
     },
 
+    /**
+     * Initializes binding.<br/>
+     * Also specifies bind loading method, that selects DOM elements and prepare values array binding.
+     *
+     * @this tie
+     * @param {string} name tie name
+     * @param {*} tiedObject
+     * @param {Array} dependencies tie dependencies
+     * @param {Object} ties already registered ties dictionary
+     * @returns {bind}
+     */
     init: function (name, tiedObject, dependencies, ties) {
         _.debug("Tie " + name, name);
         var r = new bind(name, dependencies, ties);
