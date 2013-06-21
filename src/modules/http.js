@@ -1,7 +1,14 @@
+/**
+ * Default values for http
+ */
 var defaults = {
     type: "GET",
     mime: "json"
 };
+
+/**
+ * Supported MIME types
+ */
 var mimeTypes = {
     script: "text/javascript, application/javascript",
     json: "application/json",
@@ -10,7 +17,17 @@ var mimeTypes = {
     text: "text/plain"
 };
 
+/**
+ * Creates http wrapper based on user described options
+ *
+ * @constructor
+ * @class http
+ * @this http
+ * @param {Object} options
+ */
 var http = function (options) {
+    this.memoize = {};
+    this.cache = true;
     if (options) {
         if (options.url) {
             this.url = options.url;
@@ -23,6 +40,9 @@ var http = function (options) {
         }
         if (options.dataType) {
             this.dataType = options.dataType;
+        }
+        if (_.isDefined(options.cache)) {
+            this.cache = options.cache;
         }
     }
 };
@@ -45,17 +65,20 @@ var gatherParams = function (params, url) {
     return res;
 };
 
-var status = function (promise, xhr, dataType) {
+var status = function (request, xhr, dataType) {
     var status = xhr.status;
     if ((status >= 200 && status < 300) || status === 0) {
-        callback(promise, response(promise, xhr, dataType), null);
+        var data = response(request, xhr, dataType);
+        callback(request, data, null);
+        return data;
     } else {
-        callback(promise, xhr.responseText, status);
+        callback(request, xhr.responseText, status);
     }
+    return null;
 };
 
-var callback = function (promise, data, err) {
-    promise.ok(err, data)
+var callback = function (request, data, err) {
+    request.done(data, err);
 };
 
 var headers = function (xhr, headers, dataType, contentType) {
@@ -70,7 +93,7 @@ var headers = function (xhr, headers, dataType, contentType) {
     });
 };
 
-var response = function (promise, xhr, dataType) {
+var response = function (request, xhr, dataType) {
     var response;
     response = xhr.responseText;
     if (response) {
@@ -78,7 +101,7 @@ var response = function (promise, xhr, dataType) {
             try {
                 response = JSON.parse(response);
             } catch (error) {
-                callback(promise, response, error);
+                callback(request, response, error);
             }
         } else {
             if (dataType === "xml") {
@@ -120,37 +143,89 @@ var thisOrApp = function (obj, property, defaultValue) {
     return res;
 };
 
-var promise = function (xhr) {
+/**
+ * Creates http request object based on XHR
+ *
+ * @constructor
+ * @class request
+ * @this request
+ * @param {XMLHttpRequest} xhr
+ * @param {Function} fn callback function
+ */
+var request = function (xhr, fn) {
     this.xhr = xhr;
-    this.done = false;
+    this.ready = false;
+    this.fn = fn;
 };
 
-promise.prototype = {
+/**
+ * Request prototype
+ */
+request.prototype = {
+
+    /**
+     * Cancels request
+     *
+     * @this request
+     */
     cancel: function () {
         if (this.xhr) {
             this.xhr.abort();
         }
-        this.done = false;
+        this.ready = false;
         delete  this.data;
         delete  this.err;
     },
-    ok: function (data, err) {
-        this.done = true;
+
+    /**
+     * Call callback when request is done.<br/>
+     * After this called the data and error are stored in request properties.
+     *
+     * @this request
+     * @param {Object|string} data response data
+     * @param {Error|string} err response error
+     */
+    done: function (data, err) {
+        this.ready = true;
         this.data = data;
         this.err = err;
         if (this.fn) {
             safeCall(this.fn, this, true, data, err);
-        }
-    },
-    ready: function (fn) {
-        if (this.done && fn) {
-            safeCall(this.fn, this, true, this.data, this.err);
         } else {
-            this.fn = fn;
+            console.log('Response received:' + data);
         }
     }
 };
 
+/**
+ * Default responding function, will log error or plain response in console
+ * and update model specified in case of JSON response
+ *
+ * @param {model} model to update with response data
+ */
+var defaultResponder = function (model) {
+    return function (data, err) {
+        if (err) {
+            console.err(err);
+        } else if (_.isObject(data)) {
+            _.extend(model, data);
+        } else {
+            console.log('Response received:' + data);
+        }
+    };
+};
+
+
+/**
+ * Executes AJAX request
+ *
+ * @param {Object} opts request options
+ * @param {model|Function} onReady function to be called when response received
+ * or model to be updated with response values
+ * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
+ * Setting http.cache to false will make refetch default behavior
+ * @return request
+ */
 var ajax = function (opts, onReady, refetch) {
     var type = opts.getType();
     var url = opts.getUrl();
@@ -158,89 +233,122 @@ var ajax = function (opts, onReady, refetch) {
     var dataType = opts.getDataType();
     var contentType = opts.getContentType();
     var heads = opts.getHeaders();
+    var cached = null;
     if (type === defaults.type) {
-        url += gatherParams(data, url);
+        url += gatherParams(params, url);
+        if (opts.cache && !refetch) {
+            cached = opts.memo(url, dataType);
+        }
     } else {
-        data = gatherParams(data);
+        params = gatherParams(params);
     }
     if (/=\$JSONP/ig.test(url)) {
         return this.jsonp(url, data);
     }
     var xhr = new window.XMLHttpRequest();
-    var p = promise(xhr);
+    var fn = null;
     if (_.isFunction(onReady)) {
-        p.ready(onReady);
+        fn = onReady;
     } else if (_.isObject(onReady)) {
-        p.ready(function (data, err) {
-            if (err) {
-                console.err(err);
-            } else if (_.isObject(data)) {
-                _.extend(onReady, data);
-            } else {
-                console.log('Response received' + data);
+        fn = defaultResponder(onReady);
+    }
+    var req = request(xhr, fn);
+    if (cached) {
+        callback(req, cached, null);
+    } else {
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                var data = status(req, xhr, dataType);
+                if(data && type === defaults.type && opts.cache) {
+                    opts.memo(url, dataType, data);
+                }
             }
-        });
-    }
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4) {
-            return status(p, xhr, dataType);
+            return null;
+        };
+        xhr.open(type, url);
+        headers(xhr, heads, contentType, dataType);
+        try {
+            xhr.send(params);
+        } catch (error) {
+            xhr = error;
+            callback(p, null, error);
         }
-        return null;
-    };
-    xhr.open(type, url);
-    headers(xhr, heads, contentType, dataType);
-    try {
-        xhr.send(data);
-    } catch (error) {
-        xhr = error;
-        callback(p, null, error);
     }
-    return xhr;
+    return req;
 };
 
 http.prototype = {
 
-    jsonp: function (url, data) {
+    /**
+     * Executes JSONP request
+     *
+     * @this http
+     * @param {string} url request URl (with '=$JSONP' to replace by callback name)
+     * @param {Object} params request params to be joined to URL. ('$JSONP' as value also works)
+     * @param {model|Function} onReady function to be called when response received
+     * or model to be updated with response values
+     * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
+     * Setting http.cache to false will make refetch default behavior
+     * @return request
+     */
+    jsonp: function (url, params, onReady, refetch) {
         var head = window.document.getElementsByTagName("head")[0];
         var script = window.document.createElement("script");
-        url += this.gatherParams(data, url);
+        url += this.gatherParams(params, url);
+        var cached = null;
+        if (this.cache && !refetch) {
+            cached = this.memo(url, defaults.mime);
+        }
+        var fn = null;
+        if (_.isFunction(onReady)) {
+            fn = onReady;
+        } else if (_.isObject(onReady)) {
+            fn = defaultResponder(onReady);
+        }
+        var req = new request(null, fn);
+        if (cached) {
+            req.done(cached, null);
+        } else {
+            var callbackName = "jsonp" + _.uid();
+            var that = this;
+            window[callbackName] = function (response) {
+                head.removeChild(script);
+                delete window[callbackName];
+                that.memo(url, defaults.mime, response);
+                return req.done(response, null);
+            };
 
-        var callbackName = "jsonp" + _.uid();
-        var p = new promise(null);
-        window[callbackName] = function (response) {
-            head.removeChild(script);
-            delete window[callbackName];
-            return p.ok(response, null);
-        };
-
-        script.type = "text/javascript";
-        script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
-        head.appendChild(script);
-        return p;
+            script.type = "text/javascript";
+            script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
+            head.appendChild(script);
+        }
+        return req;
     },
-    get: function (params, model, refetch) {
+
+    get: function (params, onReady, refetch) {
         this.type = defaults.type;
         delete this.contentType;
         prepareParams(this, params);
-        return ajax(this, model, refetch);
+        return ajax(this, onReady, refetch);
     },
-    post: function (params, model, refetch) {
-        return this.form("POST", params, model, refetch);
+
+    post: function (params, onReady, refetch) {
+        return this.form("POST", params, onReady, refetch);
     },
-    put: function (params, model, refetch) {
-        return this.form("PUT", params, model, refetch);
+
+    put: function (params, onReady, refetch) {
+        return this.form("PUT", params, onReady, refetch);
     },
-    del: function (params, model, refetch) {
-        return this.form("DELETE", params, model, refetch);
+
+    delete: function (params, onReady, refetch) {
+        return this.form("DELETE", params, onReady, refetch);
     },
-    delete: function (params, model, refetch) {
-        return this.form("DELETE", params, model, refetch);
-    },
-    form: function (type, params, model, refetch) {
+
+    form: function (type, params, onReady, refetch) {
         this.type = type;
         this.contentType = "application/x-www-form-urlencoded";
         prepareParams(this, params);
-        return ajax(this, model, refetch);
+        return ajax(this, onReady, refetch);
     },
 
     getUrl: function () {
@@ -268,6 +376,14 @@ http.prototype = {
 
     getHeaders: function () {
         return thisOrApp(this, 'header', {});
+    },
+
+    memo : function (url, type, value) {
+        var hash = url + type;
+        if(_.isDefined(value)) {
+            this.memoize[hash] = value;
+        }
+        return this.memoize[hash];
     }
 
 };

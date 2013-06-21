@@ -5,7 +5,7 @@ var pipesRegistry = {};
  *
  * @param {string} name pipe name
  * @param {Function} [fn] pipe function that will accept. If not defined existed pipe will return.
- * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs) default to false
+ * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs, async) default to false
  */
 var pipes = function (name, fn, opts) {
     if (_.isUndefined(fn)) {
@@ -14,7 +14,8 @@ var pipes = function (name, fn, opts) {
     var defOpts = {
         canWrite: false,
         changeRoutes: false,
-        changeAttrs: false
+        changeAttrs: false,
+        async: false
     };
     if (_.isDefined(opts)) {
         _.extend(defOpts, opts);
@@ -60,8 +61,9 @@ pipe.prototype = {
      * @this pipe
      * @param {model} obj tied model
      * @param {Object} [value] new object value
+     * @param {Function} [next] function to be passed to asynchronous pipe
      */
-    process: function (obj, value) {
+    process: function (obj, value, next) {
         var pipe = pipesRegistry[this.name];
         if (!pipe) {
             throw new Error('Pipe ' + this.name + ' not found');
@@ -79,9 +81,20 @@ pipe.prototype = {
         }
         var res = _.isDefined(value) && this.canWrite() ? obj : _.clone(obj);
         if (fn && _.isFunction(fn)) {
-            res = safeCall(fn, pipe, true, res, params, value);
+            res = safeCall(fn, pipe, true, res, params, value, next);
         }
         return res;
+    },
+
+    /**
+     * Returns whether this pipe uses asynchronous calls.
+     *
+     * @this pipe
+     * @return boolean
+     */
+    async: function () {
+        var pipe = pipesRegistry[this.name];
+        return pipe ? pipe.opts.async : false;
     },
 
     /**

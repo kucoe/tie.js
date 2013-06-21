@@ -339,11 +339,14 @@ bind.prototype = {
         }
         _.forEach(this.$, function (el) {
             if (el) {
-                var shown = el.pipeline().$shown;
-                if (shown && !this.rendered) {
-                    this.render();
-                }
-                el.show(shown);
+                el.pipeline(function (obj) {
+                    var shown = obj.$shown;
+                    if (shown && !this.rendered) {
+                        this.render();
+                    }
+                    el.show(shown);
+                }.bind(this));
+
             }
         }, this);
     },
@@ -357,33 +360,35 @@ bind.prototype = {
         if (!this.obj.$shown) {
             return;
         }
-        _.debug("Render " + this.name, this.name + " Render");
+        var bindName = this.name;
+        _.debug("Render " + bindName, bindName + " Render");
         if (!this.loaded && !this.loading) {
             this.load();
         }
         _.forEach(this.$, function (el) {
             if (el) {
-                var obj = el.pipeline();
-                var ready = obj.$ready();
-                var attrs = obj.attrs;
-                var idx = el.index;
-                if (attrs) {
-                    _.forIn(attrs, function (attr) {
-                        var val = attr.val(obj, idx, ready);
-                        var name = attr.name;
-                        _.debug("Render attribute '" + name + "' with value " + val);
-                        el.setAttribute(name, val);
-                    });
-                    el.setAttribute(TIED);
-                    if (el.isInput) {
-                        el.setAttribute('name', this.name);
+                el.pipeline(function (obj) {
+                    var ready = obj.$ready();
+                    var attrs = obj.attrs;
+                    var idx = el.index;
+                    if (attrs) {
+                        _.forIn(attrs, function (attr) {
+                            var val = attr.val(obj, idx, ready);
+                            var name = attr.name;
+                            _.debug("Render attribute '" + name + "' with value " + val);
+                            el.setAttribute(name, val);
+                        });
+                        el.setAttribute(TIED);
+                        if (el.isInput) {
+                            el.setAttribute('name', bindName);
+                        }
                     }
-                }
+                });
             }
         }, this);
         this.show(this.obj.$shown);
         this.rendered = true;
-        _.debug("Rendered " + this.name);
+        _.debug("Rendered " + bindName);
     }
 
 };

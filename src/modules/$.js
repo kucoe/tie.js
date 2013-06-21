@@ -64,7 +64,7 @@ var $ = function (el, bind) {
         value = _.trim(value);
 
         if (this.pipes.length > 0) {
-            this.pipeline(value);
+            this.pipeline(function(){}, value);
         } else {
             if (bind.obj.value !== value) {
                 bind.obj.value = value;
@@ -115,10 +115,10 @@ var $ = function (el, bind) {
      * Processes pipelines of current element
      *
      * @this $
-     * @param {*} value value to use in pipeline
-     * @returns {model} new object according to pipes
+     * @param {Function} next function to be called next
+     * @param {*} [value] value to use in pipeline
      */
-    this.pipeline = function (value) {
+    this.pipeline = function (next, value) {
         var res = this.bind.obj;
         if (this.pipes.length > 0) {
             _.forEach(this.pipes, function (pipe) {
@@ -131,8 +131,9 @@ var $ = function (el, bind) {
                     res.$shown = res.$location().route.has(res);
                 }
             }, this)
+        } else {
+            next(res);
         }
-        return res;
     }
 };
 
