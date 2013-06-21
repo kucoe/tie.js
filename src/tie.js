@@ -2,7 +2,8 @@
  * Tie.js
  * Smart binding, routes, pipes, properties, templates, resources.
  *
- * @namespace export
+ * Copyright 2013, Wolfgang Bas
+ * Released under the MIT License
  */
 (function (window) {
     'use strict';
@@ -164,12 +165,23 @@
         return obj;
     };
     
+    /**
+     * Routes utilities
+     *
+     * @type {{list: {}, init: Function, locate: Function, find: Function, move: Function}}
+     */
     var routes = {
+        /**
+         * List of application defined routes
+         */
         list: {},
-        init: function () {
-            if (app == null) {
-                throw new Error("App is not ready");
-            }
+    
+        /**
+         * Initializes list of routes using application info.
+         *
+         * @param {bind} app info
+         */
+        init: function (app) {
             if (app.obj.routes) {
                 _.forIn(app.obj.routes, function (r, path) {
                     path = path.toLowerCase();
@@ -179,6 +191,20 @@
             }
         },
     
+        /**
+         * Processes current route using window location hash.<br/>
+         * If application has no routes configured process default route.<br/>
+         * Else tries to find route, if no configured route found moves to default '#/' route.<br/>
+         * When configured route is found, iterates through all registered ties and analyses theirs routes configuration
+         * and show/hide them accordingly.<br/>
+         *
+         * During this processing every tie got a $location utility function available that returns object with properties href
+         * and route, calling $location(my-path) will change window location to '#my-path'.
+         *
+         *
+         *
+         * @param {Object} ties already registered ties dictionary
+         */
         locate: function (ties) {
             var current = window.location.hash.substring(1);
             current = this.find(current);
@@ -240,10 +266,21 @@
             }
         },
     
+        /**
+         * Finds route in configured routes list
+         *
+         * @param path route path
+         * @returns {route}
+         */
         find: function (path) {
             return this.list[path];
         },
     
+        /**
+         * Moves location to route specified.
+         *
+         * @param {string} url will be appended to hash using '#'+url
+         */
         move: function (url) {
             setTimeout(function () {
                 window.location.hash = '#' + url;
@@ -251,12 +288,34 @@
         }
     };
     
+    /**
+     * Constructs new route
+     *
+     * @constructor
+     * @class route
+     * @this route
+     * @param {string} path route path
+     * @param {Function} handler route handle will be executed every time the location is moved to this route
+     */
     var route = function (path, handler) {
         this.path = path;
         this.handler = handler;
     };
     
+    /**
+     * Route prototype
+     *
+     * @type {{has: Function}}
+     */
     route.prototype = {
+    
+        /**
+         * Returns whether the model specified has current route among it's routes configuration. <br/>
+         * By default model inherit all application's routes.
+         *
+         * @param {model} obj
+         * @returns {boolean}
+         */
         has: function (obj) {
             var routes = obj.routes;
             if (routes) {
@@ -409,14 +468,24 @@
         text: "text/plain"
     };
     
-    var http = function (options, model) {
+    var http = function (options) {
         if (options) {
-            _.extend(this, options);
+            if (options.url) {
+                this.url = options.url;
+            }
+            if (options.params) {
+                this.params = options.params;
+            }
+            if (options.headers) {
+                this.headers = options.headers;
+            }
+            if (options.dataType) {
+                this.dataType = options.dataType;
+            }
         }
-        this.model = model;
     };
     
-    var params = function (params, url) {
+    var gatherParams = function (params, url) {
         var sign = "";
         if (url) {
             sign = url.indexOf("?") + 1 ? "&" : "?";
@@ -434,17 +503,17 @@
         return res;
     };
     
-    var status = function (obj, xhr, dataType, fn) {
+    var status = function (promise, xhr, dataType) {
         var status = xhr.status;
         if ((status >= 200 && status < 300) || status === 0) {
-            callback(obj, response(obj, xhr, dataType, fn), null, fn);
+            callback(promise, response(promise, xhr, dataType), null);
         } else {
-            callback(obj, xhr.responseText, status, fn);
+            callback(promise, xhr.responseText, status);
         }
     };
     
-    var callback = function (obj, response, error, fn) {
-        safeCall(fn, obj, obj.$ready(), response, error);
+    var callback = function (promise, data, err) {
+        promise.ok(err, data)
     };
     
     var headers = function (xhr, headers, dataType, contentType) {
@@ -459,7 +528,7 @@
         });
     };
     
-    var response = function (obj, xhr, dataType, fn) {
+    var response = function (promise, xhr, dataType) {
         var response;
         response = xhr.responseText;
         if (response) {
@@ -467,7 +536,7 @@
                 try {
                     response = JSON.parse(response);
                 } catch (error) {
-                    callback(obj, response, error, fn);
+                    callback(promise, response, error);
                 }
             } else {
                 if (dataType === "xml") {
@@ -478,151 +547,158 @@
         return response;
     };
     
-    var thisOrApp = function (obj, property, defaultValue) {
-        if (obj[property]) {
-            return obj[property];
-        }
-        if (app && app.connect && app.connect[property]) {
-            return app.connect[property];
-        }
-        return defaultValue;
-    };
-    
-    var apply = function (obj, opts) {
-        var cache = false;
-        if (_.isUndefined(obj.cache)) {
-            obj.cache = {};
-            cache = true;
-        }
-        _.forIn(opts, function (value, prop) {
-            if (value) {
-                if (cache) {
-                    obj.cache[prop] = obj[prop];
-                }
-                obj[prop] = value;
+    var prepareParams = function (opts, params) {
+        if (params) {
+            if (opts.params) {
+                _.extend(opts.params, params);
+            } else {
+                opts.params = params;
             }
-        });
+        }
     };
     
-    var fromCache = function (obj) {
-        if (_.isDefined(obj.cache)) {
-            _.forIn(obj.cache, function (value, prop) {
-                if (value) {
-                    obj[prop] = value;
+    var thisOrApp = function (obj, property, defaultValue) {
+        var res = defaultValue;
+        if (app && app.connect && app.connect[property]) {
+            var a = app.connect[property];
+            if (_.isObject(res)) {
+                res = _.extend(res, tmp);
+            } else {
+                res = tmp;
+            }
+        }
+        var tmp = obj[property];
+        if (tmp) {
+            if (_.isObject(res)) {
+                res = _.extend(res, tmp);
+            } else {
+                res = tmp;
+            }
+        }
+        return res;
+    };
+    
+    var promise = function (xhr) {
+        this.xhr = xhr;
+        this.done = false;
+    };
+    
+    promise.prototype = {
+        cancel: function () {
+            if (this.xhr) {
+                this.xhr.abort();
+            }
+            this.done = false;
+            delete  this.data;
+            delete  this.err;
+        },
+        ok: function (data, err) {
+            this.done = true;
+            this.data = data;
+            this.err = err;
+            if (this.fn) {
+                safeCall(this.fn, this, true, data, err);
+            }
+        },
+        ready: function (fn) {
+            if (this.done && fn) {
+                safeCall(this.fn, this, true, this.data, this.err);
+            } else {
+                this.fn = fn;
+            }
+        }
+    };
+    
+    var ajax = function (opts, onReady, refetch) {
+        var type = opts.getType();
+        var url = opts.getUrl();
+        var params = opts.getParams();
+        var dataType = opts.getDataType();
+        var contentType = opts.getContentType();
+        var heads = opts.getHeaders();
+        if (type === defaults.type) {
+            url += gatherParams(data, url);
+        } else {
+            data = gatherParams(data);
+        }
+        if (/=\$JSONP/ig.test(url)) {
+            return this.jsonp(url, data);
+        }
+        var xhr = new window.XMLHttpRequest();
+        var p = promise(xhr);
+        if (_.isFunction(onReady)) {
+            p.ready(onReady);
+        } else if (_.isObject(onReady)) {
+            p.ready(function (data, err) {
+                if (err) {
+                    console.err(err);
+                } else if (_.isObject(data)) {
+                    _.extend(onReady, data);
+                } else {
+                    console.log('Response received' + data);
                 }
             });
-            delete  obj.cache;
         }
-    };
-    
-    var promise = function (obj, xhr) {
-        var p = _.clone(obj);
-        p.cancel = function () {
-            xhr.abort();
-        };
-        p.ok = function () {
-            if (this.fn) {
-                safeCall(this.fn, this, this.$ready());
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                return status(p, xhr, dataType);
             }
+            return null;
         };
-        p.ready = function (fn) {
-            this.fn = fn;
+        xhr.open(type, url);
+        headers(xhr, heads, contentType, dataType);
+        try {
+            xhr.send(data);
+        } catch (error) {
+            xhr = error;
+            callback(p, null, error);
         }
-    
+        return xhr;
     };
     
     http.prototype = {
     
-        ajax: function () {
-            var type = this.getType();
-            var url = this.getUrl();
-            var data = this.getData();
-            var dataType = this.getDataType();
-            var contentType = this.getContentType();
-            var heads = this.getHeaders();
-            var fn = this.getCallback();
-            if (type === defaults.type) {
-                url += params(data, url);
-            } else {
-                data = params(data);
-            }
-            if (/=\$JSONP/ig.test(url)) {
-                return this.jsonp(url, data, fn);
-            }
-            var xhr = new window.XMLHttpRequest();
-            var future = promise(this.model, xhr);
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    return status(future, xhr, dataType, fn);
-                }
-                return null;
-            }.bind(this);
-            xhr.open(type, url);
-            headers(xhr, heads, contentType, dataType);
-            try {
-                xhr.send(data);
-            } catch (error) {
-                xhr = error;
-                callback(future, null, error, fn);
-            }
-            return xhr;
-        },
-        jsonp: function (url, data, callback) {
+        jsonp: function (url, data) {
             var head = window.document.getElementsByTagName("head")[0];
             var script = window.document.createElement("script");
             url += this.gatherParams(data, url);
     
             var callbackName = "jsonp" + _.uid();
+            var p = new promise(null);
             window[callbackName] = function (response) {
                 head.removeChild(script);
                 delete window[callbackName];
-                return callback(response);
+                return p.ok(response, null);
             };
     
             script.type = "text/javascript";
             script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
             head.appendChild(script);
+            return p;
         },
-        get: function (url, data, dataType, callback) {
-            if (arguments.length == 0) {
-                fromCache(this);
-            } else {
-                apply(this, {
-                    type: defaults.type,
-                    url: url,
-                    data: data,
-                    callback: callback,
-                    dataType: dataType
-                });
-            }
-            return this.ajax();
+        get: function (params, model, refetch) {
+            this.type = defaults.type;
+            delete this.contentType;
+            prepareParams(this, params);
+            return ajax(this, model, refetch);
         },
-        post: function (url, data, dataType, callback) {
-            return this.form("POST", url, data, dataType, callback);
+        post: function (params, model, refetch) {
+            return this.form("POST", params, model, refetch);
         },
-        put: function (url, data, dataType, callback) {
-            return this.form("PUT", url, data, dataType, callback);
+        put: function (params, model, refetch) {
+            return this.form("PUT", params, model, refetch);
         },
-        del: function (url, data, dataType, callback) {
-            return this.form("DELETE", url, data, dataType, callback);
+        del: function (params, model, refetch) {
+            return this.form("DELETE", params, model, refetch);
         },
-        delete: function (url, data, dataType, callback) {
-            return this.form("DELETE", url, data, dataType, callback);
+        delete: function (params, model, refetch) {
+            return this.form("DELETE", params, model, refetch);
         },
-        form: function (method, url, data, dataType, callback) {
-            if (arguments.length == 0) {
-                fromCache(this);
-            } else {
-                apply(this, {
-                    type: method,
-                    url: url,
-                    data: data,
-                    callback: callback,
-                    dataType: dataType,
-                    contentType: "application/x-www-form-urlencoded"
-                });
-            }
-            return this.ajax();
+        form: function (type, params, model, refetch) {
+            this.type = type;
+            this.contentType = "application/x-www-form-urlencoded";
+            prepareParams(this, params);
+            return ajax(this, model, refetch);
         },
     
         getUrl: function () {
@@ -632,8 +708,8 @@
             }
         },
     
-        getData: function () {
-            return thisOrApp(this, 'data', {});
+        getParams: function () {
+            return thisOrApp(this, 'params', {});
         },
     
         getType: function () {
@@ -649,24 +725,9 @@
         },
     
         getHeaders: function () {
-            return thisOrApp(this, 'header', []);
-        },
-    
-        getCallback: function () {
-            return thisOrApp(this, 'callback', function (response, error) {
-                if (response && this.isObject(response)) {
-                    this.extend(this, response);
-                } else {
-                    this.debug("Response received" + response);
-                }
-                if (error) {
-                    console.error("Error received" + error);
-                }
-                if (this.isFunction(this.ok)) {
-                    this.ok();
-                }
-            });
+            return thisOrApp(this, 'header', {});
         }
+    
     };
     
     
@@ -1748,6 +1809,8 @@
     
     /**
      * Returns function to apply ties with closure ties dictionary.
+     *
+     * @return {Function} tie(name, object, [dependencies Array])
      */
     var tie = function () {
         var ties = {};
@@ -1763,7 +1826,7 @@
                 tie.prototype.define(name, r, ties);
                 if (name == APP) {
                     app = r;
-                    routes.init();
+                    routes.init(app);
                     q.ready(function () {
                         routes.locate(ties);
                     });
@@ -1772,11 +1835,16 @@
             }
         }
     };
+    
+    /**
+     * Tie prototype
+     */
     tie.prototype = {
     
         /**
          * Select DOM elements which are bound to current tie. Using 'data-tie' attribute. <br/>
          *
+         * @this tie
          * @param {string} tieName name of current tie
          * @param {bind} bind current tie bind
          */
@@ -1805,7 +1873,9 @@
         /**
          * Create object based on primitive value
          *
+         * @this tie
          * @param {Object} obj primitive
+         * @return {{value: Object, attrs: Array}}
          */
         wrapPrimitive: function (obj) {
             return {
@@ -1817,7 +1887,9 @@
         /**
          * Create object based on function
          *
+         * @this tie
          * @param {Function} fn
+         * @return {{attrs: {value: Function}}}
          */
         wrapFunction: function (fn) {
             return {
@@ -1830,7 +1902,9 @@
         /**
          * Create object based on array
          *
+         * @this tie
          * @param {Array} array
+         * @return {{values: Array, attrs: Array}}
          */
         wrapArray: function (array) {
             return {
@@ -1839,6 +1913,13 @@
             };
         },
     
+        /**
+         * Checks object and wraps it if necessary. Also specify $shown, attrs and routes properties if empty.
+         *
+         * @this tie
+         * @param {Object|Function|Date|Array|*} obj
+         * @returns {model}
+         */
         check: function (obj) {
             if (_.isFunction(obj)) {
                 obj = this.wrapFunction(obj);
@@ -1861,6 +1942,17 @@
             return new model(obj);
         },
     
+        /**
+         * Resolves dependencies.<br/>
+         * If dependency not yet present, stub will be created and later replaced when dependency is tied.
+         * If not all dependencies are resolved yet bind is presumed as not ready and errors will be skipped.
+         *
+         *
+         * @this tie
+         * @param {bind} bind associated bind
+         * @param {Array} dependencies tie dependencies
+         * @param {Object} ties already registered ties dictionary
+         */
         resolve: function (bind, dependencies, ties) {
             if (!dependencies) {
                 return;
@@ -1878,6 +1970,15 @@
             }, this);
         },
     
+        /**
+         * Defines current bind in the registry and resolves stubs that were created for dependant ties.<br/>
+         * That will also update dependant ties with new dependency.
+         *
+         * @this tie
+         * @param {string} name tie name
+         * @param {bind} bind associated bind
+         * @param {Object} ties already registered ties dictionary
+         */
         define: function (name, bind, ties) {
             var old = ties[name];
             ties[name] = bind;
@@ -1889,6 +1990,15 @@
             }
         },
     
+        /**
+         * Updates current tie with another tied object
+         *
+         *
+         * @this tie
+         * @param {bind} bind already associated bind
+         * @param {*} tiedObject
+         * @returns {bind}
+         */
         update: function (bind, tiedObject) {
             var name = bind.name;
             _.debug("Update tie " + name, name);
@@ -1905,9 +2015,20 @@
             if (!bind.rendered) {
                 bind.render();
             }
-            return prev;
+            return bind;
         },
     
+        /**
+         * Initializes binding.<br/>
+         * Also specifies bind loading method, that selects DOM elements and prepare values array binding.
+         *
+         * @this tie
+         * @param {string} name tie name
+         * @param {*} tiedObject
+         * @param {Array} dependencies tie dependencies
+         * @param {Object} ties already registered ties dictionary
+         * @returns {bind}
+         */
         init: function (name, tiedObject, dependencies, ties) {
             _.debug("Tie " + name, name);
             var r = new bind(name, dependencies, ties);
@@ -1938,6 +2059,7 @@
             return r;
         }
     };
+
 
     /**
      * Exports
