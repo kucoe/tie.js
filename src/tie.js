@@ -377,12 +377,11 @@
      * @param {string} str pipe string.
      */
     var pipe = function (str) {
-        var split = str.split(':');
-        this.name = _.trim(split[0]);
+        var index = str.indexOf(':');
+        this.name = _.trim(index + 1 ? str.substr(0, index) : str);
         this.params = '';
-        if (split.length > 1) {
-            var p = split[1];
-            p = _.trim(p);
+        if (index >= 0) {
+            var p = _.trim(str.substr(++index));
             p = '[' + p + ']';
             this.params = p;
         }
@@ -392,13 +391,14 @@
     pipe.prototype = {
     
         /**
-         * Process model from bind and returns new model after pipe execution
+         * Process model from bind and passed it result to next function
          *
          * @this pipe
          * @param {model} obj tied model
+         * @param {Function} next function to be passed to pipe
          * @param {Object} [value] new object value
          */
-        process: function (obj, value) {
+        process: function (obj, next, value) {
             var pipe = pipesRegistry[this.name];
             if (!pipe) {
                 throw new Error('Pipe ' + this.name + ' not found');
@@ -416,7 +416,7 @@
             }
             var res = _.isDefined(value) && this.canWrite() ? obj : _.clone(obj);
             if (fn && _.isFunction(fn)) {
-                res = safeCall(fn, pipe, true, res, params, value);
+                res = safeCall(fn, pipe, true, res, params, next, value);
             }
             return res;
         },
@@ -456,10 +456,17 @@
     };
     
     
+    /**
+     * Default values for http
+     */
     var defaults = {
         type: "GET",
         mime: "json"
     };
+    
+    /**
+     * Supported MIME types
+     */
     var mimeTypes = {
         script: "text/javascript, application/javascript",
         json: "application/json",
@@ -468,7 +475,17 @@
         text: "text/plain"
     };
     
+    /**
+     * Creates http wrapper based on user described options
+     *
+     * @constructor
+     * @class http
+     * @this http
+     * @param {Object} options
+     */
     var http = function (options) {
+        this.memoize = {};
+        this.cache = true;
         if (options) {
             if (options.url) {
                 this.url = options.url;
@@ -482,9 +499,220 @@
             if (options.dataType) {
                 this.dataType = options.dataType;
             }
+            if (_.isDefined(options.cache)) {
+                this.cache = options.cache;
+            }
         }
     };
     
+    
+    /**
+     * Reads status, response and callback with results.
+     *
+     * @param {request} request
+     * @param {string} dataType
+     * @returns {*}
+     */
+    var status = function (request, dataType) {
+        var xhr = request.xhr;
+        var status = xhr.status;
+        if ((status >= 200 && status < 300) || status === 0) {
+            var data = response(request, xhr, dataType);
+            callback(request, data, null);
+            return data;
+        } else {
+            callback(request, xhr.responseText, status);
+        }
+        return null;
+    };
+    
+    /**
+     * Calls request with results
+     *
+     * @param {request} request
+     * @param {Object|string} data
+     * @param {Error|string} err
+     */
+    var callback = function (request, data, err) {
+        request.done(data, err);
+    };
+    
+    var headers = function (xhr, headers, dataType, contentType) {
+        if (contentType) {
+            headers["Content-Type"] = contentType;
+        }
+        if (dataType) {
+            headers["Accept"] = mimeTypes[dataType];
+        }
+        _.forIn(headers, function (header, name) {
+            xhr.setRequestHeader(name, header);
+        });
+    };
+    
+    var response = function (request, xhr, dataType) {
+        var response;
+        response = xhr.responseText;
+        if (response) {
+            if (dataType === defaults.mime) {
+                try {
+                    response = JSON.parse(response);
+                } catch (error) {
+                    callback(request, response, error);
+                }
+            } else {
+                if (dataType === "xml") {
+                    response = xhr.responseXML;
+                }
+            }
+        }
+        return response;
+    };
+    
+    var thisOrApp = function (obj, property, defaultValue) {
+        var res = defaultValue;
+        if (app && app.connect && app.connect[property]) {
+            var a = app.connect[property];
+            if (_.isObject(res)) {
+                res = _.extend(res, a);
+            } else {
+                res = tmp;
+            }
+        }
+        var tmp = obj[property];
+        if (tmp) {
+            if (_.isObject(res)) {
+                res = _.extend(res, tmp);
+            } else {
+                res = tmp;
+            }
+        }
+        return res;
+    };
+    
+    /**
+     * Creates http request object based on XHR
+     *
+     * @constructor
+     * @class request
+     * @this request
+     * @param {XMLHttpRequest} xhr
+     * @param {Function} fn callback function
+     */
+    var request = function (xhr, fn) {
+        this.xhr = xhr;
+        this.ready = false;
+        this.fn = fn;
+    };
+    
+    /**
+     * Request prototype
+     */
+    request.prototype = {
+    
+        /**
+         * Cancels request
+         *
+         * @this request
+         */
+        cancel: function () {
+            if (this.xhr) {
+                this.xhr.abort();
+            }
+            this.ready = false;
+            delete  this.data;
+            delete  this.err;
+        },
+    
+        /**
+         * Call callback when request is done.<br/>
+         * After this called the data and error are stored in request properties.
+         *
+         * @this request
+         * @param {Object|string} data response data
+         * @param {Error|string} err response error
+         */
+        done: function (data, err) {
+            this.ready = true;
+            this.data = data;
+            this.err = err;
+            if (this.fn) {
+                safeCall(this.fn, this, true, data, err);
+            } else {
+                console.log('Response received:' + data);
+            }
+        }
+    };
+    
+    /**
+     * Default responding function, will log error or plain response in console
+     * and update model specified in case of JSON response
+     *
+     * @param {model} model to update with response data
+     */
+    var defaultResponder = function (model) {
+        return function (data, err) {
+            if (err) {
+                console.err(err);
+            } else if (_.isObject(data)) {
+                _.extend(model, data);
+            } else {
+                console.log('Response received:' + data);
+            }
+        };
+    };
+    
+    
+    /**
+     * Replaces '/:id' like parts of URL with parameter value.<br/>
+     * It removes parameter from list of parameters to avoid duplications.
+     *
+     * @param {string} url
+     * @param {Object} params
+     * @returns {string}
+     */
+    var prepareURL = function (url, params) {
+        if(!url) {
+            return url;
+        }
+        var index = url.indexOf('?');
+        var clearUrl = url.substring(0, index + 1 ? index : url.length);
+        var splits = clearUrl.split('/');
+        _.forEach(splits, function(split) {
+            if(split[0] === ':') {
+                var name = split.substr(1);
+                var val = params[ name];
+                if(_.isDefined(val)) {
+                    url.replace(split, val);
+                    delete  params[name];
+                }
+            }
+        });
+        return url;
+    };
+    
+    /**
+     * Merges parameters with exiting parameters
+     *
+     * @param {Object} opts
+     * @param {Object} params
+     */
+    var prepareParams = function (opts, params) {
+        if (params) {
+            if (opts.params) {
+                _.extend(opts.params, params);
+            } else {
+                opts.params = params;
+            }
+        }
+    };
+    
+    /**
+     * Return parameters body string. If url is passed - calculate value to be appended to url.
+     *
+     * @param {Object} params
+     * @param {string} [url]
+     * @returns {string}
+     */
     var gatherParams = function (params, url) {
         var sign = "";
         if (url) {
@@ -503,112 +731,16 @@
         return res;
     };
     
-    var status = function (promise, xhr, dataType) {
-        var status = xhr.status;
-        if ((status >= 200 && status < 300) || status === 0) {
-            callback(promise, response(promise, xhr, dataType), null);
-        } else {
-            callback(promise, xhr.responseText, status);
-        }
-    };
-    
-    var callback = function (promise, data, err) {
-        promise.ok(err, data)
-    };
-    
-    var headers = function (xhr, headers, dataType, contentType) {
-        if (contentType) {
-            headers["Content-Type"] = contentType;
-        }
-        if (dataType) {
-            headers["Accept"] = mimeTypes[dataType];
-        }
-        _.forIn(headers, function (header, name) {
-            xhr.setRequestHeader(name, header);
-        });
-    };
-    
-    var response = function (promise, xhr, dataType) {
-        var response;
-        response = xhr.responseText;
-        if (response) {
-            if (dataType === defaults.mime) {
-                try {
-                    response = JSON.parse(response);
-                } catch (error) {
-                    callback(promise, response, error);
-                }
-            } else {
-                if (dataType === "xml") {
-                    response = xhr.responseXML;
-                }
-            }
-        }
-        return response;
-    };
-    
-    var prepareParams = function (opts, params) {
-        if (params) {
-            if (opts.params) {
-                _.extend(opts.params, params);
-            } else {
-                opts.params = params;
-            }
-        }
-    };
-    
-    var thisOrApp = function (obj, property, defaultValue) {
-        var res = defaultValue;
-        if (app && app.connect && app.connect[property]) {
-            var a = app.connect[property];
-            if (_.isObject(res)) {
-                res = _.extend(res, tmp);
-            } else {
-                res = tmp;
-            }
-        }
-        var tmp = obj[property];
-        if (tmp) {
-            if (_.isObject(res)) {
-                res = _.extend(res, tmp);
-            } else {
-                res = tmp;
-            }
-        }
-        return res;
-    };
-    
-    var promise = function (xhr) {
-        this.xhr = xhr;
-        this.done = false;
-    };
-    
-    promise.prototype = {
-        cancel: function () {
-            if (this.xhr) {
-                this.xhr.abort();
-            }
-            this.done = false;
-            delete  this.data;
-            delete  this.err;
-        },
-        ok: function (data, err) {
-            this.done = true;
-            this.data = data;
-            this.err = err;
-            if (this.fn) {
-                safeCall(this.fn, this, true, data, err);
-            }
-        },
-        ready: function (fn) {
-            if (this.done && fn) {
-                safeCall(this.fn, this, true, this.data, this.err);
-            } else {
-                this.fn = fn;
-            }
-        }
-    };
-    
+    /**
+     * Executes AJAX request
+     *
+     * @param {Object} opts request options
+     * @param {model|Function} onReady function to be called when response received
+     * or model to be updated with response values
+     * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
+     * Setting http.cache to false will make refetch default behavior
+     * @return request
+     */
     var ajax = function (opts, onReady, refetch) {
         var type = opts.getType();
         var url = opts.getUrl();
@@ -616,89 +748,193 @@
         var dataType = opts.getDataType();
         var contentType = opts.getContentType();
         var heads = opts.getHeaders();
+        var cached = null;
+        url = prepareURL(url, params);
         if (type === defaults.type) {
-            url += gatherParams(data, url);
+            url += gatherParams(params, url);
+            if (opts.cache && !refetch) {
+                cached = opts.memo(url, dataType);
+            }
         } else {
-            data = gatherParams(data);
+            params = gatherParams(params);
         }
         if (/=\$JSONP/ig.test(url)) {
             return this.jsonp(url, data);
         }
         var xhr = new window.XMLHttpRequest();
-        var p = promise(xhr);
+        var fn = null;
         if (_.isFunction(onReady)) {
-            p.ready(onReady);
+            fn = onReady;
         } else if (_.isObject(onReady)) {
-            p.ready(function (data, err) {
-                if (err) {
-                    console.err(err);
-                } else if (_.isObject(data)) {
-                    _.extend(onReady, data);
-                } else {
-                    console.log('Response received' + data);
+            fn = defaultResponder(onReady);
+        }
+        var req = request(xhr, fn);
+        if (cached) {
+            callback(req, cached, null);
+        } else {
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    var data = status(req, dataType);
+                    if (data && type === defaults.type && opts.cache) {
+                        opts.memo(url, dataType, data);
+                    }
                 }
-            });
-        }
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                return status(p, xhr, dataType);
+                return null;
+            };
+            xhr.open(type, url);
+            headers(xhr, heads, contentType, dataType);
+            try {
+                xhr.send(params);
+            } catch (error) {
+                xhr = error;
+                callback(p, null, error);
             }
-            return null;
-        };
-        xhr.open(type, url);
-        headers(xhr, heads, contentType, dataType);
-        try {
-            xhr.send(data);
-        } catch (error) {
-            xhr = error;
-            callback(p, null, error);
         }
-        return xhr;
+        return req;
     };
     
-    http.prototype = {
-    
-        jsonp: function (url, data) {
-            var head = window.document.getElementsByTagName("head")[0];
-            var script = window.document.createElement("script");
-            url += this.gatherParams(data, url);
-    
+    /**
+     * Executes JSONP request
+     *
+     * @param {Object} opts request options
+     * @param {model|Function} onReady function to be called when response received
+     * or model to be updated with response values
+     * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
+     * Setting http.cache to false will make refetch default behavior
+     * @return request
+     */
+    var jsonp = function (opts, onReady, refetch) {
+        var url = opts.url;
+        var params = opts.params;
+        var head = window.document.getElementsByTagName("head")[0];
+        var script = window.document.createElement("script");
+        url = prepareURL(url, params);
+        url += gatherParams(params, url);
+        var cached = null;
+        if (opts.cache && !refetch) {
+            cached = opts.memo(url, defaults.mime);
+        }
+        var fn = null;
+        if (_.isFunction(onReady)) {
+            fn = onReady;
+        } else if (_.isObject(onReady)) {
+            fn = defaultResponder(onReady);
+        }
+        var req = new request(null, fn);
+        if (cached) {
+            req.done(cached, null);
+        } else {
             var callbackName = "jsonp" + _.uid();
-            var p = new promise(null);
             window[callbackName] = function (response) {
                 head.removeChild(script);
                 delete window[callbackName];
-                return p.ok(response, null);
+                opts.memo(url, defaults.mime, response);
+                return req.done(response, null);
             };
     
             script.type = "text/javascript";
             script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
             head.appendChild(script);
-            return p;
+        }
+        return req;
+    };
+    
+    /**
+     * Executes form url encoded content request
+     *
+     * @param {Object} opts request options
+     * @param {string} type request type ('POST', 'PUT', 'DELETE')
+     * @param {Object} params request params to be set in request body
+     * @param {model|Function} onReady function to be called when response received
+     * or model to be updated with response values
+     * @return request
+     */
+    var form = function (opts, type, params, onReady) {
+        opts.type = type;
+        opts.contentType = "application/x-www-form-urlencoded";
+        prepareParams(opts, params);
+        return ajax(opts, onReady);
+    };
+    
+    /**
+     * Http prototype
+     */
+    http.prototype = {
+    
+        /**
+         * Executes JSONP request
+         *
+         * @this http
+         * @param {string} url request URl (with '=$JSONP' to replace by callback name)
+         * @param {Object} params request params to be joined to URL. ('$JSONP' as value also works)
+         * @param {model|Function} onReady function to be called when response received
+         * or model to be updated with response values
+         * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
+         * Setting http.cache to false will make refetch default behavior
+         * @return request
+         */
+        jsonp: function (url, params, onReady, refetch) {
+            var opts = _.extend({}, this);
+            opts.url = url;
+            opts.params = params;
+            return jsonp(opts, onReady, refetch);
         },
-        get: function (params, model, refetch) {
+    
+        /**
+         * Executes GET request
+         *
+         * @this http
+         * @param {Object} params request params to be joined to URL
+         * @param {model|Function} onReady function to be called when response received
+         * or model to be updated with response values
+         * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
+         * Setting http.cache to false will make refetch default behavior
+         * @return request
+         */
+        get: function (params, onReady, refetch) {
             this.type = defaults.type;
             delete this.contentType;
             prepareParams(this, params);
-            return ajax(this, model, refetch);
+            return ajax(this, onReady, refetch);
         },
-        post: function (params, model, refetch) {
-            return this.form("POST", params, model, refetch);
+    
+        /**
+         * Executes POST request
+         *
+         * @this http
+         * @param {Object} params request params to be set in request body
+         * @param {model|Function} onReady function to be called when response received
+         * or model to be updated with response values
+         * @return request
+         */
+        post: function (params, onReady) {
+            return form(this, "POST", params, onReady);
         },
-        put: function (params, model, refetch) {
-            return this.form("PUT", params, model, refetch);
+    
+        /**
+         * Executes PUT request
+         *
+         * @this http
+         * @param {Object} params request params to be set in request body
+         * @param {model|Function} onReady function to be called when response received
+         * or model to be updated with response values
+         * @return request
+         */
+        put: function (params, onReady) {
+            return form(this, "PUT", params, onReady);
         },
-        del: function (params, model, refetch) {
-            return this.form("DELETE", params, model, refetch);
-        },
-        delete: function (params, model, refetch) {
-            return this.form("DELETE", params, model, refetch);
-        },
-        form: function (type, params, model, refetch) {
-            this.type = type;
-            this.contentType = "application/x-www-form-urlencoded";
-            prepareParams(this, params);
-            return ajax(this, model, refetch);
+    
+        /**
+         * Executes DELETE request
+         *
+         * @this http
+         * @param {Object} params request params to be set in request body
+         * @param {model|Function} onReady function to be called when response received
+         * or model to be updated with response values
+         * @return request
+         */
+        delete: function (params, onReady) {
+            return form(this, "DELETE", params, onReady);
         },
     
         getUrl: function () {
@@ -726,6 +962,22 @@
     
         getHeaders: function () {
             return thisOrApp(this, 'header', {});
+        },
+    
+        /**
+         * Memoizes cache value or return existed
+         *
+         * @param {string} url
+         * @param {string} type data type
+         * @param {*} [value] value to cache
+         * @returns {*}
+         */
+        memo: function (url, type, value) {
+            var hash = url + type;
+            if (_.isDefined(value)) {
+                this.memoize[hash] = value;
+            }
+            return this.memoize[hash];
         }
     
     };
@@ -797,7 +1049,7 @@
             value = _.trim(value);
     
             if (this.pipes.length > 0) {
-                this.pipeline(value);
+                this.pipeline(function(){}, value);
             } else {
                 if (bind.obj.value !== value) {
                     bind.obj.value = value;
@@ -845,27 +1097,41 @@
         }, this);
     
         /**
-         * Processes pipelines of current element
+         * Processes pipelines of current element. All pipes are processed asynchronously and result of the first pipe is passed to next pipe,
+         * that should call next function to activate next pipe. If pipe do not call next function and return result - next function will be called automatically.
+         *
          *
          * @this $
-         * @param {*} value value to use in pipeline
-         * @returns {model} new object according to pipes
+         * @param {Function} next function to be called next
+         * @param {*} [value] value to use in pipeline
          */
-        this.pipeline = function (value) {
+        this.pipeline = function (next, value) {
             var res = this.bind.obj;
             if (this.pipes.length > 0) {
-                _.forEach(this.pipes, function (pipe) {
+                _.async(this.pipes, function (pipe, next) {
+                    function update(data) {
+                        res = data;
+                        if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
+                            res.$shown = res.$location().route.has(res);
+                        }
+                        next(res);
+                    }
+                    var c;
                     if (_.isDefined(value)) {
-                        res = pipe.process(res,  value);
+                        c =  pipe.process(res,  update, value);
                     } else {
-                        res = pipe.process(res);
+                        c = pipe.process(res, update);
                     }
-                    if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
-                        res.$shown = res.$location().route.has(res);
+                    if(c) {
+                        update(c);
                     }
-                }, this)
+    
+                }, function() {
+                    next(res);
+                })
+            } else {
+                next(res);
             }
-            return res;
         }
     };
     
@@ -1224,7 +1490,7 @@
             if (!obj || !this.isObject(obj)) {
                 return obj;
             }
-            var newObj = this.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
+            var newObj = this.isCollection(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
             newObj = this.extend(newObj, obj, function (item) {
                 if (item && this.isObject(item)) {
                     item = this.clone(item);
@@ -1345,6 +1611,37 @@
                 }
             }
             return object;
+        },
+    
+        /**
+         * Process asynchronous calling or array or object elements and performs callback on every item, when no items left, called last function.
+         *
+         * @param {Object|Array} obj to iterate through
+         * @param {Function} callback function will be called on every element
+         * @param {Function} [last] the last function when all elements processed
+         */
+        async: function(obj, callback, last) {
+            var keys = [];
+            if (this.isCollection(obj)) {
+                var index = -1;
+                var length = obj.length;
+                while (++index < length) {
+                    keys.push(index);
+                }
+            } else {
+                keys = Object.keys(obj);
+            }
+    
+            function next() {
+                var key = keys.shift();
+                if (key === 0 || key) {
+                    var value = obj[key];
+                    callback(value, next);
+                } else {
+                    last(obj);
+                }
+            }
+            next();
         },
     
         /**
@@ -1753,11 +2050,14 @@
             }
             _.forEach(this.$, function (el) {
                 if (el) {
-                    var shown = el.pipeline().$shown;
-                    if (shown && !this.rendered) {
-                        this.render();
-                    }
-                    el.show(shown);
+                    el.pipeline(function (obj) {
+                        var shown = obj.$shown;
+                        if (shown && !this.rendered) {
+                            this.render();
+                        }
+                        el.show(shown);
+                    }.bind(this));
+    
                 }
             }, this);
         },
@@ -1771,33 +2071,35 @@
             if (!this.obj.$shown) {
                 return;
             }
-            _.debug("Render " + this.name, this.name + " Render");
+            var bindName = this.name;
+            _.debug("Render " + bindName, bindName + " Render");
             if (!this.loaded && !this.loading) {
                 this.load();
             }
             _.forEach(this.$, function (el) {
                 if (el) {
-                    var obj = el.pipeline();
-                    var ready = obj.$ready();
-                    var attrs = obj.attrs;
-                    var idx = el.index;
-                    if (attrs) {
-                        _.forIn(attrs, function (attr) {
-                            var val = attr.val(obj, idx, ready);
-                            var name = attr.name;
-                            _.debug("Render attribute '" + name + "' with value " + val);
-                            el.setAttribute(name, val);
-                        });
-                        el.setAttribute(TIED);
-                        if (el.isInput) {
-                            el.setAttribute('name', this.name);
+                    el.pipeline(function (obj) {
+                        var ready = obj.$ready();
+                        var attrs = obj.attrs;
+                        var idx = el.index;
+                        if (attrs) {
+                            _.forIn(attrs, function (attr) {
+                                var val = attr.val(obj, idx, ready);
+                                var name = attr.name;
+                                _.debug("Render attribute '" + name + "' with value " + val);
+                                el.setAttribute(name, val);
+                            });
+                            el.setAttribute(TIED);
+                            if (el.isInput) {
+                                el.setAttribute('name', bindName);
+                            }
                         }
-                    }
+                    });
                 }
             }, this);
             this.show(this.obj.$shown);
             this.rendered = true;
-            _.debug("Rendered " + this.name);
+            _.debug("Rendered " + bindName);
         }
     
     };
@@ -2060,17 +2362,19 @@
         }
     };
 
-
     /**
      * Exports
      */
     window.tie = tie();
     window.tie.pipes = pipes;
+    window.tie.enableDebug = function (enable) {
+        _.debugEnabled = enable;
+    };
 
     /**
      * Property pipeline definition
      */
-    pipes("property", function (obj, params, value) {
+    pipes("property", function (obj, params, next, value) {
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -2080,7 +2384,7 @@
                 obj.$prop(prop, value);
             }
         }
-        return obj;
+        next(obj);
     }, {canWrite: true});
 
     /**
@@ -2121,5 +2425,33 @@
         }
         return obj;
     }, {changeRoutes: true});
+
+    /**
+     * Routes pipeline definition
+     */
+    pipes("load", function (obj, params, next) {
+        var opts = {};
+        if (params) {
+            var trim = this.trim;
+            this.forEach(params, function (item) {
+                var splits = item.split(':');
+                if (splits.length == 2) {
+                    opts[trim(splits[0])] = trim(splits[1]);
+                } else {
+                    opts[trim(splits[0])] = '';
+                }
+            });
+        }
+        obj.http.get(opts, function (data, err) {
+            if (err) {
+                console.err(err);
+            } else if (_.isObject(data)) {
+                _.extend(obj, data);
+            } else {
+                console.log('Response received:' + data);
+            }
+            next(obj);
+        });
+    });
 
 })(window);

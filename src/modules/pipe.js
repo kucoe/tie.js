@@ -5,7 +5,7 @@ var pipesRegistry = {};
  *
  * @param {string} name pipe name
  * @param {Function} [fn] pipe function that will accept. If not defined existed pipe will return.
- * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs, async) default to false
+ * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs) default to false
  */
 var pipes = function (name, fn, opts) {
     if (_.isUndefined(fn)) {
@@ -14,8 +14,7 @@ var pipes = function (name, fn, opts) {
     var defOpts = {
         canWrite: false,
         changeRoutes: false,
-        changeAttrs: false,
-        async: false
+        changeAttrs: false
     };
     if (_.isDefined(opts)) {
         _.extend(defOpts, opts);
@@ -41,12 +40,11 @@ var pipes = function (name, fn, opts) {
  * @param {string} str pipe string.
  */
 var pipe = function (str) {
-    var split = str.split(':');
-    this.name = _.trim(split[0]);
+    var index = str.indexOf(':');
+    this.name = _.trim(index + 1 ? str.substr(0, index) : str);
     this.params = '';
-    if (split.length > 1) {
-        var p = split[1];
-        p = _.trim(p);
+    if (index >= 0) {
+        var p = _.trim(str.substr(++index));
         p = '[' + p + ']';
         this.params = p;
     }
@@ -56,14 +54,14 @@ var pipe = function (str) {
 pipe.prototype = {
 
     /**
-     * Process model from bind and returns new model after pipe execution
+     * Process model from bind and passed it result to next function
      *
      * @this pipe
      * @param {model} obj tied model
+     * @param {Function} next function to be passed to pipe
      * @param {Object} [value] new object value
-     * @param {Function} [next] function to be passed to asynchronous pipe
      */
-    process: function (obj, value, next) {
+    process: function (obj, next, value) {
         var pipe = pipesRegistry[this.name];
         if (!pipe) {
             throw new Error('Pipe ' + this.name + ' not found');
@@ -81,20 +79,9 @@ pipe.prototype = {
         }
         var res = _.isDefined(value) && this.canWrite() ? obj : _.clone(obj);
         if (fn && _.isFunction(fn)) {
-            res = safeCall(fn, pipe, true, res, params, value, next);
+            res = safeCall(fn, pipe, true, res, params, next, value);
         }
         return res;
-    },
-
-    /**
-     * Returns whether this pipe uses asynchronous calls.
-     *
-     * @this pipe
-     * @return boolean
-     */
-    async: function () {
-        var pipe = pipesRegistry[this.name];
-        return pipe ? pipe.opts.async : false;
     },
 
     /**

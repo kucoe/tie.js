@@ -194,7 +194,7 @@ var _ = {
         if (!obj || !this.isObject(obj)) {
             return obj;
         }
-        var newObj = this.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
+        var newObj = this.isCollection(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
         newObj = this.extend(newObj, obj, function (item) {
             if (item && this.isObject(item)) {
                 item = this.clone(item);
@@ -315,6 +315,37 @@ var _ = {
             }
         }
         return object;
+    },
+
+    /**
+     * Process asynchronous calling or array or object elements and performs callback on every item, when no items left, called last function.
+     *
+     * @param {Object|Array} obj to iterate through
+     * @param {Function} callback function will be called on every element
+     * @param {Function} [last] the last function when all elements processed
+     */
+    async: function(obj, callback, last) {
+        var keys = [];
+        if (this.isCollection(obj)) {
+            var index = -1;
+            var length = obj.length;
+            while (++index < length) {
+                keys.push(index);
+            }
+        } else {
+            keys = Object.keys(obj);
+        }
+
+        function next() {
+            var key = keys.shift();
+            if (key === 0 || key) {
+                var value = obj[key];
+                callback(value, next);
+            } else {
+                last(obj);
+            }
+        }
+        next();
     },
 
     /**

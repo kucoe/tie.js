@@ -58,11 +58,14 @@
      */
     window.tie = tie();
     window.tie.pipes = pipes;
+    window.tie.enableDebug = function (enable) {
+        _.debugEnabled = enable;
+    };
 
     /**
      * Property pipeline definition
      */
-    pipes("property", function (obj, params, value) {
+    pipes("property", function (obj, params, next, value) {
         if (params) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
@@ -72,7 +75,7 @@
                 obj.$prop(prop, value);
             }
         }
-        return obj;
+        next(obj);
     }, {canWrite: true});
 
     /**
@@ -113,5 +116,33 @@
         }
         return obj;
     }, {changeRoutes: true});
+
+    /**
+     * Routes pipeline definition
+     */
+    pipes("load", function (obj, params, next) {
+        var opts = {};
+        if (params) {
+            var trim = this.trim;
+            this.forEach(params, function (item) {
+                var splits = item.split(':');
+                if (splits.length == 2) {
+                    opts[trim(splits[0])] = trim(splits[1]);
+                } else {
+                    opts[trim(splits[0])] = '';
+                }
+            });
+        }
+        obj.http.get(opts, function (data, err) {
+            if (err) {
+                console.err(err);
+            } else if (_.isObject(data)) {
+                _.extend(obj, data);
+            } else {
+                console.log('Response received:' + data);
+            }
+            next(obj);
+        });
+    });
 
 })(window);

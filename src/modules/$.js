@@ -112,7 +112,9 @@ var $ = function (el, bind) {
     }, this);
 
     /**
-     * Processes pipelines of current element
+     * Processes pipelines of current element. All pipes are processed asynchronously and result of the first pipe is passed to next pipe,
+     * that should call next function to activate next pipe. If pipe do not call next function and return result - next function will be called automatically.
+     *
      *
      * @this $
      * @param {Function} next function to be called next
@@ -121,16 +123,27 @@ var $ = function (el, bind) {
     this.pipeline = function (next, value) {
         var res = this.bind.obj;
         if (this.pipes.length > 0) {
-            _.forEach(this.pipes, function (pipe) {
+            _.async(this.pipes, function (pipe, next) {
+                function update(data) {
+                    res = data;
+                    if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
+                        res.$shown = res.$location().route.has(res);
+                    }
+                    next(res);
+                }
+                var c;
                 if (_.isDefined(value)) {
-                    res = pipe.process(res,  value);
+                    c =  pipe.process(res,  update, value);
                 } else {
-                    res = pipe.process(res);
+                    c = pipe.process(res, update);
                 }
-                if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
-                    res.$shown = res.$location().route.has(res);
+                if(c) {
+                    update(c);
                 }
-            }, this)
+
+            }, function() {
+                next(res);
+            })
         } else {
             next(res);
         }
