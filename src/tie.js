@@ -652,7 +652,7 @@
     var defaultResponder = function (model) {
         return function (data, err) {
             if (err) {
-                console.err(err);
+                console.error(err);
             } else if (_.isObject(data)) {
                 _.extend(model, data);
             } else {
@@ -768,7 +768,7 @@
         } else if (_.isObject(onReady)) {
             fn = defaultResponder(onReady);
         }
-        var req = request(xhr, fn);
+        var req = new request(xhr, fn);
         if (cached) {
             callback(req, cached, null);
         } else {
@@ -787,7 +787,7 @@
                 xhr.send(params);
             } catch (error) {
                 xhr = error;
-                callback(p, null, error);
+                callback(req, null, error);
             }
         }
         return req;
@@ -942,6 +942,7 @@
             if (!url) {
                 throw new Error("URL is not defined");
             }
+            return url;
         },
     
         getParams: function () {
@@ -2241,6 +2242,7 @@
                     obj.routes = app.obj.routes;
                 }
             }
+            obj.http = new http(obj.http);
             return new model(obj);
         },
     
@@ -2444,7 +2446,7 @@
         }
         obj.http.get(opts, function (data, err) {
             if (err) {
-                console.err(err);
+                console.error(err);
             } else if (_.isObject(data)) {
                 _.extend(obj, data);
             } else {

@@ -194,7 +194,7 @@ request.prototype = {
 var defaultResponder = function (model) {
     return function (data, err) {
         if (err) {
-            console.err(err);
+            console.error(err);
         } else if (_.isObject(data)) {
             _.extend(model, data);
         } else {
@@ -310,7 +310,7 @@ var ajax = function (opts, onReady, refetch) {
     } else if (_.isObject(onReady)) {
         fn = defaultResponder(onReady);
     }
-    var req = request(xhr, fn);
+    var req = new request(xhr, fn);
     if (cached) {
         callback(req, cached, null);
     } else {
@@ -329,7 +329,7 @@ var ajax = function (opts, onReady, refetch) {
             xhr.send(params);
         } catch (error) {
             xhr = error;
-            callback(p, null, error);
+            callback(req, null, error);
         }
     }
     return req;
@@ -484,6 +484,7 @@ http.prototype = {
         if (!url) {
             throw new Error("URL is not defined");
         }
+        return url;
     },
 
     getParams: function () {

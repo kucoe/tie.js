@@ -135,6 +135,7 @@ tie.prototype = {
                 obj.routes = app.obj.routes;
             }
         }
+        obj.http = new http(obj.http);
         return new model(obj);
     },
 

@@ -135,7 +135,7 @@
         }
         obj.http.get(opts, function (data, err) {
             if (err) {
-                console.err(err);
+                console.error(err);
             } else if (_.isObject(data)) {
                 _.extend(obj, data);
             } else {
