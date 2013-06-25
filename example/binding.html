@@ -17,8 +17,8 @@
 <script>
     tie("label", {
         style: 'color:red',
-        routes: ['labels'],
-        attrs: ['style']._({
+        $routes: ['labels'],
+        $attrs: ['style']._({
             value: function () {
                 return this.$text.value
             }
@@ -45,7 +45,7 @@
             tie('text', 'changed');
         },
         value: 'Out',
-        attrs: ['value']._({
+        $attrs: ['value']._({
             mouseover: '#float',
             mouseout: '#float',
             click: '#trigger'

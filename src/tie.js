@@ -13,13 +13,18 @@
      */
     var APP = 'app';
     var VALUE = 'value';
-    var VALUES = 'values';
+    var VALUES = '$values';
     var TEXT = 'text';
     var SHOWN = '$shown';
     var DEPS = '$deps';
-    var ATTRS = 'attrs';
-    var ROUTES = 'routes';
+    var ATTRS = '$attrs';
+    var ROUTES = '$routes';
+    var HTTP = '$http';
+    var TMPL = '$tmpl';
+    var FORM = '$form';
     var ITEM_NAME = '_item_name';
+    var FETCHED = '_fetched';
+    var RESERVED = [FETCHED, VALUES, SHOWN, DEPS, ATTRS, ROUTES, HTTP, TMPL , FORM, '$attr', '$prop', '$location'];
 
     /**
      * Attribute constants
@@ -66,10 +71,11 @@
          * @param {Object} desc property descriptor if any
          * @param {string} prop property name
          * @param {boolean} [dependency] whether the property refers to dependent tie
+         * @returns boolean whether proxy was added
          */
         var observe = function (obj, desc, prop, dependency) {
             if (desc && desc._proxyMark) {
-                return; //proxy already set
+                return false; //proxy already set
             }
             var newGet = function () {
                 if (desc) {
@@ -80,7 +86,14 @@
                 }
                 return obj.$attr(prop);
             };
+            var changed = function(val) {
+                var prev = newGet();
+                return !_.isEqual(prev, val);
+            };
             var newSet = function (val) {
+                if(!changed(val)) {
+                    return;
+                }
                 if (desc) {
                     if (desc.set) {
                         desc.set.call(this, val);
@@ -92,6 +105,11 @@
                 }
                 if (prop == SHOWN) {
                     bind.show(val);
+                } else if(prop == FETCHED) {
+                    var added = proxy(bind);
+                    if (added.length > 0) {
+                        bind.apply();
+                    }
                 } else {
                     if (prop == ATTRS) {
                         bind.prepareAttrs();
@@ -101,7 +119,7 @@
                         bind.prepareValues();
                     }
                     _.debug("Calling apply on '" + bind.name + "' after changed property '" + prop + "'");
-                    bind.apply();
+                    bind.apply(prop);
                 }
             };
             var enumerable = desc ? desc.enumerable : false;
@@ -112,6 +130,7 @@
                 enumerable: enumerable,
                 _proxyMark: true
             });
+            return true;
         };
     
         /**
@@ -120,49 +139,52 @@
          * Note: will recursively observe property of {Object} type
          *
          * @param {model} obj inspected object
+         * @returns Array list of added properties
          */
         var explore = function (obj) {
-            for (var prop in obj) {
-                if (obj.hasOwnProperty(prop)) {
-                    props.push(prop);
-                    if ('prototype' == prop) {
-                        continue; // skip prototype
-                    }
-                    var desc = Object.getOwnPropertyDescriptor(obj, prop);
-                    if (desc._proxyMark) {
-                        continue; //skip already processed
-                    }
-                    if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
-                        continue; // skip readonly
-                    }
-                    var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
-                    var val = obj[prop];
-                    if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS && prop != VALUES) {
-                        _.debug("Exploring " + prop);
-                        explore(val);
-                    }
-                    _.debug("Observing " + prop);
-                    observe(obj, desc, prop, dep);
+            var added = [];
+            _.forIn(obj, function (value, prop) {
+                props.push(prop);
+                if ('prototype' == prop) {
+                    return false;// skip prototype
                 }
-            }
-            if (obj.attrs) {
-                _.forIn(obj.attrs, function (attr, prop) {
+                var desc = Object.getOwnPropertyDescriptor(obj, prop);
+                if (desc._proxyMark) {
+                    return false; //skip already processed
+                }
+                if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
+                    return false; // skip readonly
+                }
+                var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
+                if (_.isObject(value) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS && prop != VALUES && prop != HTTP) {
+                    _.debug("Exploring " + prop);
+                    explore(value);
+                }
+                _.debug("Observing " + prop);
+                if (observe(obj, desc, prop, dep)) {
+                    added.push(prop);
+                }
+                return true;
+            });
+            if (obj.$attrs) {
+                _.forIn(obj.$attrs, function (attr, prop) {
                     // do not override real properties from object and only when attributes have something to change.
                     if (props.indexOf(prop) == -1 && (attr.property || attr.value)) {
                         _.debug("Observing attribute " + prop);
-                        observe(obj, null, prop);
+                        if(observe(obj, null, prop)) {
+                            added.push(prop);
+                        }
                         props.push(prop);
                     }
                 }, this);
             }
+            return added;
         };
     
         var obj = bind.obj;
         var props = [];
         _.debug("Exploring " + bind.name);
-        explore(obj);
-    
-        return obj;
+        return explore(obj);
     };
     
     /**
@@ -182,8 +204,8 @@
          * @param {bind} app info
          */
         init: function (app) {
-            if (app.obj.routes) {
-                _.forIn(app.obj.routes, function (r, path) {
+            if (app.obj.$routes) {
+                _.forIn(app.obj.$routes, function (r, path) {
                     path = path.toLowerCase();
                     this.list[path] = new route(path, r.handler);
                 }, this);
@@ -209,7 +231,7 @@
             var current = window.location.hash.substring(1);
             current = this.find(current);
             if (!current) {
-                if (app.obj.routes) {
+                if (app.obj.$routes) {
                     this.move('/');
                 } else {
                     _.debug("Process default route");
@@ -232,29 +254,30 @@
                 }
             } else {
                 _.debug("Process route " + current.path);
-                app.location = function (url) {
+                var that = this;
+                app.$location = function (url) {
                     if (url) {
-                        this.move(url);
+                        that.move(url);
                         return null;
                     }
                     return {
                         href: window.location.href,
                         route: current
                     };
-                }.bind(this);
+                };
                 if (current.handler) {
                     safeCall(current.handler, app.obj);
                 }
                 _.forIn(ties, function (bind) {
                     var obj = bind.obj;
-                    obj.$location = app.location;
+                    obj.$location = app.$location;
                     var shown = current.has(obj);
                     obj.$shown = shown;
                     if (!bind.rendered) {
                         bind.render();
                     }
                     bind.validateShow();
-                    var bindRoutes = obj.routes;
+                    var bindRoutes = obj.$routes;
                     if (bindRoutes && shown) {
                         var r = bindRoutes[current.path];
                         if (r && r.handler) {
@@ -317,7 +340,7 @@
          * @returns {boolean}
          */
         has: function (obj) {
-            var routes = obj.routes;
+            var routes = obj.$routes;
             if (routes) {
                 var exclude = routes['-'] != null;
                 var contains = false;
@@ -342,16 +365,16 @@
      *
      * @param {string} name pipe name
      * @param {Function} [fn] pipe function that will accept. If not defined existed pipe will return.
-     * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs) default to false
+     * @param {Object} [opts] options (updateModel, updateRoute, fetchModel) default to false
      */
     var pipes = function (name, fn, opts) {
         if (_.isUndefined(fn)) {
             return pipesRegistry[name];
         }
         var defOpts = {
-            canWrite: false,
-            changeRoutes: false,
-            changeAttrs: false
+            fetchModel: false,
+            updateModel: false,
+            updateRoutes: false
         };
         if (_.isDefined(opts)) {
             _.extend(defOpts, opts);
@@ -399,9 +422,11 @@
          * @param {Object} [value] new object value
          */
         process: function (obj, next, value) {
-            var pipe = pipesRegistry[this.name];
+            var name = this.name;
+            _.debug("Process pipe " + name);
+            var pipe = pipesRegistry[name];
             if (!pipe) {
-                throw new Error('Pipe ' + this.name + ' not found');
+                throw new Error('Pipe ' + name + ' not found');
             }
             var fn = pipe.fn;
             var params = [];
@@ -414,22 +439,34 @@
                     params.push(param);
                 });
             }
-            var res = _.isDefined(value) && this.canWrite() ? obj : _.clone(obj);
+            var res = obj;
             if (fn && _.isFunction(fn)) {
                 res = safeCall(fn, pipe, true, res, params, next, value);
             }
+            _.debug("Ready pipe " + name);
             return res;
         },
     
         /**
-         * Returns whether this pipe can change object value.
+         * Returns whether this pipe can fetch object model.
          *
          * @this pipe
          * @return boolean
          */
-        canWrite: function () {
+        fetchModel: function () {
             var pipe = pipesRegistry[this.name];
-            return pipe ? pipe.opts.canWrite : false;
+            return pipe ? pipe.opts.fetchModel : false;
+        },
+    
+        /**
+         * Returns whether this pipe can change object model.
+         *
+         * @this pipe
+         * @return boolean
+         */
+        updateModel: function () {
+            var pipe = pipesRegistry[this.name];
+            return pipe ? pipe.opts.updateModel : false;
         },
     
         /**
@@ -438,21 +475,11 @@
          * @this pipe
          * @return boolean
          */
-        changeRoutes: function () {
+        updateRoutes: function () {
             var pipe = pipesRegistry[this.name];
-            return pipe ? pipe.opts.changeRoutes : false;
-        },
-    
-        /**
-         * Returns whether this pipe can change attributes.
-         *
-         * @this pipe
-         * @return boolean
-         */
-        changeAttrs: function () {
-            var pipe = pipesRegistry[this.name];
-            return pipe ? pipe.opts.changeAttrs : false;
+            return pipe ? pipe.opts.updateRoutes : false;
         }
+    
     };
     
     
@@ -511,19 +538,19 @@
      *
      * @param {request} request
      * @param {string} dataType
-     * @returns {*}
+     * @returns {Array}
      */
     var status = function (request, dataType) {
         var xhr = request.xhr;
         var status = xhr.status;
+        var err, data;
         if ((status >= 200 && status < 300) || status === 0) {
-            var data = response(request, xhr, dataType);
-            callback(request, data, null);
-            return data;
+            data = response(request, xhr, dataType);
         } else {
-            callback(request, xhr.responseText, status);
+            data = xhr.responseText;
+            err = status;
         }
-        return null;
+        return [data, err];
     };
     
     /**
@@ -547,6 +574,22 @@
         _.forIn(headers, function (header, name) {
             xhr.setRequestHeader(name, header);
         });
+    };
+    
+    var stateChange = function (req, xhr, url, dataType, type, opts) {
+        return function () {
+            if (xhr.readyState === 4) {
+                _.debug("Process response");
+                var st = status(req, dataType);
+                var data = st[0];
+                var err = st[1];
+                if (!err && _.isObject(data) && type === defaults.type && opts.cache) {
+                    opts.memo(url, dataType, data);
+                }
+                callback(req, data, err);
+            }
+            return null;
+        }
     };
     
     var response = function (request, xhr, dataType) {
@@ -655,6 +698,7 @@
                 console.error(err);
             } else if (_.isObject(data)) {
                 _.extend(model, data);
+                model._fetched = true;
             } else {
                 console.log('Response received:' + data);
             }
@@ -671,17 +715,17 @@
      * @returns {string}
      */
     var prepareURL = function (url, params) {
-        if(!url) {
+        if (!url) {
             return url;
         }
         var index = url.indexOf('?');
         var clearUrl = url.substring(0, index + 1 ? index : url.length);
         var splits = clearUrl.split('/');
-        _.forEach(splits, function(split) {
-            if(split[0] === ':') {
+        _.forEach(splits, function (split) {
+            if (split[0] === ':') {
                 var name = split.substr(1);
                 var val = params[ name];
-                if(_.isDefined(val)) {
+                if (_.isDefined(val)) {
                     url.replace(split, val);
                     delete  params[name];
                 }
@@ -750,6 +794,7 @@
         var heads = opts.getHeaders();
         var cached = null;
         url = prepareURL(url, params);
+        _.debug("Ajax call to " + url);
         if (type === defaults.type) {
             url += gatherParams(params, url);
             if (opts.cache && !refetch) {
@@ -770,20 +815,14 @@
         }
         var req = new request(xhr, fn);
         if (cached) {
+            _.debug("Got cached result");
             callback(req, cached, null);
         } else {
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    var data = status(req, dataType);
-                    if (data && type === defaults.type && opts.cache) {
-                        opts.memo(url, dataType, data);
-                    }
-                }
-                return null;
-            };
+            xhr.onreadystatechange = stateChange(req, xhr, url, dataType, type, opts);
             xhr.open(type, url);
             headers(xhr, heads, contentType, dataType);
             try {
+                _.debug("Send request");
                 xhr.send(params);
             } catch (error) {
                 xhr = error;
@@ -810,6 +849,7 @@
         var script = window.document.createElement("script");
         url = prepareURL(url, params);
         url += gatherParams(params, url);
+        _.debug("JSONP call to " + url);
         var cached = null;
         if (opts.cache && !refetch) {
             cached = opts.memo(url, defaults.mime);
@@ -822,16 +862,19 @@
         }
         var req = new request(null, fn);
         if (cached) {
+            _.debug("Got cached result");
             req.done(cached, null);
         } else {
             var callbackName = "jsonp" + _.uid();
             window[callbackName] = function (response) {
                 head.removeChild(script);
                 delete window[callbackName];
+                _.debug("Process response");
                 opts.memo(url, defaults.mime, response);
                 return req.done(response, null);
             };
     
+            _.debug("Create JSONP request");
             script.type = "text/javascript";
             script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
             head.appendChild(script);
@@ -933,7 +976,7 @@
          * or model to be updated with response values
          * @return request
          */
-        delete: function (params, onReady) {
+        "delete": function (params, onReady) {
             return form(this, "DELETE", params, onReady);
         },
     
@@ -1044,19 +1087,21 @@
      * @param {bind} bind element bound tie
      */
     var $ = function (el, bind) {
+        var that = this;
         var listener = function (event) {
             _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
-            var value = this.value();
+            var value = that.value();
             value = _.trim(value);
     
-            if (this.pipes.length > 0) {
-                this.pipeline(function(){}, value);
+            if (that.pipes.length > 0) {
+                that.pipeline(function () {
+                }, value);
             } else {
                 if (bind.obj.value !== value) {
                     bind.obj.value = value;
                 }
             }
-        }.bind(this);
+        };
     
         var idx = el.getAttribute(INDEX);
         this.$ = el;
@@ -1071,7 +1116,7 @@
         this.shown = true;
         this.textEl = null;
     
-        if(this.isInput) {
+        if (this.isInput) {
             if (!this.hasCheck) {
                 if ('oninput' in el) {
                     _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
@@ -1107,28 +1152,38 @@
          * @param {*} [value] value to use in pipeline
          */
         this.pipeline = function (next, value) {
-            var res = this.bind.obj;
+            var orig = this.bind.obj;
+            var bind = this.bind;
+            var res = orig;
             if (this.pipes.length > 0) {
-                _.async(this.pipes, function (pipe, next) {
-                    function update(data) {
+                _.sequence(this.pipes, function (pipe, next) {
+                    var update = function (data) {
                         res = data;
-                        if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
+                        if (pipe.updateRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
                             res.$shown = res.$location().route.has(res);
                         }
+                        if ((_.isDefined(value) && pipe.updateModel()) || (pipe.fetchModel() && _.isUndefined(value))) {
+                            _.extend(orig, data);
+                            res._fetched  = orig._fetched = true;
+    
+                        }
                         next(res);
-                    }
+                    };
                     var c;
+                    var clone = _.clone(res);
                     if (_.isDefined(value)) {
-                        c =  pipe.process(res,  update, value);
+                        c = pipe.process(clone, update, value);
                     } else {
-                        c = pipe.process(res, update);
+                        c = pipe.process(clone, update);
                     }
-                    if(c) {
+                    if (c) {
                         update(c);
                     }
     
-                }, function() {
-                    next(res);
+                }, function () {
+                    if (next) {
+                        next(res);
+                    }
                 })
             } else {
                 next(res);
@@ -1161,11 +1216,12 @@
                 if (handler) {
                     this.$.removeEventListener(name, handler);
                 }
+                var that = this;
                 handler = function (event) {
-                    event.index = this.index;
-                    event.tie = this.tie;
-                    safeCall(value, this.bind.obj, this.bind.obj.$ready(), event);
-                }.bind(this);
+                    event.index = that.index;
+                    event.tie = that.tie;
+                    safeCall(value, that.bind.obj, that.bind.obj.$ready(), event);
+                };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
             } else {
@@ -1310,405 +1366,529 @@
      */
     var _ = {
     
-        /**
-         * Enables debug mode.
-         *
-         * @property debugEnabled default to true
-         */
-        debugEnabled: false,
+            /**
+             * Enables debug mode.
+             *
+             * @property debugEnabled default to true
+             */
+            debugEnabled: false,
     
-        /**
-         * Whether value is undefined
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isUndefined: function (value) {
-            return value == undefined;
-        },
+            /**
+             * Whether value is undefined
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isUndefined: function (value) {
+                return value == undefined;
+            },
     
-        /**
-         * Whether value is defined
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isDefined: function (value) {
-            return value != undefined;
-        },
+            /**
+             * Whether value is defined
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isDefined: function (value) {
+                return value != undefined;
+            },
     
-        /**
-         * Whether value is object
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isObject: function (value) {
-            return value != null && typeof value == 'object';
-        },
+            /**
+             * Whether value is object
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isObject: function (value) {
+                return value != null && typeof value == 'object';
+            },
     
-        /**
-         * Whether value is string
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isString: function (value) {
-            return typeof value == 'string';
-        },
+            /**
+             * Whether value is string
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isString: function (value) {
+                return typeof value == 'string';
+            },
     
-        /**
-         * Whether value is number
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isNumber: function (value) {
-            return typeof value == 'number';
-        },
+            /**
+             * Whether value is number
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isNumber: function (value) {
+                return typeof value == 'number';
+            },
     
-        /**
-         * Whether value is date
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isDate: function (value) {
-            return Object.prototype.toString.apply(value) == '[object Date]';
-        },
+            /**
+             * Whether value is date
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isDate: function (value) {
+                return Object.prototype.toString.apply(value) == '[object Date]';
+            },
     
-        /**
-         * Whether value is array. Exact array match. Array-like objects (arguments, node lists) will not pass that check.
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isArray: function (value) {
-            return Array.isArray(value) || Object.prototype.toString.apply(value) == '[object Array]';
-        },
+            /**
+             * Whether value is array. Exact array match. Array-like objects (arguments, node lists) will not pass that check.
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isArray: function (value) {
+                return Array.isArray(value) || Object.prototype.toString.apply(value) == '[object Array]';
+            },
     
-        /**
-         * Whether value is array or array-like. Array-like objects (arguments, node lists) will pass that check.
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isCollection: function (value) {
-            return this.isArray(value) || value instanceof Array
-                || Object.prototype.toString.apply(value) == '[object NodeList]'
-                || Object.prototype.toString.apply(value) == '[object NamedNodeMap]'
-                || Object.prototype.toString.apply(value) == '[object Arguments]';
-        },
+            /**
+             * Whether value is array or array-like. Array-like objects (arguments, node lists) will pass that check.
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isCollection: function (value) {
+                return this.isArray(value) || value instanceof Array
+                    || Object.prototype.toString.apply(value) == '[object NodeList]'
+                    || Object.prototype.toString.apply(value) == '[object NamedNodeMap]'
+                    || Object.prototype.toString.apply(value) == '[object Arguments]';
+            },
     
-        /**
-         * Whether value is function.
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isFunction: function (value) {
-            return typeof value == 'function';
-        },
+            /**
+             * Whether value is function.
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isFunction: function (value) {
+                return typeof value == 'function';
+            },
     
-        /**
-         * Whether value is boolean.
-         *
-         * @param {*} value
-         * @returns boolean
-         */
-        isBoolean: function (value) {
-            return typeof value == 'boolean';
-        },
+            /**
+             * Whether value is boolean.
+             *
+             * @param {*} value
+             * @returns boolean
+             */
+            isBoolean: function (value) {
+                return typeof value == 'boolean';
+            },
     
-        /**
-         * Remove trailing whitespaces from string.
-         *
-         * @param {string} value
-         * @returns string
-         */
-        trim: function (value) {
-            return this.isString(value) ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
-        },
+            /**
+             * Remove trailing whitespaces from string.
+             *
+             * @param {string} value
+             * @returns string
+             */
+            trim: function (value) {
+                return this.isString(value) ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
+            },
     
-        /**
-         * Converts string to lower case.
-         *
-         * @param {string} string
-         * @returns string
-         */
-        lowercase: function (string) {
-            return this.isString(string) ? string.toLowerCase() : string;
-        },
+            /**
+             * Converts string to lower case.
+             *
+             * @param {string} string
+             * @returns string
+             */
+            lowercase: function (string) {
+                return this.isString(string) ? string.toLowerCase() : string;
+            },
     
-        /**
-         * Converts string to upper case.
-         *
-         * @param {string} string
-         * @returns string
-         */
-        uppercase: function (string) {
-            return this.isString(string) ? string.toUpperCase() : string;
-        },
+            /**
+             * Converts string to upper case.
+             *
+             * @param {string} string
+             * @returns string
+             */
+            uppercase: function (string) {
+                return this.isString(string) ? string.toUpperCase() : string;
+            },
     
-        /**
-         * Converts string to integer.
-         *
-         * @param {string} string
-         * @returns number
-         */
-        toInt: function (string) {
-            return parseInt(string, 10);
-        },
+            /**
+             * Converts string to integer.
+             *
+             * @param {string} string
+             * @returns number
+             */
+            toInt: function (string) {
+                return parseInt(string, 10);
+            },
     
-        /**
-         * Converts string to float.
-         *
-         * @param {string} string
-         * @returns number
-         */
-        toFloat: function (string) {
-            return parseFloat(string);
-        },
+            /**
+             * Converts string to float.
+             *
+             * @param {string} string
+             * @returns number
+             */
+            toFloat: function (string) {
+                return parseFloat(string);
+            },
     
-        /**
-         * Compares two strings ignoring case.
-         *
-         * @param {string} string1
-         * @param {string} string2
-         * @returns boolean
-         */
-        eqi: function (string1, string2) {
-            return this.lowercase(string1) === this.lowercase(string2);
-        },
+            /**
+             * Compares two strings ignoring case.
+             *
+             * @param {string} string1
+             * @param {string} string2
+             * @returns boolean
+             */
+            eqi: function (string1, string2) {
+                return this.lowercase(string1) === this.lowercase(string2);
+            },
     
-        /**
-         * Clones object using deep referencing.
-         *
-         * @param {*} obj
-         * @returns Object|Array clone
-         */
-        clone: function (obj) {
-            if (!obj || !this.isObject(obj)) {
-                return obj;
-            }
-            var newObj = this.isCollection(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
-            newObj = this.extend(newObj, obj, function (item) {
-                if (item && this.isObject(item)) {
-                    item = this.clone(item);
+            /**
+             * Performs a deep comparison between two values to determine if they are
+             * equivalent to each other.
+             *
+             * @param {Mixed} a The value to compare.
+             * @param {Mixed} b The other value to compare.
+             * @param {Array} [aStack=[]] Tracks traversed `a` objects.
+             * @param {Array} [bStack=[]] Tracks traversed `b` objects.
+             * @returns {Boolean} Returns `true`, if the values are equivalent, else `false`.
+             */
+            isEqual: function (a, b, aStack, bStack) {
+                // Identical objects are equal. `0 === -0`, but they aren't identical.
+                // See the [Harmony `egal` proposal](http://wiki.ecmascript.org/doku.php?id=harmony:egal).
+                if (a === b) {
+                    return a !== 0 || 1 / a == 1 / b;
                 }
-                return item;
-            }.bind(this));
-            return newObj;
-        },
-    
-        /**
-         * Converts string to object of guessing type.
-         *
-         * Note: supports integer, float, boolean, string. String will be cleaned from quotes.
-         *
-         * @param {string} string
-         * @param {Object} [context] object to get properties
-         */
-        convert: function (string, context) {
-            var res = string;
-            var reviver = function (k, v) {
-                if (_.isString(v) && v[0] == '#') {
-                    return context[v.substring(1)];
+                // A strict comparison is necessary because `null == undefined`.
+                if (a == null || b == null) {
+                    return a === b;
                 }
-                return v;
-            };
-            if ('true' === string) {
-                res = true
-            } else if ('false' === string) {
-                res = false
-            } else if (/^\d*$/.test(string)) {
-                if (string.indexOf('.') != -1) {
-                    res = this.toFloat(string);
+                // Compare `[[Class]]` names.
+                var className = Object.prototype.toString.call(a);
+                if (className != Object.prototype.toString.call(b)) {
+                    return false;
+                }
+                switch (className) {
+                    // Strings, numbers, dates, and booleans are compared by value.
+                    case '[object String]':
+                        // Primitives and their corresponding object wrappers are equivalent; thus, `"5"` is
+                        // equivalent to `new String("5")`.
+                        return a == String(b);
+                    case '[object Number]':
+                        // `NaN`s are equivalent, but non-reflexive. An `egal` comparison is performed for
+                        // other numeric values.
+                        return a != +a ? b != +b : (a == 0 ? 1 / a == 1 / b : a == +b);
+                    case '[object Date]':
+                    case '[object Boolean]':
+                        // Coerce dates and booleans to numeric primitive values. Dates are compared by their
+                        // millisecond representations. Note that invalid dates with millisecond representations
+                        // of `NaN` are not equivalent.
+                        return +a == +b;
+                    // RegExps are compared by their source patterns and flags.
+                    case '[object RegExp]':
+                        return a.source == b.source &&
+                            a.global == b.global &&
+                            a.multiline == b.multiline &&
+                            a.ignoreCase == b.ignoreCase;
+                }
+                if (typeof a != 'object' || typeof b != 'object') {
+                    return false;
+                }
+    
+                if(this.isUndefined(aStack)) {
+                    aStack = [];
+                }
+                if(this.isUndefined(bStack)) {
+                    bStack = [];
+                }
+                // Assume equality for cyclic structures. The algorithm for detecting cyclic
+                // structures is adapted from ES 5.1 section 15.12.3, abstract operation `JO`.
+                var length = aStack.length;
+                while (length--) {
+                    // Linear search. Performance is inversely proportional to the number of
+                    // unique nested structures.
+                    if (aStack[length] == a) {
+                        return bStack[length] == b;
+                    }
+                }
+                // Add the first object to the stack of traversed objects.
+                aStack.push(a);
+                bStack.push(b);
+                var size = 0, result = true;
+                // Recursively compare objects and arrays.
+                if (className == '[object Array]') {
+                    // Compare array lengths to determine if a deep comparison is necessary.
+                    size = a.length;
+                    result = size == b.length;
+                    if (result) {
+                        // Deep compare the contents, ignoring non-numeric properties.
+                        while (size--) {
+                            if (!(result = this.isEqual(a[size], b[size], aStack, bStack))) {
+                                break;
+                            }
+                        }
+                    }
                 } else {
-                    res = this.toInt(string);
+                    // Objects with different constructors are not equivalent, but `Object`s
+                    // from different frames are.
+                    var aCtor = a.constructor, bCtor = b.constructor;
+                    if (aCtor !== bCtor && !(this.isFunction(aCtor) && (aCtor instanceof aCtor) &&
+                        this.isFunction(bCtor) && (bCtor instanceof bCtor))) {
+                        return false;
+                    }
+                    // Deep compare objects.
+                    this.forIn(a, function (value, prop) {
+                        size++;
+                        if (!(result = b.hasOwnProperty(prop) && _.isEqual(value, b[prop], aStack, bStack))) {
+                            return false;
+                        }
+                        return true;
+                    });
+                    // Ensure that both objects contain the same number of properties.
+                    if (result) {
+                        this.forIn(b, function (value, prop) {
+                            if (!(size--)) {
+                                return false;
+                            }
+                            return true;
+                        });
+                        result = !size;
+                    }
                 }
-            } else if (string[0] == '[' && string[string.length - 1] == "]") {
-                string = string.replace(/'/g, '"');
-                res = JSON.parse(string, reviver);
-            } else if (string[0] == '{' && string[string.length - 1] == "}") {
-                string = string.replace(/'/g, '"');
-                res = JSON.parse(string, reviver);
-            } else if (string[0] == '"' || string[0] == "'") {
-                res = string.substring(1, string.length - 1);
-            }
-            return res;
-        },
+                // Remove the first object from the stack of traversed objects.
+                aStack.pop();
+                bStack.pop();
+                return result;
+            },
     
-        /**
-         * Iterates through collection calling callback on every element. If only one item passed will call on it.
-         *
-         * For ex.
-         *  <pre>
-         *      forEach(array, function(item, i, collection){
+            /**
+             * Clones object using deep referencing.
+             *
+             * @param {*} obj
+             * @returns Object|Array clone
+             */
+            clone: function (obj) {
+                if (!obj || !this.isObject(obj)) {
+                    return obj;
+                }
+                var newObj = this.isCollection(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
+                newObj = this.extend(newObj, obj, function (item) {
+                    return _.clone(item);
+                });
+                return newObj;
+            },
+    
+            /**
+             * Converts string to object of guessing type.
+             *
+             * Note: supports integer, float, boolean, string. String will be cleaned from quotes.
+             *
+             * @param {string} string
+             * @param {Object} [context] object to get properties
+             */
+            convert: function (string, context) {
+                var res = string;
+                var reviver = function (k, v) {
+                    if (_.isString(v) && v[0] == '#') {
+                        return context[v.substring(1)];
+                    }
+                    return v;
+                };
+                if ('true' === string) {
+                    res = true
+                } else if ('false' === string) {
+                    res = false
+                } else if (/^\d*$/.test(string)) {
+                    if (string.indexOf('.') != -1) {
+                        res = this.toFloat(string);
+                    } else {
+                        res = this.toInt(string);
+                    }
+                } else if (string[0] == '[' && string[string.length - 1] == "]") {
+                    string = string.replace(/'/g, '"');
+                    res = JSON.parse(string, reviver);
+                } else if (string[0] == '{' && string[string.length - 1] == "}") {
+                    string = string.replace(/'/g, '"');
+                    res = JSON.parse(string, reviver);
+                } else if (string[0] == '"' || string[0] == "'") {
+                    res = string.substring(1, string.length - 1);
+                }
+                return res;
+            },
+    
+            /**
+             * Iterates through collection calling callback on every element. If only one item passed will call on it.
+             *
+             * For ex.
+             *  <pre>
+             *      forEach(array, function(item, i, collection){
          *          item.idx = i;
          *      })
-         *  </pre>
-         *
-         * @param {Array|Object} collection
-         * @param {Function} callback function
-         * @param {Object} [thisArg] this object inside your callback
-         * @param {boolean} [safe] if true will iterate over copy of collection, so you can easily remove elements from collection
-         */
-        forEach: function (collection, callback, thisArg, safe) {
-            if (!thisArg) {
-                thisArg = this;
-            }
-            if (callback) {
-                if (this.isCollection(collection)) {
-                    var index = -1;
-                    var length = collection.length;
-                    var coll = [];
-                    if (safe) {
-                        while (++index < length) {
-                            coll.push(collection[index]);
-                        }
-                        index = -1;
-                    } else {
-                        coll = collection;
-                    }
-                    while (++index < length) {
-                        if (callback.call(thisArg, coll[index], index, collection) === false) {
-                            break;
-                        }
-                    }
-                } else {
-                    callback.call(thisArg, collection, 0, [collection]);
+             *  </pre>
+             *
+             * @param {Array|Object} collection
+             * @param {Function} callback function
+             * @param {Object} [thisArg] this object inside your callback
+             * @param {boolean} [safe] if true will iterate over copy of collection, so you can easily remove elements from collection
+             */
+            forEach: function (collection, callback, thisArg, safe) {
+                if (!thisArg) {
+                    thisArg = this;
                 }
-            }
-            return collection;
-        },
+                if (callback) {
+                    if (this.isCollection(collection)) {
+                        var index = -1;
+                        var length = collection.length;
+                        var coll = [];
+                        if (safe) {
+                            while (++index < length) {
+                                coll.push(collection[index]);
+                            }
+                            index = -1;
+                        } else {
+                            coll = collection;
+                        }
+                        while (++index < length) {
+                            if (callback.call(thisArg, coll[index], index, collection) === false) {
+                                break;
+                            }
+                        }
+                    } else {
+                        callback.call(thisArg, collection, 0, [collection]);
+                    }
+                }
+                return collection;
+            },
     
-        /**
-         * Iterates through object own properties calling callback on every property.
-         *
-         * For ex.
-         *  <blockquote>
-         *      forIn(obj, function(value, prop, obj){
+            /**
+             * Iterates through object own properties calling callback on every property.
+             *
+             * For ex.
+             *  <blockquote>
+             *      forIn(obj, function(value, prop, obj){
          *          value.prop = prop;
          *      })
-         *  </pre>
-         *
-         * @param {Object} object
-         * @param {Function} callback function
-         * @param {Object} [thisArg] this object inside your callback
-         * @param {boolean} [all = false] whether iterate  through all properties
-         */
-        forIn: function (object, callback, thisArg, all) {
-            if (!thisArg) {
-                thisArg = this;
-            }
-            if (callback) {
-                for (var prop in object) {
-                    if (object.hasOwnProperty(prop) || all) {
-                        if (callback.call(thisArg, object[prop], prop, object) === false) {
-                            break;
+             *  </pre>
+             *
+             * @param {Object} object
+             * @param {Function} callback function
+             * @param {Object} [thisArg] this object inside your callback
+             * @param {boolean} [all = false] whether iterate  through all properties
+             */
+            forIn: function (object, callback, thisArg, all) {
+                if (!thisArg) {
+                    thisArg = this;
+                }
+                if (callback) {
+                    for (var prop in object) {
+                        if (object.hasOwnProperty(prop) || all) {
+                            if (callback.call(thisArg, object[prop], prop, object) === false) {
+                                break;
+                            }
                         }
                     }
                 }
-            }
-            return object;
-        },
+                return object;
+            },
     
-        /**
-         * Process asynchronous calling or array or object elements and performs callback on every item, when no items left, called last function.
-         *
-         * @param {Object|Array} obj to iterate through
-         * @param {Function} callback function will be called on every element
-         * @param {Function} [last] the last function when all elements processed
-         */
-        async: function(obj, callback, last) {
-            var keys = [];
-            if (this.isCollection(obj)) {
-                var index = -1;
-                var length = obj.length;
-                while (++index < length) {
-                    keys.push(index);
+            /**
+             * Process asynchronous calling or array or object elements and performs callback on every item, when no items left, called last function.
+             *
+             * @param {Object|Array} obj to iterate through
+             * @param {Function} callback function will be called on every element
+             * @param {Function} [last] the last function when all elements processed
+             * @param {Object} [thisArg] this object inside your callback
+             */
+            sequence: function (obj, callback, last, thisArg) {
+                var keys = [];
+                if (!thisArg) {
+                    thisArg = this;
                 }
-            } else {
-                keys = Object.keys(obj);
-            }
+                if (callback) {
+                    if (this.isCollection(obj)) {
+                        var index = -1;
+                        var length = obj.length;
+                        while (++index < length) {
+                            keys.push(index);
+                        }
+                    } else {
+                        keys = Object.keys(obj);
+                    }
     
-            function next() {
-                var key = keys.shift();
-                if (key === 0 || key) {
-                    var value = obj[key];
-                    callback(value, next);
-                } else {
-                    last(obj);
+                    var next = function () {
+                        var key = keys.shift();
+                        if (key === 0 || key) {
+                            var value = obj[key];
+                            callback.call(thisArg, value, next);
+                        } else {
+                            if (last) {
+                                last.call(thisArg, obj);
+                            }
+                        }
+                    }
+                    next();
                 }
-            }
-            next();
-        },
+            },
     
-        /**
-         * Generates unique identifier
-         *
-         * @returns string
-         */
-        uid: function () {
-            return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
-        },
+            /**
+             * Generates unique identifier
+             *
+             * @returns string
+             */
+            uid: function () {
+                return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
+            },
     
-        /**
-         * Copies all properties/items of source to destination. Supports collections and objects.
-         *
-         * For ex.
-         *  <pre>
-         *      extend([], array, function(item, i){
+            /**
+             * Copies all properties/items of source to destination. Supports collections and objects.
+             *
+             * For ex.
+             *  <pre>
+             *      extend([], array, function(item, i){
          *          if(i == 0) return 'a';
          *          return item;
          *      });
-         *      extend({}, obj, function(value, prop){
+             *      extend({}, obj, function(value, prop){
          *          if(prop == 'name') return 'a';
          *          return value;
          *      });
-         *  </pre>
-         *
-         * @param {Array|Object} destination
-         * @param {Array|Object} source
-         * @param {Function} [fn] Function to be called on every item/property to change the item.
-         * @returns Object|Array
-         */
-        extend: function (destination, source, fn) {
-            if (this.isCollection(destination) && this.isCollection(source)) {
-                this.forEach(source, function (item, i) {
-                    if (fn) {
-                        item = fn(item, i);
-                    }
-                    destination.push(item);
-                });
-            } else {
-                this.forIn(source, function (value, prop) {
-                    if (fn) {
-                        value = fn(value, prop);
-                    }
-                    destination[prop] = value;
-                }, this);
-            }
-            return destination;
-        },
-    
-        /**
-         * Writes debug string to console if debug enabled.
-         *
-         * @param {string} message
-         * @param {string} [group] starts new collapsed group
-         */
-        debug: function (message, group) {
-            if (this.debugEnabled) {
-                if (group) {
-                    console.groupEnd();
-                    console.groupCollapsed(group);
+             *  </pre>
+             *
+             * @param {Array|Object} destination
+             * @param {Array|Object} source
+             * @param {Function} [fn] Function to be called on every item/property to change the item.
+             * @returns Object|Array
+             */
+            extend: function (destination, source, fn) {
+                if (this.isCollection(destination) && this.isCollection(source)) {
+                    this.forEach(source, function (item, i) {
+                        if (fn) {
+                            item = fn(item, i);
+                        }
+                        destination.push(item);
+                    });
+                } else {
+                    this.forIn(source, function (value, prop) {
+                        if (fn) {
+                            value = fn(value, prop);
+                        }
+                        destination[prop] = value;
+                    }, this);
                 }
-                console.log(message);
+                return destination;
+            },
+    
+            /**
+             * Writes debug string to console if debug enabled.
+             *
+             * @param {string} message
+             * @param {string} [group] starts new collapsed group
+             */
+            debug: function (message, group) {
+                if (this.debugEnabled) {
+                    if (group) {
+                        console.groupEnd();
+                        console.groupCollapsed(group);
+                    }
+                    console.log(message);
+                }
             }
         }
-    };
+        ;
     
     /**
      * Model object wrapper. In fact is created to extend originally passed object with utilities.
@@ -1719,6 +1899,7 @@
      * @param {Object} obj
      */
     var model = function (obj) {
+        this._fetched = false;
         _.extend(this, obj);
     };
     
@@ -1732,8 +1913,8 @@
      * @param {*} value attribute object
      */
     model.prototype.$attr = function (name, value) {
-        if (this.attrs) {
-            var attr = this.attrs[name];
+        if (this.$attrs) {
+            var attr = this.$attrs[name];
             if (_.isUndefined(value)) {
                 if (attr) {
                     return attr.val(this);
@@ -1764,6 +1945,9 @@
         while (i < length) {
             res = res[split[i - 1]];
             i++;
+            if (_.isUndefined(res)) {
+                return null;
+            }
         }
         var last = split[length - 1];
         if (_.isUndefined(value)) {
@@ -1836,7 +2020,7 @@
         if (_.isUndefined(idx)) {
             idx = -1;
         }
-        var values = obj.values;
+        var values = obj.$values;
         if (idx >= 0 && values && _.isDefined(values[idx][name])) {
             return values[idx][name];
         }
@@ -1893,6 +2077,7 @@
         this.values = {};
         this.depends = dependencies || [];
         this.rendered = false;
+        this.rendering = false;
         this.loaded = false;
         this.loading = false;
         this.selected = false;
@@ -1904,14 +2089,15 @@
          * Apply model changes. It renders current bind and updates dependencies.
          *
          * @this bind
+         * @param {string} property changed property name
          */
-        this.apply = function () {
+        this.apply = function (property) {
             this.applyCount++;
             if (this.applyCount > 10) {
                 _.debug("Too many apply :" + this.name + " - " + this.applyCount);
             }
             if (this.rendered) {
-                this.render();
+                this.render(property);
             }
             _.forEach(this.touch, function (item) {
                 var tie = ties[item];
@@ -1920,10 +2106,11 @@
                 }
             }, this);
             if (!this.timeout) {
+                var that = this;
                 this.timeout = setTimeout(function () {
-                    this.timeout = null;
-                    this.applyCount = 0;
-                }.bind(this), 3000);
+                    that.timeout = null;
+                    that.applyCount = 0;
+                }, 3000);
             }
         };
     };
@@ -1936,18 +2123,18 @@
          * @this bind
          */
         prepareRoutes: function () {
-            var routes = this.obj.routes;
+            var routes = this.obj.$routes;
             if (routes) {
                 if (_.isArray(routes)) {
-                    this.obj.routes = routes._({});
+                    this.obj.$routes = routes._({});
                 }
-                _.forIn(this.obj.routes, function (route, path) {
+                _.forIn(this.obj.$routes, function (route, path) {
                     if (_.isFunction(route)) {
                         route = {path: path, handler: route}
                     } else {
                         route = {path: path}
                     }
-                    this.obj.routes[path] = route;
+                    this.obj.$routes[path] = route;
                 }, this);
             }
         },
@@ -1958,12 +2145,12 @@
          * @this bind
          */
         prepareAttrs: function () {
-            var attrs = this.obj.attrs;
+            var attrs = this.obj.$attrs;
             if (attrs) {
                 if (_.isArray(attrs)) {
-                    this.obj.attrs = attrs._({});
+                    this.obj.$attrs = attrs._({});
                 }
-                _.forIn(this.obj.attrs, function (attr, name) {
+                _.forIn(this.obj.$attrs, function (attr, name) {
                     if (_.isString(attr) && attr[0] == '#') {
                         attr = {name: name, property: attr.substring(1)}
                     } else if (_.isFunction(attr)) {
@@ -1974,7 +2161,7 @@
                         attr = {name: name, value: attr}
                     }
                     attr.val = valueFn;
-                    this.obj.attrs[name] = attr;
+                    this.obj.$attrs[name] = attr;
                 }, this);
             }
         },
@@ -1985,7 +2172,7 @@
          * @this bind
          */
         prepareValues: function () {
-            var values = this.obj.values;
+            var values = this.obj.$values;
             if (values) {
                 if (this.$.length - this.e == values.length) {
                     this.rendered = false;
@@ -2049,39 +2236,46 @@
             if (!this.loaded && !this.loading) {
                 this.load();
             }
+            var that = this;
             _.forEach(this.$, function (el) {
                 if (el) {
                     el.pipeline(function (obj) {
                         var shown = obj.$shown;
-                        if (shown && !this.rendered) {
-                            this.render();
+                        if (shown && !that.rendered) {
+                            that.render();
                         }
                         el.show(shown);
-                    }.bind(this));
-    
+                    });
                 }
-            }, this);
+            });
         },
     
         /**
          * Renders all elements of current bind. <br>
          * Rendering means particularly check whether bind is loaded and load it if needed, <br>
          * set value for every element attribute and show element if needed.
+         *
+         * @param {string} property changed property name
+         * @param {boolean} [force] force rendering
          */
-        render: function () {
-            if (!this.obj.$shown) {
+        render: function (property, force) {
+            if (!this.obj.$shown || (this.rendering && !force)) {
                 return;
             }
+            this.rendering = true;
             var bindName = this.name;
             _.debug("Render " + bindName, bindName + " Render");
             if (!this.loaded && !this.loading) {
                 this.load();
             }
+            var ready = this.obj.$ready();
+            var els = this.$.length;
+            var that = this;
+            var state = this.obj._fetched;
             _.forEach(this.$, function (el) {
                 if (el) {
                     el.pipeline(function (obj) {
-                        var ready = obj.$ready();
-                        var attrs = obj.attrs;
+                        var attrs = obj.$attrs;
                         var idx = el.index;
                         if (attrs) {
                             _.forIn(attrs, function (attr) {
@@ -2095,12 +2289,23 @@
                                 el.setAttribute('name', bindName);
                             }
                         }
+                        if (--els == 0) {
+                            that.rendering = false;
+                            that.rendered = true;
+                            _.debug("Rendered " + bindName);
+                        }
+                        if(obj._fetched && !state) {
+                            state = true;
+                            that.render(null, true);
+                        }
                     });
                 }
-            }, this);
-            this.show(this.obj.$shown);
-            this.rendered = true;
-            _.debug("Rendered " + bindName);
+            });
+            if (els == 0) {
+                this.rendering = false;
+                this.rendered = true;
+                _.debug("Rendered " + bindName);
+            }
         }
     
     };
@@ -2118,6 +2323,9 @@
     var tie = function () {
         var ties = {};
         return function (name, tiedObject, dependencies) {
+            if (RESERVED.indexOf('$' + name) != -1) {
+                throw new Error(name + ' is reserved. Please choose another name for your tie');
+            }
             if (name != APP && ties[APP] == null) {
                 window.tie(APP, {});
             }
@@ -2178,12 +2386,12 @@
          *
          * @this tie
          * @param {Object} obj primitive
-         * @return {{value: Object, attrs: Array}}
+         * @return {{value: Object, $attrs: Array}}
          */
         wrapPrimitive: function (obj) {
             return {
                 value: obj,
-                attrs: [VALUE]
+                $attrs: [VALUE]
             }
         },
     
@@ -2192,11 +2400,11 @@
          *
          * @this tie
          * @param {Function} fn
-         * @return {{attrs: {value: Function}}}
+         * @return {{$attrs: {value: Function}}}
          */
         wrapFunction: function (fn) {
             return {
-                attrs: {
+                $attrs: {
                     value: fn
                 }
             }
@@ -2207,12 +2415,12 @@
          *
          * @this tie
          * @param {Array} array
-         * @return {{values: Array, attrs: Array}}
+         * @return {{$values: Array, $attrs: Array}}
          */
         wrapArray: function (array) {
             return {
-                values: array,
-                attrs: [VALUE]
+                $values: array,
+                $attrs: [VALUE]
             };
         },
     
@@ -2234,15 +2442,15 @@
             if (_.isUndefined(obj.$shown)) {
                 obj.$shown = true;
             }
-            if (_.isUndefined(obj.attrs)) {
-                obj.attrs = {};
+            if (_.isUndefined(obj.$attrs)) {
+                obj.$attrs = {};
             }
-            if (_.isUndefined(obj.routes)) {
-                if (app != null && app.obj.routes) {
-                    obj.routes = app.obj.routes;
+            if (_.isUndefined(obj.$routes)) {
+                if (app != null && app.obj.$routes) {
+                    obj.$routes = app.obj.$routes;
                 }
             }
-            obj.http = new http(obj.http);
+            obj.$http = new http(obj.$http);
             return new model(obj);
         },
     
@@ -2311,7 +2519,7 @@
             bind.prepareRoutes();
             bind.prepareValues();
             _.debug("Prepared inner array structure");
-            bind.obj = proxy(bind);
+            proxy(bind);
             if (!bind.selected) {
                 this.$ = tie.select(name, bind);
                 _.debug("Elements reselected: " + this.$.length);
@@ -2341,7 +2549,7 @@
             r.prepareRoutes();
             this.resolve(r, dependencies, ties);
             r.obj.$deps = r.depends;
-            r.obj = proxy(r);
+            proxy(r);
             _.debug("Bind model ready");
             var tie = this;
             r.load = function () {
@@ -2364,6 +2572,7 @@
         }
     };
 
+
     /**
      * Exports
      */
@@ -2377,7 +2586,7 @@
      * Property pipeline definition
      */
     pipes("property", function (obj, params, next, value) {
-        if (params) {
+        if (params && params.length > 0) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
             if (_.isUndefined(value)) {
@@ -2386,14 +2595,14 @@
                 obj.$prop(prop, value);
             }
         }
-        next(obj);
-    }, {canWrite: true});
+         return obj;
+    }, {updateModel: true});
 
     /**
      * Value pipeline definition
      */
     pipes("value", function (obj, params) {
-        if (params) {
+        if (params && params.length > 0) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
             obj.$prop(prop, val);
@@ -2405,35 +2614,35 @@
      * Routes pipeline definition
      */
     pipes("routes", function (obj, params) {
-        if (params) {
+        if (params && params.length > 0) {
             var add = params[0] === '+';
             var subtract = params[0] === '-';
             if (add) {
                 params.splice(0, 1);
                 this.forEach(params, function (item) {
-                    obj.routes[item] = {path: item};
+                    obj.$routes[item] = {path: item};
                 });
             } else if (subtract) {
                 params.splice(0, 1);
                 this.forEach(params, function (item) {
-                    delete obj.routes[item];
+                    delete obj.$routes[item];
                 });
             } else {
-                obj.routes = {};
+                obj.$routes = {};
                 this.forEach(params, function (item) {
-                    obj.routes[item] = {path: item};
+                    obj.$routes[item] = {path: item};
                 });
             }
         }
         return obj;
-    }, {changeRoutes: true});
+    }, {updateRoutes: true});
 
-    /**
-     * Routes pipeline definition
-     */
-    pipes("load", function (obj, params, next) {
+    var load = function (obj, params, next) {
+        if(obj._fetched) {
+            return obj;
+        }
         var opts = {};
-        if (params) {
+        if (params && params.length > 0) {
             var trim = this.trim;
             this.forEach(params, function (item) {
                 var splits = item.split(':');
@@ -2444,7 +2653,7 @@
                 }
             });
         }
-        obj.http.get(opts, function (data, err) {
+        obj.$http.get(opts, function (data, err) {
             if (err) {
                 console.error(err);
             } else if (_.isObject(data)) {
@@ -2454,6 +2663,18 @@
             }
             next(obj);
         });
-    });
+        return null;
+    };
+
+    /**
+     * Load pipeline definition
+     */
+    pipes("load", load);
+
+    /**
+     * Fetch pipeline definition
+     */
+    pipes("fetch", load, {fetchModel: true});
+
 
 })(window);

@@ -7,6 +7,7 @@
  * @param {Object} obj
  */
 var model = function (obj) {
+    this._fetched = false;
     _.extend(this, obj);
 };
 
@@ -20,8 +21,8 @@ model.prototype = _;
  * @param {*} value attribute object
  */
 model.prototype.$attr = function (name, value) {
-    if (this.attrs) {
-        var attr = this.attrs[name];
+    if (this.$attrs) {
+        var attr = this.$attrs[name];
         if (_.isUndefined(value)) {
             if (attr) {
                 return attr.val(this);
@@ -52,6 +53,9 @@ model.prototype.$prop = function (name, value) {
     while (i < length) {
         res = res[split[i - 1]];
         i++;
+        if (_.isUndefined(res)) {
+            return null;
+        }
     }
     var last = split[length - 1];
     if (_.isUndefined(value)) {
@@ -124,7 +128,7 @@ var findProperty = function (obj, name, idx) {
     if (_.isUndefined(idx)) {
         idx = -1;
     }
-    var values = obj.values;
+    var values = obj.$values;
     if (idx >= 0 && values && _.isDefined(values[idx][name])) {
         return values[idx][name];
     }
@@ -181,6 +185,7 @@ var bind = function (name, dependencies, ties) {
     this.values = {};
     this.depends = dependencies || [];
     this.rendered = false;
+    this.rendering = false;
     this.loaded = false;
     this.loading = false;
     this.selected = false;
@@ -192,14 +197,15 @@ var bind = function (name, dependencies, ties) {
      * Apply model changes. It renders current bind and updates dependencies.
      *
      * @this bind
+     * @param {string} property changed property name
      */
-    this.apply = function () {
+    this.apply = function (property) {
         this.applyCount++;
         if (this.applyCount > 10) {
             _.debug("Too many apply :" + this.name + " - " + this.applyCount);
         }
         if (this.rendered) {
-            this.render();
+            this.render(property);
         }
         _.forEach(this.touch, function (item) {
             var tie = ties[item];
@@ -208,10 +214,11 @@ var bind = function (name, dependencies, ties) {
             }
         }, this);
         if (!this.timeout) {
+            var that = this;
             this.timeout = setTimeout(function () {
-                this.timeout = null;
-                this.applyCount = 0;
-            }.bind(this), 3000);
+                that.timeout = null;
+                that.applyCount = 0;
+            }, 3000);
         }
     };
 };
@@ -224,18 +231,18 @@ bind.prototype = {
      * @this bind
      */
     prepareRoutes: function () {
-        var routes = this.obj.routes;
+        var routes = this.obj.$routes;
         if (routes) {
             if (_.isArray(routes)) {
-                this.obj.routes = routes._({});
+                this.obj.$routes = routes._({});
             }
-            _.forIn(this.obj.routes, function (route, path) {
+            _.forIn(this.obj.$routes, function (route, path) {
                 if (_.isFunction(route)) {
                     route = {path: path, handler: route}
                 } else {
                     route = {path: path}
                 }
-                this.obj.routes[path] = route;
+                this.obj.$routes[path] = route;
             }, this);
         }
     },
@@ -246,12 +253,12 @@ bind.prototype = {
      * @this bind
      */
     prepareAttrs: function () {
-        var attrs = this.obj.attrs;
+        var attrs = this.obj.$attrs;
         if (attrs) {
             if (_.isArray(attrs)) {
-                this.obj.attrs = attrs._({});
+                this.obj.$attrs = attrs._({});
             }
-            _.forIn(this.obj.attrs, function (attr, name) {
+            _.forIn(this.obj.$attrs, function (attr, name) {
                 if (_.isString(attr) && attr[0] == '#') {
                     attr = {name: name, property: attr.substring(1)}
                 } else if (_.isFunction(attr)) {
@@ -262,7 +269,7 @@ bind.prototype = {
                     attr = {name: name, value: attr}
                 }
                 attr.val = valueFn;
-                this.obj.attrs[name] = attr;
+                this.obj.$attrs[name] = attr;
             }, this);
         }
     },
@@ -273,7 +280,7 @@ bind.prototype = {
      * @this bind
      */
     prepareValues: function () {
-        var values = this.obj.values;
+        var values = this.obj.$values;
         if (values) {
             if (this.$.length - this.e == values.length) {
                 this.rendered = false;
@@ -337,39 +344,46 @@ bind.prototype = {
         if (!this.loaded && !this.loading) {
             this.load();
         }
+        var that = this;
         _.forEach(this.$, function (el) {
             if (el) {
                 el.pipeline(function (obj) {
                     var shown = obj.$shown;
-                    if (shown && !this.rendered) {
-                        this.render();
+                    if (shown && !that.rendered) {
+                        that.render();
                     }
                     el.show(shown);
-                }.bind(this));
-
+                });
             }
-        }, this);
+        });
     },
 
     /**
      * Renders all elements of current bind. <br>
      * Rendering means particularly check whether bind is loaded and load it if needed, <br>
      * set value for every element attribute and show element if needed.
+     *
+     * @param {string} property changed property name
+     * @param {boolean} [force] force rendering
      */
-    render: function () {
-        if (!this.obj.$shown) {
+    render: function (property, force) {
+        if (!this.obj.$shown || (this.rendering && !force)) {
             return;
         }
+        this.rendering = true;
         var bindName = this.name;
         _.debug("Render " + bindName, bindName + " Render");
         if (!this.loaded && !this.loading) {
             this.load();
         }
+        var ready = this.obj.$ready();
+        var els = this.$.length;
+        var that = this;
+        var state = this.obj._fetched;
         _.forEach(this.$, function (el) {
             if (el) {
                 el.pipeline(function (obj) {
-                    var ready = obj.$ready();
-                    var attrs = obj.attrs;
+                    var attrs = obj.$attrs;
                     var idx = el.index;
                     if (attrs) {
                         _.forIn(attrs, function (attr) {
@@ -383,12 +397,23 @@ bind.prototype = {
                             el.setAttribute('name', bindName);
                         }
                     }
+                    if (--els == 0) {
+                        that.rendering = false;
+                        that.rendered = true;
+                        _.debug("Rendered " + bindName);
+                    }
+                    if(obj._fetched && !state) {
+                        state = true;
+                        that.render(null, true);
+                    }
                 });
             }
-        }, this);
-        this.show(this.obj.$shown);
-        this.rendered = true;
-        _.debug("Rendered " + bindName);
+        });
+        if (els == 0) {
+            this.rendering = false;
+            this.rendered = true;
+            _.debug("Rendered " + bindName);
+        }
     }
 
 };

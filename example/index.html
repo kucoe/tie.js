@@ -30,7 +30,7 @@
 <script src="../src/tie.js"></script>
 <script>
     tie("app", {
-        routes: ['/', 'sex']._({
+        $routes: ['/', 'sex']._({
             labels: function () {
                 tie('text', 'labelText');
             }
@@ -38,8 +38,8 @@
     });
     tie("label", {
         style: 'color:red',
-        routes: ['labels'],
-        attrs: ['style']._({
+        $routes: ['labels'],
+        $attrs: ['style']._({
             value: function () {
                 return this.$text.value
             }
@@ -52,13 +52,13 @@
         return this.$label.value.length;
     }, ['label']);
     tie("text", 'test');
-    tie("bool", {value: true, attrs: ['value'], routes: ['-', 'sex']});
+    tie("bool", {value: true, $attrs: ['value'], $routes: ['-', 'sex']});
     tie("sex", {
-        values: [
+        $values: [
             {text: 'Male', value: true},
             {text: 'Female', value: false}
         ],
-        routes: {
+        $routes: {
             sex: function () {
                 //this.$location('labels');
                 this.$trigger.attrs = {
@@ -70,7 +70,7 @@
                 }
             }
         },
-        attrs: ['value', 'text']
+        $attrs: ['value', 'text']
     }, ['trigger']);
     tie("trigger", {
         float: function (evt) {
@@ -86,7 +86,7 @@
             tie('text', 'changed');
         },
         value: 'Out',
-        attrs: ['value']._({
+        $attrs: ['value']._({
             mouseover: '#float',
             mouseout: '#float',
             click: '#trigger'

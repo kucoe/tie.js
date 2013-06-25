@@ -6,7 +6,7 @@
 </head>
 <body>
 
-<div data-tie="person|load">
+<div data-tie="person|fetch">
     Name:
     <input type="text" data-tie="person.name"/>
     Name length:
@@ -17,14 +17,33 @@
     Style:
     <input type="text" data-tie="person.style|value:'style','color:red'"/>
 </div>
+<input type="button" data-tie="person|value:'click','#load'" value="Reload"/>
+
+<p/>
+
+<ul>
+    <li data-tie="data|fetch"></li>
+</ul>
+
 
 <script src="../src/tie.js"></script>
 <script>
+    tie.enableDebug(true);
     tie("person", {
-        http: {
+        load : function() {
+            this.$http.get({}, this);
+        },
+        $http: {
             url:'person.json'
         },
-        attrs: ['value', 'style']
+        $attrs: ['value', 'style', 'click']
+    });
+    tie("data", {
+        $values:[],
+        $http: {
+            url:'data.json'
+        },
+        $attrs: ['value']
     });
 </script>
 

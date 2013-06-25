@@ -6,7 +6,7 @@
 </head>
 <body>
 <div>
-    <input type="button" value="Reverse" data-tie="reverse"/>
+    <input type="button" value="Change" data-tie="change"/>
     <ul>
         <li data-tie="data"></li>
     </ul>
@@ -14,27 +14,16 @@
 <script src="../src/tie.js"></script>
 <script>
     var arr = [];
-    var arr2 = [];
     for (var i = 1; i <= 100000; i++) {
         arr.push(i);
     }
-    for (var j = 100000; j >= 1; j--) {
-        arr2.push(j);
-    }
     tie("data", arr);
-    tie("reverse", {
+    tie("change", {
         click : function() {
-            if(!this.reversed){
-                tie("data", arr2);
-                this.reversed = true;
-            }  else {
-                tie("data", arr);
-                this.reversed = false;
-            }
+           this.$data.$values[0] = Math.random();
         },
-        reversed: false,
-        attrs: ['click']
-    });
+        $attrs: ['click']
+    }, ['data']);
 </script>
 
 </body>

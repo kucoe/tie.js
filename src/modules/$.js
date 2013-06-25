@@ -58,19 +58,21 @@ var q = {
  * @param {bind} bind element bound tie
  */
 var $ = function (el, bind) {
+    var that = this;
     var listener = function (event) {
         _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
-        var value = this.value();
+        var value = that.value();
         value = _.trim(value);
 
-        if (this.pipes.length > 0) {
-            this.pipeline(function(){}, value);
+        if (that.pipes.length > 0) {
+            that.pipeline(function () {
+            }, value);
         } else {
             if (bind.obj.value !== value) {
                 bind.obj.value = value;
             }
         }
-    }.bind(this);
+    };
 
     var idx = el.getAttribute(INDEX);
     this.$ = el;
@@ -85,7 +87,7 @@ var $ = function (el, bind) {
     this.shown = true;
     this.textEl = null;
 
-    if(this.isInput) {
+    if (this.isInput) {
         if (!this.hasCheck) {
             if ('oninput' in el) {
                 _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
@@ -121,28 +123,38 @@ var $ = function (el, bind) {
      * @param {*} [value] value to use in pipeline
      */
     this.pipeline = function (next, value) {
-        var res = this.bind.obj;
+        var orig = this.bind.obj;
+        var bind = this.bind;
+        var res = orig;
         if (this.pipes.length > 0) {
-            _.async(this.pipes, function (pipe, next) {
-                function update(data) {
+            _.sequence(this.pipes, function (pipe, next) {
+                var update = function (data) {
                     res = data;
-                    if(pipe.changeRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
+                    if (pipe.updateRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
                         res.$shown = res.$location().route.has(res);
                     }
+                    if ((_.isDefined(value) && pipe.updateModel()) || (pipe.fetchModel() && _.isUndefined(value))) {
+                        _.extend(orig, data);
+                        res._fetched  = orig._fetched = true;
+
+                    }
                     next(res);
-                }
+                };
                 var c;
+                var clone = _.clone(res);
                 if (_.isDefined(value)) {
-                    c =  pipe.process(res,  update, value);
+                    c = pipe.process(clone, update, value);
                 } else {
-                    c = pipe.process(res, update);
+                    c = pipe.process(clone, update);
                 }
-                if(c) {
+                if (c) {
                     update(c);
                 }
 
-            }, function() {
-                next(res);
+            }, function () {
+                if (next) {
+                    next(res);
+                }
             })
         } else {
             next(res);
@@ -175,11 +187,12 @@ $.prototype = {
             if (handler) {
                 this.$.removeEventListener(name, handler);
             }
+            var that = this;
             handler = function (event) {
-                event.index = this.index;
-                event.tie = this.tie;
-                safeCall(value, this.bind.obj, this.bind.obj.$ready(), event);
-            }.bind(this);
+                event.index = that.index;
+                event.tie = that.tie;
+                safeCall(value, that.bind.obj, that.bind.obj.$ready(), event);
+            };
             this.events[name] = handler;
             this.$.addEventListener(name, handler);
         } else {

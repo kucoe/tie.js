@@ -13,10 +13,11 @@ var proxy = function (bind) {
      * @param {Object} desc property descriptor if any
      * @param {string} prop property name
      * @param {boolean} [dependency] whether the property refers to dependent tie
+     * @returns boolean whether proxy was added
      */
     var observe = function (obj, desc, prop, dependency) {
         if (desc && desc._proxyMark) {
-            return; //proxy already set
+            return false; //proxy already set
         }
         var newGet = function () {
             if (desc) {
@@ -27,7 +28,14 @@ var proxy = function (bind) {
             }
             return obj.$attr(prop);
         };
+        var changed = function(val) {
+            var prev = newGet();
+            return !_.isEqual(prev, val);
+        };
         var newSet = function (val) {
+            if(!changed(val)) {
+                return;
+            }
             if (desc) {
                 if (desc.set) {
                     desc.set.call(this, val);
@@ -39,6 +47,11 @@ var proxy = function (bind) {
             }
             if (prop == SHOWN) {
                 bind.show(val);
+            } else if(prop == FETCHED) {
+                var added = proxy(bind);
+                if (added.length > 0) {
+                    bind.apply();
+                }
             } else {
                 if (prop == ATTRS) {
                     bind.prepareAttrs();
@@ -48,7 +61,7 @@ var proxy = function (bind) {
                     bind.prepareValues();
                 }
                 _.debug("Calling apply on '" + bind.name + "' after changed property '" + prop + "'");
-                bind.apply();
+                bind.apply(prop);
             }
         };
         var enumerable = desc ? desc.enumerable : false;
@@ -59,6 +72,7 @@ var proxy = function (bind) {
             enumerable: enumerable,
             _proxyMark: true
         });
+        return true;
     };
 
     /**
@@ -67,47 +81,50 @@ var proxy = function (bind) {
      * Note: will recursively observe property of {Object} type
      *
      * @param {model} obj inspected object
+     * @returns Array list of added properties
      */
     var explore = function (obj) {
-        for (var prop in obj) {
-            if (obj.hasOwnProperty(prop)) {
-                props.push(prop);
-                if ('prototype' == prop) {
-                    continue; // skip prototype
-                }
-                var desc = Object.getOwnPropertyDescriptor(obj, prop);
-                if (desc._proxyMark) {
-                    continue; //skip already processed
-                }
-                if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
-                    continue; // skip readonly
-                }
-                var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
-                var val = obj[prop];
-                if (_.isObject(val) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS && prop != VALUES) {
-                    _.debug("Exploring " + prop);
-                    explore(val);
-                }
-                _.debug("Observing " + prop);
-                observe(obj, desc, prop, dep);
+        var added = [];
+        _.forIn(obj, function (value, prop) {
+            props.push(prop);
+            if ('prototype' == prop) {
+                return false;// skip prototype
             }
-        }
-        if (obj.attrs) {
-            _.forIn(obj.attrs, function (attr, prop) {
+            var desc = Object.getOwnPropertyDescriptor(obj, prop);
+            if (desc._proxyMark) {
+                return false; //skip already processed
+            }
+            if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
+                return false; // skip readonly
+            }
+            var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
+            if (_.isObject(value) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS && prop != VALUES && prop != HTTP) {
+                _.debug("Exploring " + prop);
+                explore(value);
+            }
+            _.debug("Observing " + prop);
+            if (observe(obj, desc, prop, dep)) {
+                added.push(prop);
+            }
+            return true;
+        });
+        if (obj.$attrs) {
+            _.forIn(obj.$attrs, function (attr, prop) {
                 // do not override real properties from object and only when attributes have something to change.
                 if (props.indexOf(prop) == -1 && (attr.property || attr.value)) {
                     _.debug("Observing attribute " + prop);
-                    observe(obj, null, prop);
+                    if(observe(obj, null, prop)) {
+                        added.push(prop);
+                    }
                     props.push(prop);
                 }
             }, this);
         }
+        return added;
     };
 
     var obj = bind.obj;
     var props = [];
     _.debug("Exploring " + bind.name);
-    explore(obj);
-
-    return obj;
+    return explore(obj);
 };

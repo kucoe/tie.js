@@ -5,16 +5,16 @@ var pipesRegistry = {};
  *
  * @param {string} name pipe name
  * @param {Function} [fn] pipe function that will accept. If not defined existed pipe will return.
- * @param {Object} [opts] options (canWrite, changeRoutes, changeAttrs) default to false
+ * @param {Object} [opts] options (updateModel, updateRoute, fetchModel) default to false
  */
 var pipes = function (name, fn, opts) {
     if (_.isUndefined(fn)) {
         return pipesRegistry[name];
     }
     var defOpts = {
-        canWrite: false,
-        changeRoutes: false,
-        changeAttrs: false
+        fetchModel: false,
+        updateModel: false,
+        updateRoutes: false
     };
     if (_.isDefined(opts)) {
         _.extend(defOpts, opts);
@@ -62,9 +62,11 @@ pipe.prototype = {
      * @param {Object} [value] new object value
      */
     process: function (obj, next, value) {
-        var pipe = pipesRegistry[this.name];
+        var name = this.name;
+        _.debug("Process pipe " + name);
+        var pipe = pipesRegistry[name];
         if (!pipe) {
-            throw new Error('Pipe ' + this.name + ' not found');
+            throw new Error('Pipe ' + name + ' not found');
         }
         var fn = pipe.fn;
         var params = [];
@@ -77,22 +79,34 @@ pipe.prototype = {
                 params.push(param);
             });
         }
-        var res = _.isDefined(value) && this.canWrite() ? obj : _.clone(obj);
+        var res = obj;
         if (fn && _.isFunction(fn)) {
             res = safeCall(fn, pipe, true, res, params, next, value);
         }
+        _.debug("Ready pipe " + name);
         return res;
     },
 
     /**
-     * Returns whether this pipe can change object value.
+     * Returns whether this pipe can fetch object model.
      *
      * @this pipe
      * @return boolean
      */
-    canWrite: function () {
+    fetchModel: function () {
         var pipe = pipesRegistry[this.name];
-        return pipe ? pipe.opts.canWrite : false;
+        return pipe ? pipe.opts.fetchModel : false;
+    },
+
+    /**
+     * Returns whether this pipe can change object model.
+     *
+     * @this pipe
+     * @return boolean
+     */
+    updateModel: function () {
+        var pipe = pipesRegistry[this.name];
+        return pipe ? pipe.opts.updateModel : false;
     },
 
     /**
@@ -101,19 +115,9 @@ pipe.prototype = {
      * @this pipe
      * @return boolean
      */
-    changeRoutes: function () {
+    updateRoutes: function () {
         var pipe = pipesRegistry[this.name];
-        return pipe ? pipe.opts.changeRoutes : false;
-    },
-
-    /**
-     * Returns whether this pipe can change attributes.
-     *
-     * @this pipe
-     * @return boolean
-     */
-    changeAttrs: function () {
-        var pipe = pipesRegistry[this.name];
-        return pipe ? pipe.opts.changeAttrs : false;
+        return pipe ? pipe.opts.updateRoutes : false;
     }
+
 };

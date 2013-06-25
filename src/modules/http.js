@@ -53,19 +53,19 @@ var http = function (options) {
  *
  * @param {request} request
  * @param {string} dataType
- * @returns {*}
+ * @returns {Array}
  */
 var status = function (request, dataType) {
     var xhr = request.xhr;
     var status = xhr.status;
+    var err, data;
     if ((status >= 200 && status < 300) || status === 0) {
-        var data = response(request, xhr, dataType);
-        callback(request, data, null);
-        return data;
+        data = response(request, xhr, dataType);
     } else {
-        callback(request, xhr.responseText, status);
+        data = xhr.responseText;
+        err = status;
     }
-    return null;
+    return [data, err];
 };
 
 /**
@@ -89,6 +89,22 @@ var headers = function (xhr, headers, dataType, contentType) {
     _.forIn(headers, function (header, name) {
         xhr.setRequestHeader(name, header);
     });
+};
+
+var stateChange = function (req, xhr, url, dataType, type, opts) {
+    return function () {
+        if (xhr.readyState === 4) {
+            _.debug("Process response");
+            var st = status(req, dataType);
+            var data = st[0];
+            var err = st[1];
+            if (!err && _.isObject(data) && type === defaults.type && opts.cache) {
+                opts.memo(url, dataType, data);
+            }
+            callback(req, data, err);
+        }
+        return null;
+    }
 };
 
 var response = function (request, xhr, dataType) {
@@ -197,6 +213,7 @@ var defaultResponder = function (model) {
             console.error(err);
         } else if (_.isObject(data)) {
             _.extend(model, data);
+            model._fetched = true;
         } else {
             console.log('Response received:' + data);
         }
@@ -213,17 +230,17 @@ var defaultResponder = function (model) {
  * @returns {string}
  */
 var prepareURL = function (url, params) {
-    if(!url) {
+    if (!url) {
         return url;
     }
     var index = url.indexOf('?');
     var clearUrl = url.substring(0, index + 1 ? index : url.length);
     var splits = clearUrl.split('/');
-    _.forEach(splits, function(split) {
-        if(split[0] === ':') {
+    _.forEach(splits, function (split) {
+        if (split[0] === ':') {
             var name = split.substr(1);
             var val = params[ name];
-            if(_.isDefined(val)) {
+            if (_.isDefined(val)) {
                 url.replace(split, val);
                 delete  params[name];
             }
@@ -292,6 +309,7 @@ var ajax = function (opts, onReady, refetch) {
     var heads = opts.getHeaders();
     var cached = null;
     url = prepareURL(url, params);
+    _.debug("Ajax call to " + url);
     if (type === defaults.type) {
         url += gatherParams(params, url);
         if (opts.cache && !refetch) {
@@ -312,20 +330,14 @@ var ajax = function (opts, onReady, refetch) {
     }
     var req = new request(xhr, fn);
     if (cached) {
+        _.debug("Got cached result");
         callback(req, cached, null);
     } else {
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                var data = status(req, dataType);
-                if (data && type === defaults.type && opts.cache) {
-                    opts.memo(url, dataType, data);
-                }
-            }
-            return null;
-        };
+        xhr.onreadystatechange = stateChange(req, xhr, url, dataType, type, opts);
         xhr.open(type, url);
         headers(xhr, heads, contentType, dataType);
         try {
+            _.debug("Send request");
             xhr.send(params);
         } catch (error) {
             xhr = error;
@@ -352,6 +364,7 @@ var jsonp = function (opts, onReady, refetch) {
     var script = window.document.createElement("script");
     url = prepareURL(url, params);
     url += gatherParams(params, url);
+    _.debug("JSONP call to " + url);
     var cached = null;
     if (opts.cache && !refetch) {
         cached = opts.memo(url, defaults.mime);
@@ -364,16 +377,19 @@ var jsonp = function (opts, onReady, refetch) {
     }
     var req = new request(null, fn);
     if (cached) {
+        _.debug("Got cached result");
         req.done(cached, null);
     } else {
         var callbackName = "jsonp" + _.uid();
         window[callbackName] = function (response) {
             head.removeChild(script);
             delete window[callbackName];
+            _.debug("Process response");
             opts.memo(url, defaults.mime, response);
             return req.done(response, null);
         };
 
+        _.debug("Create JSONP request");
         script.type = "text/javascript";
         script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
         head.appendChild(script);
@@ -475,7 +491,7 @@ http.prototype = {
      * or model to be updated with response values
      * @return request
      */
-    delete: function (params, onReady) {
+    "delete": function (params, onReady) {
         return form(this, "DELETE", params, onReady);
     },
 

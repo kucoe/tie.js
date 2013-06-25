@@ -11,6 +11,9 @@ var app = null;
 var tie = function () {
     var ties = {};
     return function (name, tiedObject, dependencies) {
+        if (RESERVED.indexOf('$' + name) != -1) {
+            throw new Error(name + ' is reserved. Please choose another name for your tie');
+        }
         if (name != APP && ties[APP] == null) {
             window.tie(APP, {});
         }
@@ -71,12 +74,12 @@ tie.prototype = {
      *
      * @this tie
      * @param {Object} obj primitive
-     * @return {{value: Object, attrs: Array}}
+     * @return {{value: Object, $attrs: Array}}
      */
     wrapPrimitive: function (obj) {
         return {
             value: obj,
-            attrs: [VALUE]
+            $attrs: [VALUE]
         }
     },
 
@@ -85,11 +88,11 @@ tie.prototype = {
      *
      * @this tie
      * @param {Function} fn
-     * @return {{attrs: {value: Function}}}
+     * @return {{$attrs: {value: Function}}}
      */
     wrapFunction: function (fn) {
         return {
-            attrs: {
+            $attrs: {
                 value: fn
             }
         }
@@ -100,12 +103,12 @@ tie.prototype = {
      *
      * @this tie
      * @param {Array} array
-     * @return {{values: Array, attrs: Array}}
+     * @return {{$values: Array, $attrs: Array}}
      */
     wrapArray: function (array) {
         return {
-            values: array,
-            attrs: [VALUE]
+            $values: array,
+            $attrs: [VALUE]
         };
     },
 
@@ -127,15 +130,15 @@ tie.prototype = {
         if (_.isUndefined(obj.$shown)) {
             obj.$shown = true;
         }
-        if (_.isUndefined(obj.attrs)) {
-            obj.attrs = {};
+        if (_.isUndefined(obj.$attrs)) {
+            obj.$attrs = {};
         }
-        if (_.isUndefined(obj.routes)) {
-            if (app != null && app.obj.routes) {
-                obj.routes = app.obj.routes;
+        if (_.isUndefined(obj.$routes)) {
+            if (app != null && app.obj.$routes) {
+                obj.$routes = app.obj.$routes;
             }
         }
-        obj.http = new http(obj.http);
+        obj.$http = new http(obj.$http);
         return new model(obj);
     },
 
@@ -204,7 +207,7 @@ tie.prototype = {
         bind.prepareRoutes();
         bind.prepareValues();
         _.debug("Prepared inner array structure");
-        bind.obj = proxy(bind);
+        proxy(bind);
         if (!bind.selected) {
             this.$ = tie.select(name, bind);
             _.debug("Elements reselected: " + this.$.length);
@@ -234,7 +237,7 @@ tie.prototype = {
         r.prepareRoutes();
         this.resolve(r, dependencies, ties);
         r.obj.$deps = r.depends;
-        r.obj = proxy(r);
+        proxy(r);
         _.debug("Bind model ready");
         var tie = this;
         r.load = function () {

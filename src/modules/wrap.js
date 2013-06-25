@@ -13,13 +13,18 @@
      */
     var APP = 'app';
     var VALUE = 'value';
-    var VALUES = 'values';
+    var VALUES = '$values';
     var TEXT = 'text';
     var SHOWN = '$shown';
     var DEPS = '$deps';
-    var ATTRS = 'attrs';
-    var ROUTES = 'routes';
+    var ATTRS = '$attrs';
+    var ROUTES = '$routes';
+    var HTTP = '$http';
+    var TMPL = '$tmpl';
+    var FORM = '$form';
     var ITEM_NAME = '_item_name';
+    var FETCHED = '_fetched';
+    var RESERVED = [FETCHED, VALUES, SHOWN, DEPS, ATTRS, ROUTES, HTTP, TMPL , FORM, '$attr', '$prop', '$location'];
 
     /**
      * Attribute constants
@@ -66,7 +71,7 @@
      * Property pipeline definition
      */
     pipes("property", function (obj, params, next, value) {
-        if (params) {
+        if (params && params.length > 0) {
             var prop = params[0];
             var target = params.length > 1 ? params[1] : VALUE;
             if (_.isUndefined(value)) {
@@ -75,14 +80,14 @@
                 obj.$prop(prop, value);
             }
         }
-        next(obj);
-    }, {canWrite: true});
+         return obj;
+    }, {updateModel: true});
 
     /**
      * Value pipeline definition
      */
     pipes("value", function (obj, params) {
-        if (params) {
+        if (params && params.length > 0) {
             var prop = params[0];
             var val = params.length > 1 ? params[1] : null;
             obj.$prop(prop, val);
@@ -94,35 +99,35 @@
      * Routes pipeline definition
      */
     pipes("routes", function (obj, params) {
-        if (params) {
+        if (params && params.length > 0) {
             var add = params[0] === '+';
             var subtract = params[0] === '-';
             if (add) {
                 params.splice(0, 1);
                 this.forEach(params, function (item) {
-                    obj.routes[item] = {path: item};
+                    obj.$routes[item] = {path: item};
                 });
             } else if (subtract) {
                 params.splice(0, 1);
                 this.forEach(params, function (item) {
-                    delete obj.routes[item];
+                    delete obj.$routes[item];
                 });
             } else {
-                obj.routes = {};
+                obj.$routes = {};
                 this.forEach(params, function (item) {
-                    obj.routes[item] = {path: item};
+                    obj.$routes[item] = {path: item};
                 });
             }
         }
         return obj;
-    }, {changeRoutes: true});
+    }, {updateRoutes: true});
 
-    /**
-     * Routes pipeline definition
-     */
-    pipes("load", function (obj, params, next) {
+    var load = function (obj, params, next) {
+        if(obj._fetched) {
+            return obj;
+        }
         var opts = {};
-        if (params) {
+        if (params && params.length > 0) {
             var trim = this.trim;
             this.forEach(params, function (item) {
                 var splits = item.split(':');
@@ -133,7 +138,7 @@
                 }
             });
         }
-        obj.http.get(opts, function (data, err) {
+        obj.$http.get(opts, function (data, err) {
             if (err) {
                 console.error(err);
             } else if (_.isObject(data)) {
@@ -143,6 +148,18 @@
             }
             next(obj);
         });
-    });
+        return null;
+    };
+
+    /**
+     * Load pipeline definition
+     */
+    pipes("load", load);
+
+    /**
+     * Fetch pipeline definition
+     */
+    pipes("fetch", load, {fetchModel: true});
+
 
 })(window);

@@ -23,14 +23,14 @@ Show: <input type="checkbox" data-tie="switch"/>
         color: 'blue',
         name: 'John',
         age: 25,
-        attrs: ['value']._({
+        $attrs: ['value']._({
             style: function() {
                 return 'color:' + this.color;
             }
         })
     });
     tie("switch", {
-        attrs : {
+        $attrs : {
             value:'#$person.$shown'
         }
     }, ['person']);
