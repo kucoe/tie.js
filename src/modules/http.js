@@ -107,6 +107,14 @@ var stateChange = function (req, xhr, url, dataType, type, opts) {
     }
 };
 
+/**
+ * Process response
+ *
+ * @param {request} request
+ * @param {XMLHttpRequest} xhr
+ * @param {string} dataType
+ * @returns {String|Object}
+ */
 var response = function (request, xhr, dataType) {
     var response;
     response = xhr.responseText;
