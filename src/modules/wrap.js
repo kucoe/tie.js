@@ -24,7 +24,7 @@
     var FORM = '$form';
     var ITEM_NAME = '_item_name';
     var FETCHED = '_fetched';
-    var RESERVED = [FETCHED, VALUES, SHOWN, DEPS, ATTRS, ROUTES, HTTP, TMPL , FORM, '$attr', '$prop', '$location'];
+    var RESERVED = [FETCHED, VALUES, SHOWN, DEPS, ATTRS, ROUTES, HTTP, TMPL , FORM, '$attr', '$prop', '$ready', '$location'];
 
     /**
      * Attribute constants
