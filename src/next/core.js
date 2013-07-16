@@ -16,10 +16,33 @@
     var RESERVED = [VALUES, DEPS, '$prop', '$ready'];
 
     var app = null;
-    var ties = [];
+    var ties = {};
+    var pipesRegistry = {};
 
     var s4 = function () {
         return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    };
+
+    var safeCall = function (fn, fnThis, bindReady) {
+        var res;
+        var spliceArgs = 3;
+        if (_.isUndefined(bindReady) && _.isFunction(fnThis.$ready)) {
+            bindReady = fnThis.$ready();
+            spliceArgs = 2;
+        }
+        try {
+            var args = Array.prototype.slice.call(arguments, spliceArgs);
+            res = fn.apply(fnThis, args);
+        } catch (e) {
+            res = undefined;
+            if (bindReady) {
+                console.groupCollapsed("User code error");
+                console.error('Is ready and had an error:' + e.message);
+                console.dir(e);
+                console.groupEnd();
+            }
+        }
+        return res;
     };
 
     var _ = {
@@ -98,121 +121,54 @@
         },
 
         //deep equals
-        isEqual2: function (a, b) {
+        isEqual: function (a, b) {
             if (a === b) {
                 return true;
-            }
-            if(this.isFunction(a)) {
-                return a.toString()
-            }
-            return this.eqi(JSON.stringify(a), JSON.stringify(b));
-        },
-
-        //deep equals
-        isEqual: function (a, b, aStack, bStack) {
-            // Identical objects are equal. `0 === -0`, but they aren't identical.
-            // See the [Harmony `egal` proposal](http://wiki.ecmascript.org/doku.php?id=harmony:egal).
-            if (a === b) {
-                return a !== 0 || 1 / a == 1 / b;
-            }
-            // A strict comparison is necessary because `null == undefined`.
-            if (a == null || b == null) {
-                return a === b;
-            }
-            // Compare `[[Class]]` names.
-            var className = Object.prototype.toString.call(a);
-            if (className != Object.prototype.toString.call(b)) {
+            } else if (this.isUndefined(a) || a == null || this.isUndefined(b) || b == null) {
                 return false;
-            }
-            switch (className) {
-                // Strings, numbers, dates, and booleans are compared by value.
-                case '[object String]':
-                    // Primitives and their corresponding object wrappers are equivalent; thus, `"5"` is
-                    // equivalent to `new String("5")`.
-                    return a == String(b);
-                case '[object Number]':
-                    // `NaN`s are equivalent, but non-reflexive. An `egal` comparison is performed for
-                    // other numeric values.
-                    return a != +a ? b != +b : (a == 0 ? 1 / a == 1 / b : a == +b);
-                case '[object Date]':
-                case '[object Boolean]':
-                    // Coerce dates and booleans to numeric primitive values. Dates are compared by their
-                    // millisecond representations. Note that invalid dates with millisecond representations
-                    // of `NaN` are not equivalent.
-                    return +a == +b;
-                // RegExps are compared by their source patterns and flags.
-                case '[object RegExp]':
-                    return a.source == b.source &&
-                        a.global == b.global &&
-                        a.multiline == b.multiline &&
-                        a.ignoreCase == b.ignoreCase;
-                case '[object Function]':
-                    return a.toString() == b.toString();
-            }
-            if (typeof a != 'object' || typeof b != 'object') {
+            } else if (typeof  a !== typeof  b) {
                 return false;
-            }
-
-            if(this.isUndefined(aStack)) {
-                aStack = [];
-            }
-            if(this.isUndefined(bStack)) {
-                bStack = [];
-            }
-            // Assume equality for cyclic structures. The algorithm for detecting cyclic
-            // structures is adapted from ES 5.1 section 15.12.3, abstract operation `JO`.
-            var length = aStack.length;
-            while (length--) {
-                // Linear search. Performance is inversely proportional to the number of
-                // unique nested structures.
-                if (aStack[length] == a) {
-                    return bStack[length] == b;
-                }
-            }
-            // Add the first object to the stack of traversed objects.
-            aStack.push(a);
-            bStack.push(b);
-            var size = 0, result = true;
-            // Recursively compare objects and arrays.
-            if (className == '[object Array]') {
-                // Compare array lengths to determine if a deep comparison is necessary.
-                size = a.length;
-                result = size == b.length;
-                if (result) {
-                    // Deep compare the contents, ignoring non-numeric properties.
-                    while (size--) {
-                        if (!(result = this.isEqual(a[size], b[size], aStack, bStack))) {
-                            break;
+            } else if (this.isDate(a) && this.isDate(b)) {
+                return a.getTime() === b.getTime();
+            } else if (this.isRegExp(a) && this.isRegExp(b)) {
+                return a.source === b.source &&
+                    a.global === b.global &&
+                    a.multiline === b.multiline &&
+                    a.lastIndex === b.lastIndex &&
+                    a.ignoreCase === b.ignoreCase;
+            } else if (this.isFunction(a) && this.isFunction(b)) {
+                return a.toString() == b.toString();
+            } else if (!this.isObject(a) && !this.isObject(b)) {
+                return a == b;
+            } else if (a.prototype !== b.prototype) {
+                return false;
+            } else {
+                try {
+                    var ka = Object.keys(a);
+                    var kb = Object.keys(b);
+                    if (ka.length != kb.length) {
+                        return false;
+                    }
+                    ka.sort();
+                    kb.sort();
+                    var i;
+                    for (i = ka.length - 1; i >= 0; i--) {
+                        if (ka[i] != kb[i]) {
+                            return false;
                         }
                     }
-                }
-            } else {
-                // Objects with different constructors are not equivalent, but `Object`s
-                // from different frames are.
-                var aCtor = a.constructor, bCtor = b.constructor;
-                if (aCtor !== bCtor && !(this.isFunction(aCtor) && (aCtor instanceof aCtor) &&
-                    this.isFunction(bCtor) && (bCtor instanceof bCtor))) {
+                    var key;
+                    for (i = ka.length - 1; i >= 0; i--) {
+                        key = ka[i];
+                        if (!this.isEqual(a[key], b[key])) {
+                            return false;
+                        }
+                    }
+                } catch (e) {
                     return false;
                 }
-                // Deep compare objects.
-                this.forIn(a, function (value, prop) {
-                    size++;
-                    return result = b.hasOwnProperty(prop) && _.isEqual(value, b[prop], aStack, bStack);
-
-                });
-                // Ensure that both objects contain the same number of properties.
-                if (result) {
-                    this.forIn(b, function (value, prop) {
-                        return size--;
-
-                    });
-                    result = !size;
-                }
             }
-            // Remove the first object from the stack of traversed objects.
-            aStack.pop();
-            bStack.pop();
-            return result;
+            return true;
         },
 
         //deep clone
@@ -450,7 +406,74 @@
         return explore(obj);
     };
 
+    var pipes = function (name, fn, opts) {
+        if (_.isUndefined(fn)) {
+            return pipesRegistry[name];
+        }
+        var defOpts = {
+            fetchModel: false,
+            updateModel: false,
+            updateRoutes: false
+        };
+        if (_.isDefined(opts)) {
+            _.extend(defOpts, opts);
+        }
+        var p = new pipe(name, fn, defOpts);
+        pipesRegistry[name] = p;
+        return p;
+    };
+
+    var pipe = function (name, fn, defOpts) {
+        this.name = name;
+        this.fn = fn;
+        this.opts = defOpts;
+    };
+
+    pipe.prototype = {
+
+        process: function (obj, params, next, value) {
+            var name = this.name;
+            _.debug("Process pipe " + name);
+            if (params.length > 0) {
+                var context = _.extend({}, obj);
+                context = _.extend(context, pipe);
+                var array = _.convert(params, context);
+                _.forEach(array, function (param) {
+                    param = _.trim(param);
+                    params.push(param);
+                });
+            }
+            var res = obj;
+            if (this.fn && _.isFunction(this.fn)) {
+                res = safeCall(fn, res, true, res, params, next, value);
+            }
+            _.debug("Ready pipe " + name);
+            return res;
+        }
+
+    };
+
+    var pipeline = function () {
+        var pipe = arguments[0];
+        if (_.isString(pipe)) {
+            pipe = pipesRegistry[pipe];
+            if (!pipe) {
+                throw new Error('Pipe ' + pipe + ' not found');
+            }
+        } else if (_.isFunction(pipe)) {
+            pipe = pipes('%tmp%', pipe);
+        }
+        var params = arguments.slice(1);
+        return pipe.process(this, params);
+    };
+
     /**  MODEL **/
+
+    var tuple = function(model) {
+        var wrap = function () {
+            return pipeline.apply(this, arguments);
+        };
+    };
 
     var model = function (obj) {
         _.extend(this, obj);
@@ -563,7 +586,7 @@
             } else if (_.isArray(obj)) {
                 obj = this.wrapArray(obj);
             }
-            return new model(obj);
+            return tuple(new model(obj));
         },
 
         resolveDependencies: function (bind, dependencies) {
@@ -598,7 +621,7 @@
             var r = new bind(name);
             r.obj = this.check(tiedObject);
             this.resolveDependencies(r, dependencies);
-            r.obj.$deps  = Object.freeze(dependencies || []);
+            r.obj.$deps = Object.freeze(dependencies || []);
             proxy(r);
             _.debug("Bind model ready");
             return r;
@@ -611,9 +634,9 @@
         _.debugEnabled = enable;
     };
     if (typeof module.exports === 'object') {
-        module.exports = function(test) {
+        module.exports = function (test) {
             var res = module.tie;
-            if(test) {
+            if (test) {
                 res.tier = tie.prototype;
                 res.util = _;
                 res.model = model;
