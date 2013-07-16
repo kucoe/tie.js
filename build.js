@@ -1,5 +1,5 @@
 var fs = require("fs");
-var ugly = require('uglify-js')
+var ugly = require('uglify-js');
 var sourcePath = "src/modules";
 var dest = "src/tie.js";
 var min = "src/tie.min.js";
