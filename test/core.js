@@ -1,63 +1,93 @@
-var core = require('../src/next/core');
-var util = core.util;
-var model = core.model;
-var bind = core.bind;
-var ties = core.ties;
+var tie = require('../src/next/core')(true);
+var util = tie.util;
+var model = tie.model;
+var bind = tie.bind;
+var ties = tie.ties;
+
+var should = require('should');
 
 describe('tie', function () {
     describe('model', function () {
 
-        beforeEach(function(){
-           ties.splice(0, ties.length);
+        beforeEach(function () {
+            ties.splice(0, ties.length);
         });
 
         describe('wrap', function () {
             it('should wrap primitive', function () {
-                var res = core.tie("a", 12);
+                var res = tie("a", 12);
                 res.value.should.eql(12, "number");
-                res = core.tie("a", 'a');
+                res = tie("a", 'a');
                 res.value.should.eql('a', "string");
                 var date = new Date();
-                res = core.tie("a", date);
+                res = tie("a", date);
                 res.value.should.eql(date, "date");
-                var nop = function(){};
-                res = core.tie("a", nop);
+                var nop = function () {
+                };
+                res = tie("a", nop);
                 res.value.should.eql(nop, "function");
             });
             it('should wrap array', function () {
-                var res = core.tie("a", ['a', 'b']);
+                var res = tie("a", ['a', 'b']);
                 res.$values.should.eql(['a', 'b'], "array");
             });
+        });
+        describe('bind', function () {
             it('should be instance of model', function () {
-                var res = core.tie("a", {});
-                res.should.be.instanceof(model, "instanceof");
+                var res = tie("a", {});
+                res.should.be.an.instanceof(model, "instanceof");
             });
             it('should have utils in prototype', function () {
-                var res = core.tie("a", {});
+                var res = tie("a", {});
                 Object.getPrototypeOf(res).should.eql(util, "prototype");
             });
             it('should have bind registered', function () {
-                var res = core.tie("a", {});
+                var res = tie("a", {});
                 res.should.eql(ties['a'].obj, "registered");
-                ties['a'].should.be.instanceof(bind, "instanceof bind");
+                ties['a'].should.be.an.instanceof(bind, "instanceof bind");
+            });
+            it('should not allow reserved', function () {
+                var assert = (function () {
+                    var res = tie("prop", {});
+                }).should.throw;
+            });
+            it('should define app implicitly', function () {
+                var res = tie("a", {});
+                should.exist(ties['app'], "app");
             });
         });
         describe('dependencies', function () {
             it('should resolve dependencies', function () {
-                var a = core.tie("a", {});
-                var b = core.tie("b", {}, ['a']);
+                var a = tie("a", {});
+                var b = tie("b", {}, ['a']);
                 a.should.eql(b.$a, "dependency");
                 b.$ready().should.eql(true, "ready");
             });
             it('should resolve late dependencies', function () {
-                var b = core.tie("b", {}, ['a']);
-                var a = core.tie("a", {});
+                var b = tie("b", {}, ['a']);
+                var a = tie("a", {});
                 a.should.eql(b.$a, "dependency");
                 b.$ready().should.eql(true, "ready");
             });
             it('should stub dependencies', function () {
-                var b = core.tie("b", {}, ['a']);
+                var b = tie("b", {}, ['a']);
                 util.isDefined(b.$a).should.eql(true, "dependency stub");
+                b.$ready().should.eql(true, "ready");
+            });
+            it('should update dependency', function () {
+                var a = tie("a", {});
+                var b = tie("b", {}, ['a']);
+                tie("a", "lol");
+                b.$a.value.should.eql("lol", "dependency updated");
+                b.$ready().should.eql(true, "ready");
+            });
+            it('should not allow interfere dependency', function () {
+                var a = tie("a", {});
+                var deps = ['a'];
+                var b = tie("b", {}, deps);
+                a.$deps.push("c");
+                a.$ready().should.eql(true, "ready");
+                deps.push("c");
                 b.$ready().should.eql(true, "ready");
             });
         });
@@ -84,8 +114,8 @@ describe('tie', function () {
                 util.isDate(new Date()).should.eql(true, "date");
                 util.isBoolean(true).should.eql(true, "boolean");
                 util.isFunction(util.isFunction).should.eql(true, "function");
-                util.isObject({a:'a'}).should.eql(true, "object");
-                util.isArray(['a','b']).should.eql(true, "array");
+                util.isObject({a: 'a'}).should.eql(true, "object");
+                util.isArray(['a', 'b']).should.eql(true, "array");
                 util.isCollection(arguments).should.eql(true, "array-like");
             });
         });
@@ -94,17 +124,17 @@ describe('tie', function () {
                 util.trim(' aaa ').should.eql('aaa', "trim");
                 util.trim('      ').should.eql('', "trim empty");
                 util.trim(12).should.eql(12, "trim wrong type");
-                util.isUndefined(util.trim()).should.eql(true, "trim undefined");
+                should.not.exist(util.trim(), "trim undefined");
                 util.uppercase('aaa').should.eql('AAA', "uppercase");
                 util.uppercase('AAA').should.eql('AAA', "uppercase ready");
                 util.uppercase('      ').should.eql('      ', "uppercase empty");
                 util.uppercase(12).should.eql(12, "uppercase wrong type");
-                util.isUndefined(util.uppercase()).should.eql(true, "uppercase undefined");
+                should.not.exist(util.uppercase(), "uppercase undefined");
                 util.lowercase('AAA').should.eql('aaa', "lowercase");
                 util.lowercase('aaa').should.eql('aaa', "lowercase ready");
                 util.lowercase('      ').should.eql('      ', "lowercase empty");
                 util.lowercase(12).should.eql(12, "lowercase wrong type");
-                util.isUndefined(util.lowercase()).should.eql(true, "lowercase undefined");
+                should.not.exist(util.lowercase(), "lowercase undefined");
             });
         });
         describe('clone', function () {

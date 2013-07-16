@@ -466,7 +466,7 @@
         var ready = true;
         _.forEach(this.$deps, function (dep) {
             var d = this['$' + dep];
-            if (d._empty) {
+            if (!d || d._empty) {
                 ready = false;
                 return false;
             }
@@ -581,7 +581,7 @@
             var r = new bind(name);
             r.obj = this.check(tiedObject);
             this.resolveDependencies(r, dependencies);
-            r.obj.$deps = dependencies || [];
+            r.obj.$deps  = Object.freeze(dependencies || []);
             proxy(r);
             _.debug("Bind model ready");
             return r;
@@ -593,15 +593,18 @@
     module.tie.enableDebug = function (enable) {
         _.debugEnabled = enable;
     };
-
     if (typeof module.exports === 'object') {
-        module.exports.tie = module.tie;
-        module.exports.tier = tie.prototype;
-        module.exports.util = _;
-        module.exports.model = model;
-        module.exports.ties = ties;
-        module.exports.bind = bind;
+        module.exports = function(test) {
+            var res = module.tie;
+            if(test) {
+                res.tier = tie.prototype;
+                res.util = _;
+                res.model = model;
+                res.ties = ties;
+                res.bind = bind;
+            }
+            return res;
+        };
     }
 
-
-})(typeof window === 'object' ? window : module);
+})(typeof exports === 'object' ? module : window);
