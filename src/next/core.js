@@ -49,6 +49,10 @@
             return Object.prototype.toString.apply(value) == '[object Date]';
         },
 
+        isRegExp: function (value) {
+            return Object.prototype.toString.apply(value) == '[object RegExp]';
+        },
+
         isArray: function (value) {
             return Array.isArray(value) || Object.prototype.toString.apply(value) == '[object Array]';
         },
@@ -94,6 +98,17 @@
         },
 
         //deep equals
+        isEqual2: function (a, b) {
+            if (a === b) {
+                return true;
+            }
+            if(this.isFunction(a)) {
+                return a.toString()
+            }
+            return this.eqi(JSON.stringify(a), JSON.stringify(b));
+        },
+
+        //deep equals
         isEqual: function (a, b, aStack, bStack) {
             // Identical objects are equal. `0 === -0`, but they aren't identical.
             // See the [Harmony `egal` proposal](http://wiki.ecmascript.org/doku.php?id=harmony:egal).
@@ -131,6 +146,8 @@
                         a.global == b.global &&
                         a.multiline == b.multiline &&
                         a.ignoreCase == b.ignoreCase;
+                case '[object Function]':
+                    return a.toString() == b.toString();
             }
             if (typeof a != 'object' || typeof b != 'object') {
                 return false;

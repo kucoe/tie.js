@@ -7,8 +7,8 @@ var ties = core.ties;
 describe('tie', function () {
     describe('model', function () {
 
-        beforeEach(function(){
-           ties.splice(0, ties.length);
+        beforeEach(function () {
+            ties.splice(0, ties.length);
         });
 
         describe('wrap', function () {
@@ -20,7 +20,8 @@ describe('tie', function () {
                 var date = new Date();
                 res = core.tie("a", date);
                 res.value.should.eql(date, "date");
-                var nop = function(){};
+                var nop = function () {
+                };
                 res = core.tie("a", nop);
                 res.value.should.eql(nop, "function");
             });
@@ -84,8 +85,8 @@ describe('tie', function () {
                 util.isDate(new Date()).should.eql(true, "date");
                 util.isBoolean(true).should.eql(true, "boolean");
                 util.isFunction(util.isFunction).should.eql(true, "function");
-                util.isObject({a:'a'}).should.eql(true, "object");
-                util.isArray(['a','b']).should.eql(true, "array");
+                util.isObject({a: 'a'}).should.eql(true, "object");
+                util.isArray(['a', 'b']).should.eql(true, "array");
                 util.isCollection(arguments).should.eql(true, "array-like");
             });
         });
@@ -113,6 +114,44 @@ describe('tie', function () {
                 var b = Object.create(a, {b: {value: 'b'}});
                 var c = util.clone(b);
                 Object.getPrototypeOf(c).should.eql(a, "prototype");
+            });
+        });
+        describe('eq', function () {
+            it('should be deep equal object', function () {
+                var a = {a: 'a', b: {c: 12}, d: [1, 2, 3]};
+                var b = {a: 'a', b: {c: 12}, d: [1, 2, 3]};
+                var assert = util.isEqual(a, b).should.be.ok;
+                assert = util.isEqual2(a, b).should.be.ok;
+            });
+            it('should be equal primitive', function () {
+                var assert = util.isEqual("a", "a").should.be.ok;
+                assert = util.isEqual2("a", "a").should.be.ok;
+                assert = util.isEqual(12, 12).should.be.ok;
+                assert = util.isEqual2(12, 12).should.be.ok;
+                assert = util.isEqual(true, true).should.be.ok;
+                assert = util.isEqual2(true, true).should.be.ok;
+                assert = util.isEqual(new Date(0), new Date(0)).should.be.ok;
+                assert = util.isEqual2(new Date(0), new Date(0)).should.be.ok;
+                assert = util.isEqual(/[1-2]+/gi, /[1-2]+/gi).should.be.ok;
+                assert = util.isEqual2(/[1-2]+/gi, /[1-2]+/gi).should.be.ok;
+            });
+            it('should be equal array', function () {
+                var assert = util.isEqual([1, 2, 3], [1, 2, 3]).should.be.ok;
+                assert = util.isEqual2([1, 2, 3], [1, 2, 3]).should.be.ok;
+                assert = util.isEqual([1, {a: 2}, 3], [1, {a: 2}, 3]).should.be.ok;
+                assert = util.isEqual2([1, {a: 2}, 3], [1, {a: 2}, 3]).should.be.ok;
+            });
+            it('should be equal function', function () {
+                var assert = util.isEqual(function(){return "a"}, function(){return "a"}).should.be.ok;
+                assert = util.isEqual2(function(){return "a"}, function(){return "a"}).should.be.ok;
+            });
+            it('should be equal null', function () {
+                var assert = util.isEqual(null, null).should.be.ok;
+                assert = util.isEqual2(null, null).should.be.ok;
+            });
+            it('should be equal undefined', function () {
+                var assert = util.isEqual().should.be.ok;
+                assert = util.isEqual2().should.be.ok;
             });
         });
         describe('convert', function () {
