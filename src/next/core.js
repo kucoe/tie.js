@@ -429,6 +429,8 @@
         return explore(obj);
     };
 
+    /**  PIPE **/
+
     var pipes = function (name, fn) {
         var p = pipesRegistry[name];
         if (_.isUndefined(fn)) {
@@ -469,13 +471,17 @@
                 obj = ties[obj].obj;
             }
         }
+        obj = _.clone(obj);
+        return chain(obj);
+    };
+
+    var chain = function(obj) {
         return function() {
             if(arguments.length == 0) {
                 return obj;
             }
-            obj = _.clone(obj);
             obj = pipeline.apply(obj, args2Array(arguments));
-            return pipeModel(obj);
+            return chain(obj);
         }
     };
 
