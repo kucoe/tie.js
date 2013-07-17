@@ -37,7 +37,7 @@
         return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
     };
 
-    var args2Array = function(args, start) {
+    var args2Array = function (args, start) {
         return Array.prototype.slice.call(args, start);
     };
 
@@ -54,12 +54,12 @@
         } catch (e) {
             res = undefined;
             if (bindReady) {
-                if(console.groupCollapsed){
+                if (console.groupCollapsed) {
                     console.groupCollapsed("User code error");
                 }
                 console.error('Is ready and had an error:' + e.message);
                 console.dir(e);
-                if(console.groupEnd){
+                if (console.groupEnd) {
                     console.groupEnd();
                 }
             }
@@ -338,7 +338,7 @@
         debug: function (message, group) {
             if (this.debugEnabled) {
                 if (group) {
-                    if(console.groupCollapsed){
+                    if (console.groupCollapsed) {
                         console.groupEnd();
                         console.groupCollapsed(group);
                     }
@@ -431,25 +431,28 @@
 
     /**  PIPE **/
 
-    var pipes = function (name, fn) {
+    var pipes = function (name, fn, dependencies, sealed) {
         var p = pipesRegistry[name];
         if (_.isUndefined(fn)) {
             return  p;
         }
-        if (p) {
-            throw new Error(name + ' pipe already registered. Please choose another name for your pipe');
+        if (p && p.sealed) {
+            throw new Error(name + ' pipe already registered and sealed. Please choose another name for your pipe');
         }
-        p = pipe(name, fn);
+        p = pipe(name, fn, dependencies || []);
+        p.sealed = sealed;
         pipesRegistry[name] = p;
         return p;
     };
 
-    var pipe = function (name, fn) {
+    var pipe = function (name, fn, dependencies) {
         return function (obj, params) {
             _.debug("Process pipe " + name);
-            if (params.length > 0) {
-                var context = _.extend({}, obj);
-                var array = _.convert(params, context);
+            _.forEach(dependencies, function (item) {
+                obj[DEP_PREFIX + item] = pipesRegistry[item];
+            });
+            if (params && params.length > 0) {
+                var array = _.convert(params, obj);
                 _.forEach(array, function (param) {
                     param = _.trim(param);
                     params.push(param);
@@ -463,21 +466,14 @@
         }
     };
 
-    var pipeModel = function() {
-        var obj = this;
-        if(arguments.length > 0) {
-            obj  = arguments[0];
-            if(_.isString(obj)) {
-                obj = ties[obj].obj;
-            }
-        }
+    var pipeModel = function (obj) {
         obj = _.clone(obj);
         return chain(obj);
     };
 
-    var chain = function(obj) {
-        return function() {
-            if(arguments.length == 0) {
+    var chain = function (obj) {
+        return function () {
+            if (arguments.length == 0) {
                 return obj;
             }
             obj = pipeline.apply(obj, args2Array(arguments));
@@ -534,15 +530,10 @@
                 return true;
             }, this);
             return ready;
-        },
-
-        $pipe: function() {
-            return pipeModel.apply(this, args2Array(arguments));
         }
-
     };
 
-    var handler = function() {
+    var handler = function () {
         _.extend(this, modelUtil);
     };
 
@@ -593,12 +584,20 @@
     /**  TIE **/
 
     var tie = function () {
-        return function (name, tiedObject, dependencies) {
+        return function (name, tiedObject, dependencies, sealed) {
             if (name != APP && ties[APP] == null) {
                 module.tie(APP, {});
             }
-            var r = tie.prototype.init(name, tiedObject, dependencies);
+            var r = ties[name];
+            if (_.isUndefined(tiedObject)) {
+                return  pipeModel(r.obj);
+            }
+            if (r && r.sealed) {
+                throw new Error(name + ' tie is already registered and sealed. Please choose another name for your tie');
+            }
+            r = tie.prototype.init(name, tiedObject, dependencies);
             tie.prototype.define(name, r);
+            r.sealed = sealed;
             if (name == APP) {
                 app = r;
             }
@@ -665,8 +664,7 @@
     };
 
     module.tie = tie();
-    module.tie.pipes = pipes;
-    module.tie._ = pipeModel;
+    module.tie.pipe = pipes;
     module.tie.enableDebug = function (enable) {
         _.debugEnabled = enable;
     };

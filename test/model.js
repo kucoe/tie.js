@@ -53,6 +53,12 @@ describe('model', function () {
             tie("a", {});
             should.exist(ties['app'], "app");
         });
+        it('should not override sealed', function () {
+            tie("a", {}, [], true);
+            var a = function () {
+                tie("a", {});
+            }.should.throw();
+        });
         it('should access deep props', function () {
             var res = tie("a", {a:121, b:{c:2}, e:[{j:"blah"}]});
             res.$prop('a').should.eql(121, 'top');
@@ -107,6 +113,13 @@ describe('model', function () {
             a.$ready().should.eql(true, "ready");
             deps.push("c");
             b.$ready().should.eql(true, "ready");
+        });
+        it('should not fail cyclic dependencies', function () {
+            var a = tie("a", 'a', ['c']);
+            var b = tie("b", 'b', ['a']);
+            var c = tie("c", 'c', ['b']);
+            a.value = 'aa';
+            c.$$b.$$a.value.should.eql('aa', "value");
         });
     });
 });
