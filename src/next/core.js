@@ -13,14 +13,32 @@
     var VALUES = '$values';
     var DEPS = '$deps';
     var ITEM_NAME = '_item_name';
-    var RESERVED = [VALUES, DEPS, '$prop', '$ready'];
+    var DEP_PREFIX = '$$';
 
     var app = null;
     var ties = {};
     var pipesRegistry = {};
 
+    /**
+     * Allow convert array to configuration object extending object passed with array values as properties
+     *
+     * @returns {Object}
+     */
+    Array.prototype._ = function (obj) {
+        _.forEach(this, function (item) {
+            if (!obj.hasOwnProperty(item)) {
+                obj[item] = {'_item_name': item};
+            }
+        });
+        return obj;
+    };
+
     var s4 = function () {
         return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    };
+
+    var args2Array = function(args, start) {
+        return Array.prototype.slice.call(args, start);
     };
 
     var safeCall = function (fn, fnThis, bindReady) {
@@ -31,15 +49,19 @@
             spliceArgs = 2;
         }
         try {
-            var args = Array.prototype.slice.call(arguments, spliceArgs);
+            var args = args2Array(arguments, spliceArgs);
             res = fn.apply(fnThis, args);
         } catch (e) {
             res = undefined;
             if (bindReady) {
-                console.groupCollapsed("User code error");
+                if(console.groupCollapsed){
+                    console.groupCollapsed("User code error");
+                }
                 console.error('Is ready and had an error:' + e.message);
                 console.dir(e);
-                console.groupEnd();
+                if(console.groupEnd){
+                    console.groupEnd();
+                }
             }
         }
         return res;
@@ -316,8 +338,10 @@
         debug: function (message, group) {
             if (this.debugEnabled) {
                 if (group) {
-                    console.groupEnd();
-                    console.groupCollapsed(group);
+                    if(console.groupCollapsed){
+                        console.groupEnd();
+                        console.groupCollapsed(group);
+                    }
                 }
                 console.log(message);
             }
@@ -355,9 +379,8 @@
                         desc.value = val;
                     }
                 } else {
-                    obj.$attr(prop, val);
+                    //TODO pointcut
                 }
-                //TODO pointcut
                 bind.apply(prop);
             };
             var enumerable = desc ? desc.enumerable : false;
@@ -385,7 +408,7 @@
                 if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
                     return false; // skip readonly
                 }
-                var dep = prop.charAt(0) === '$' && bind.obj.$deps.indexOf(prop.substring(1)) != -1;
+                var dep = prop.indexOf(DEP_PREFIX) == 0 && bind.obj.$deps.indexOf(prop.substring(2)) != -1;
                 if (_.isObject(value) && !dep && prop != DEPS && prop != VALUES) {
                     _.debug("Exploring " + prop);
                     explore(value);
@@ -406,114 +429,124 @@
         return explore(obj);
     };
 
-    var pipes = function (name, fn, opts) {
+    var pipes = function (name, fn) {
+        var p = pipesRegistry[name];
         if (_.isUndefined(fn)) {
-            return pipesRegistry[name];
+            return  p;
         }
-        var defOpts = {
-            fetchModel: false,
-            updateModel: false,
-            updateRoutes: false
-        };
-        if (_.isDefined(opts)) {
-            _.extend(defOpts, opts);
+        if (p) {
+            throw new Error(name + ' pipe already registered. Please choose another name for your pipe');
         }
-        var p = new pipe(name, fn, defOpts);
+        p = pipe(name, fn);
         pipesRegistry[name] = p;
         return p;
     };
 
-    var pipe = function (name, fn, defOpts) {
-        this.name = name;
-        this.fn = fn;
-        this.opts = defOpts;
-    };
-
-    pipe.prototype = {
-
-        process: function (obj, params, next, value) {
-            var name = this.name;
+    var pipe = function (name, fn) {
+        return function (obj, params) {
             _.debug("Process pipe " + name);
             if (params.length > 0) {
                 var context = _.extend({}, obj);
-                context = _.extend(context, pipe);
                 var array = _.convert(params, context);
                 _.forEach(array, function (param) {
                     param = _.trim(param);
                     params.push(param);
                 });
             }
-            var res = obj;
-            if (this.fn && _.isFunction(this.fn)) {
-                res = safeCall(fn, res, true, res, params, next, value);
+            if (fn && _.isFunction(fn)) {
+                obj = safeCall(fn, obj, true, obj, params);
             }
             _.debug("Ready pipe " + name);
-            return res;
+            return obj;
         }
+    };
 
+    var pipeModel = function() {
+        var obj = this;
+        if(arguments.length > 0) {
+            obj  = arguments[0];
+            if(_.isString(obj)) {
+                obj = ties[obj].obj;
+            }
+        }
+        return function() {
+            if(arguments.length == 0) {
+                return obj;
+            }
+            obj = _.clone(obj);
+            obj = pipeline.apply(obj, args2Array(arguments));
+            return pipeModel(obj);
+        }
     };
 
     var pipeline = function () {
-        var pipe = arguments[0];
-        if (_.isString(pipe)) {
-            pipe = pipesRegistry[pipe];
-            if (!pipe) {
-                throw new Error('Pipe ' + pipe + ' not found');
+        var p = arguments[0];
+        if (_.isString(p)) {
+            p = pipesRegistry[p];
+            if (!p) {
+                throw new Error('Pipe ' + p + ' not found');
             }
-        } else if (_.isFunction(pipe)) {
-            pipe = pipes('%tmp%', pipe);
+        } else if (_.isFunction(p)) {
+            p = pipes('%tmp%', p);
         }
-        var params = arguments.slice(1);
-        return pipe.process(this, params);
+        var params = args2Array(arguments, 1);
+        return p(this, params);
     };
 
     /**  MODEL **/
 
-    var tuple = function(model) {
-        var wrap = function () {
-            return pipeline.apply(this, arguments);
-        };
+    var modelUtil = {
+        $prop: function (name, value) {
+            var res = this;
+            var split = name.split('.');
+            var i = 1;
+            var length = split.length;
+            while (i < length) {
+                res = res[split[i - 1]];
+                i++;
+                if (_.isUndefined(res)) {
+                    return null;
+                }
+            }
+            var last = split[length - 1];
+            if (_.isUndefined(value)) {
+                return res[last];
+            } else {
+                res[last] = value;
+            }
+            return null;
+        },
+
+        $ready: function () {
+            var ready = true;
+            _.forEach(this.$deps, function (dep) {
+                var d = this[DEP_PREFIX + dep];
+                if (!d || d._empty) {
+                    ready = false;
+                    return false;
+                }
+                return true;
+            }, this);
+            return ready;
+        },
+
+        $pipe: function() {
+            return pipeModel.apply(this, args2Array(arguments));
+        }
+
     };
+
+    var handler = function() {
+        _.extend(this, modelUtil);
+    };
+
+    handler.prototype = _;
 
     var model = function (obj) {
         _.extend(this, obj);
     };
 
-    model.prototype = _;
-
-    model.prototype.$prop = function (name, value) {
-        var res = this;
-        var split = name.split('.');
-        var i = 1;
-        var length = split.length;
-        while (i < length) {
-            res = res[split[i - 1]];
-            i++;
-            if (_.isUndefined(res)) {
-                return null;
-            }
-        }
-        var last = split[length - 1];
-        if (_.isUndefined(value)) {
-            return res[last];
-        } else {
-            res[last] = value;
-        }
-        return null;
-    };
-
-    model.prototype.$ready = function () {
-        var ready = true;
-        _.forEach(this.$deps, function (dep) {
-            var d = this['$' + dep];
-            if (!d || d._empty) {
-                ready = false;
-                return false;
-            }
-            return true;
-        }, this);
-        return ready;
-    };
+    model.prototype = new handler();
 
     /**  BIND **/
 
@@ -535,9 +568,9 @@
             _.debug("Calling apply on '" + this.name + "' after changed property '" + property + "'");
             //TODO pointcut
             _.forEach(this.touch, function (item) {
-                var tie = ties[item];
-                if (tie) {
-                    tie.obj['$' + this.name] = this.obj;
+                var bind = ties[item];
+                if (bind) {
+                    bind.obj[DEP_PREFIX + this.name] = this.obj;
                 }
             }, this);
             if (!this.timeout) {
@@ -555,9 +588,6 @@
 
     var tie = function () {
         return function (name, tiedObject, dependencies) {
-            if (RESERVED.indexOf('$' + name) != -1) {
-                throw new Error(name + ' is reserved. Please choose another name for your tie');
-            }
             if (name != APP && ties[APP] == null) {
                 module.tie(APP, {});
             }
@@ -586,7 +616,7 @@
             } else if (_.isArray(obj)) {
                 obj = this.wrapArray(obj);
             }
-            return tuple(new model(obj));
+            return new model(obj);
         },
 
         resolveDependencies: function (bind, dependencies) {
@@ -599,7 +629,7 @@
                     found = {name: dep, touch: [], obj: {_empty: true}};
                     this.define(dep, found);
                 }
-                bind.obj['$' + dep] = found.obj;
+                bind.obj[DEP_PREFIX + dep] = found.obj;
                 if (found.touch.indexOf(bind.name) == -1) {
                     found.touch.push(bind.name);
                 }
@@ -629,7 +659,8 @@
     };
 
     module.tie = tie();
-    //module.tie.pipes = pipes;
+    module.tie.pipes = pipes;
+    module.tie._ = pipeModel;
     module.tie.enableDebug = function (enable) {
         _.debugEnabled = enable;
     };
@@ -641,6 +672,7 @@
                 res.util = _;
                 res.model = model;
                 res.ties = ties;
+                res.pipesRegistry = pipesRegistry;
                 res.bind = bind;
             }
             return res;
