@@ -22,61 +22,80 @@ describe('handle', function () {
         }.should.throw();
     });
     it('should have dependencies', function () {
-        tie.handle("a", function (obj) {
-            obj.name = "John";
-            return obj;
+        tie.handle("a", function (obj, config) {
+            config.name = "John";
+            return config;
         });
-        var b = tie.handle("b", function (obj) {
-            return this.$$a(obj);
+        var b = tie.handle("b", function (obj, config) {
+            return this.$$a(obj, config);
         }, ['a']);
-        b({}).name.should.eql("John");
+        b({}, {}).name.should.eql("John");
     });
     it('should allow memoization', function () {
-        var a = tie.pipe("a", function (obj) {
-            obj.age = this.memo[obj.name] | 0;
-            return obj;
+        var a = tie.handle("a", function (obj, config) {
+            config.age = this.memo[config.name] || 0;
+            return config;
         });
-        a.memo = {'John':12};
-        var b = tie.pipe("b", function (obj) {
-            return obj;
+        a.memo = {'John': 12};
+        var b = tie.handle("b", function (obj, config) {
+            return config;
         });
-        b.memo = {'John':14};
-        a({name:'John'}).age.should.eql(12);
+        b.memo = {'John': 14};
+        a({}, {name: 'John'}).age.should.eql(12);
     });
-    it('should pipe tie by name', function () {
-        var a = tie("a", "aaa");
-        tie.pipe("upper", function (obj) {
-            obj.value = this.uppercase(obj.value);
-            return obj;
+    it('should handle property', function () {
+        tie.handle("name", function (obj, config) {
+            obj.name = config;
+            return {name: config};
         });
-        var b = tie("a")('upper')();
-        a.value.should.eql("aaa", "original");
-        b.value.should.eql("AAA", "pipe");
+        var a = tie("a", {$name: 'John'});
+        a.$name.should.eql({name: 'John'}, 'config');
+        a.name.should.eql('John', 'name');
     });
-    it('should pipe tie by name and use updated', function () {
-        var a = tie("a", "aaa");
-        tie.pipe("upper", function (obj) {
-            obj.value = this.uppercase(obj.value);
-            return obj;
+    it('should handle property from app', function () {
+        tie.handle("name", function (obj, config) {
+            obj.name = config;
+            return {name: config};
         });
-        tie("a", "bbb");
-        var b = tie("a")('upper')();
-        a.value.should.eql("aaa", "original");
-        b.value.should.eql("BBB", "pipe");
+        tie("app", {$name: 'John'});
+        var a = tie("a", {});
+        a.name.should.eql('John', 'name');
+        a.$name.should.eql({name: 'John'}, 'config');
     });
-    it('should chain pipes for tie by name', function () {
-        var a = tie("a", "aral");
-        tie.pipe("upper", function (obj) {
-            obj.value = this.uppercase(obj.value);
-            return obj;
+    it('should use dependencies order', function () {
+        var b = tie.handle("b", function (obj, config) {
+            obj.name = obj.name + ' ' + config;
+            return config;
+        }, ['a']);
+        tie.handle("a", function (obj, config) {
+            obj.name = config;
+            return config;
         });
-        tie.pipe("filter", function(obj, params) {
-            var search = new RegExp(params.join('|'), 'gi');
-            obj.value = obj.value.replace(search, '');
-            return obj;
+        var test = tie("test", {$a: "Jack", $b: "Wolf"});
+        test.name.should.eql("Jack Wolf");
+    });
+    it('should watch config', function () {
+        tie.handle("a", function (obj, config) {
+            obj.name = config;
+            return config;
         });
-        var b = tie("a")('upper')('filter', 'r', 'l')();
-        a.value.should.eql("aral", "original");
-        b.value.should.eql("AA", "pipe");
+        var test = tie("test", {$a: "Jack"});
+        test.name.should.eql("Jack");
+        test.$a = 'Wolf';
+        test.name.should.eql("Wolf");
+    });
+    it('should watch property', function () {
+        tie.handle("a", function (obj, config, watcher) {
+            var w = watcher.add('name', function() {
+                this.total = config + ' ' + this.name;
+            });
+            w.call(obj);
+            return config;
+        });
+        var test = tie("test", {$a: "Hello", name:'Jack'});
+        test.total.should.eql("Hello Jack");
+        test.name = 'Wolf';
+        test.name.should.eql("Wolf");
+        test.total.should.eql("Hello Wolf");
     });
 });

@@ -14,6 +14,7 @@
     var DEPS = '$deps';
     var ITEM_NAME = '_item_name';
     var DEP_PREFIX = '$$';
+    var HANDLE_PREFIX = '$';
 
     var app = null;
     var ties = {};
@@ -508,21 +509,22 @@
         if (h && h.sealed) {
             throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
         }
-        h = pipe(name, fn, dependencies || []);
+        h = handle(name, fn, dependencies || []);
         h.sealed = sealed;
+        h.dependencies = dependencies || [];
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
     };
 
     var handle = function (name, fn, dependencies) {
-        var h = function (obj, config) {
+        var h = function (obj, config, watcher) {
             _.debug("Process handle " + name);
             _.forEach(dependencies, function (item) {
                 h[DEP_PREFIX + item] = handlesRegistry[item];
             });
             if (fn && _.isFunction(fn)) {
-                obj = safeCall(fn, h, true, obj, config);
+                obj = safeCall(fn, h, true, obj, config, watcher);
             }
             _.debug("Ready handle " + name);
             return obj;
@@ -580,6 +582,37 @@
 
     model.prototype = new handler();
 
+    /** WATCHER **/
+
+    var watcher = function () {
+        this.watchers = {};
+    };
+
+    watcher.prototype = {
+        add: function (prop, fn) {
+            var prev = this.watchers[prop];
+            var w = function () {
+                if(prev){
+                    prev();
+                }
+                fn();
+            };
+            this.watchers[prop] = w;
+            return w;
+        },
+
+        clear: function (prop) {
+            this.watchers[prop] = function () {};
+        },
+
+        call: function (prop, obj) {
+            var point = this.watchers[prop];
+            if (point) {
+                safeCall(point, obj);
+            }
+        }
+    };
+
     /**  BIND **/
 
     var bind = function (name) {
@@ -588,23 +621,39 @@
         this.values = {};
         this.applyCount = 0;
         this.timeout = null;
-        this.e = 0;
+        this.currentProperty = null;
+        this.watcher = new watcher();
     };
 
     bind.prototype = {
         apply: function (property) {
+            if (property === this.currentProperty) {
+                return;
+            }
+            this.currentProperty = property;
             this.applyCount++;
             if (this.applyCount > 10) {
                 _.debug("Too many apply :" + this.name + " - " + this.applyCount);
             }
             _.debug("Calling apply on '" + this.name + "' after changed property '" + property + "'");
-            //TODO pointcut
+            if (property && property[0] == HANDLE_PREFIX) {
+                var n = property.substring(1);
+                var h = handlesRegistry[n];
+                if (h) {
+                    this.resolveHandle(this.obj, n, h, []);
+                }
+            }
+            this.watcher.call('*', this.obj);
+            if (property && property !== '*') {
+                this.watcher.call(property, this.obj);
+            }
             _.forEach(this.touch, function (item) {
                 var bind = ties[item];
                 if (bind) {
                     bind.obj[DEP_PREFIX + this.name] = this.obj;
                 }
             }, this);
+            this.currentProperty = null;
             if (!this.timeout) {
                 var that = this;
                 this.timeout = setTimeout(function () {
@@ -612,6 +661,37 @@
                     that.applyCount = 0;
                 }, 3000);
             }
+        },
+
+        resolveHandles: function () {
+            var name = this.name;
+            var obj = this.obj;
+            if (name != APP) {
+                var processed = [];
+                _.forIn(handlesRegistry, function (handle, prop) {
+                    if (processed.indexOf(prop) == -1) {
+                        this.resolveHandle(obj, prop, handle, processed);
+                    }
+                }, this);
+            }
+        },
+
+        resolveHandle: function (obj, prop, handle, processed) {
+            _.forEach(handle.dependencies, function (item) {
+                if (processed.indexOf(item) == -1) {
+                    var h = handlesRegistry[item];
+                    this.resolveHandle(obj, item, h, processed);
+                }
+            }, this);
+            var n = (HANDLE_PREFIX + prop);
+            var config = obj[ n];
+            if (_.isUndefined(config) && app) {
+                config = app.obj[n];
+            }
+            this.currentProperty = n; //prevent apply update
+            obj[n] = handle(obj, config, this.watcher);
+            this.currentProperty = null;
+            processed.push(prop);
         }
     };
 
@@ -632,6 +712,7 @@
             }
             r = tie.prototype.init(name, tiedObject, dependencies);
             tie.prototype.define(name, r);
+            r.resolveHandles();
             r.sealed = sealed;
             if (name == APP) {
                 app = r;
@@ -697,6 +778,9 @@
             _.debug("Tie " + name, name);
             var r = new bind(name);
             r.obj = this.check(tiedObject);
+            r.obj.$inspect = function () {
+                proxy(r);
+            };
             this.resolveDependencies(r, dependencies);
             r.obj.$deps = Object.freeze(dependencies || []);
             proxy(r);
