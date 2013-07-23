@@ -1,32 +1,32 @@
 var tie = require('../src/next/core')(true);
-var pipes = tie.pipesRegistry;
+var handles = tie.handlesRegistry;
 
 var should = require('should');
 
 afterEach(function () {
     var prop;
-    for (prop in pipes) {
-        if (pipes.hasOwnProperty(prop)) {
-            delete pipes[prop];
+    for (prop in handles) {
+        if (handles.hasOwnProperty(prop)) {
+            delete handles[prop];
         }
     }
 });
 
-describe('pipe', function () {
+describe('handle', function () {
     it('should prevent existing', function () {
-        tie.pipe("a", function () {
+        tie.handle("a", function () {
         }, [], true);
         var a = function () {
-            tie.pipe("a", function () {
+            tie.handle("a", function () {
             });
         }.should.throw();
     });
     it('should have dependencies', function () {
-        tie.pipe("a", function (obj) {
+        tie.handle("a", function (obj) {
             obj.name = "John";
             return obj;
         });
-        var b = tie.pipe("b", function (obj) {
+        var b = tie.handle("b", function (obj) {
             return this.$$a(obj);
         }, ['a']);
         b({}).name.should.eql("John");

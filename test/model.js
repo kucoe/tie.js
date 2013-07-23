@@ -81,6 +81,13 @@ describe('model', function () {
         });
     });
     describe('dependencies', function () {
+        it('should have app dependency', function () {
+            var app = tie("app", {name:"a"});
+            var a = tie("a", {});
+            app.should.eql(a.$$app, "app");
+            a.$$app.name.should.eql("a", "app");
+            a.$ready().should.eql(true, "ready");
+        });
         it('should resolve dependencies', function () {
             var a = tie("a", {});
             var b = tie("b", {}, ['a']);

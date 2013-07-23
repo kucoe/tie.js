@@ -18,6 +18,7 @@
     var app = null;
     var ties = {};
     var pipesRegistry = {};
+    var handlesRegistry = {};
 
     /**
      * Allow convert array to configuration object extending object passed with array values as properties
@@ -441,15 +442,16 @@
         }
         p = pipe(name, fn, dependencies || []);
         p.sealed = sealed;
+        p = _.extend(p, _);
         pipesRegistry[name] = p;
         return p;
     };
 
     var pipe = function (name, fn, dependencies) {
-        return function (obj, params) {
+        var p = function (obj, params) {
             _.debug("Process pipe " + name);
             _.forEach(dependencies, function (item) {
-                obj[DEP_PREFIX + item] = pipesRegistry[item];
+                p[DEP_PREFIX + item] = pipesRegistry[item];
             });
             if (params && params.length > 0) {
                 var array = _.convert(params, obj);
@@ -459,11 +461,12 @@
                 });
             }
             if (fn && _.isFunction(fn)) {
-                obj = safeCall(fn, obj, true, obj, params);
+                obj = safeCall(fn, p, true, obj, params);
             }
             _.debug("Ready pipe " + name);
             return obj;
-        }
+        };
+        return p;
     };
 
     var pipeModel = function (obj) {
@@ -493,6 +496,38 @@
         }
         var params = args2Array(arguments, 1);
         return p(this, params);
+    };
+
+    /**  HANDLE **/
+
+    var handles = function (name, fn, dependencies, sealed) {
+        var h = handlesRegistry[name];
+        if (_.isUndefined(fn)) {
+            return  h;
+        }
+        if (h && h.sealed) {
+            throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
+        }
+        h = pipe(name, fn, dependencies || []);
+        h.sealed = sealed;
+        h = _.extend(h, _);
+        handlesRegistry[name] = h;
+        return h;
+    };
+
+    var handle = function (name, fn, dependencies) {
+        var h = function (obj, config) {
+            _.debug("Process handle " + name);
+            _.forEach(dependencies, function (item) {
+                h[DEP_PREFIX + item] = handlesRegistry[item];
+            });
+            if (fn && _.isFunction(fn)) {
+                obj = safeCall(fn, h, true, obj, config);
+            }
+            _.debug("Ready handle " + name);
+            return obj;
+        };
+        return h;
     };
 
     /**  MODEL **/
@@ -625,6 +660,13 @@
         },
 
         resolveDependencies: function (bind, dependencies) {
+            var name = bind.name;
+            if (name != APP) {
+                bind.obj[DEP_PREFIX + APP] = app.obj;
+                if (app.touch.indexOf(name) == -1) {
+                    app.touch.push(name);
+                }
+            }
             if (!dependencies) {
                 return;
             }
@@ -635,8 +677,8 @@
                     this.define(dep, found);
                 }
                 bind.obj[DEP_PREFIX + dep] = found.obj;
-                if (found.touch.indexOf(bind.name) == -1) {
-                    found.touch.push(bind.name);
+                if (found.touch.indexOf(name) == -1) {
+                    found.touch.push(name);
                 }
             }, this);
         },
@@ -665,6 +707,7 @@
 
     module.tie = tie();
     module.tie.pipe = pipes;
+    module.tie.handle = handles;
     module.tie.enableDebug = function (enable) {
         _.debugEnabled = enable;
     };
@@ -677,6 +720,7 @@
                 res.model = model;
                 res.ties = ties;
                 res.pipesRegistry = pipesRegistry;
+                res.handlesRegistry = handlesRegistry;
                 res.bind = bind;
             }
             return res;
