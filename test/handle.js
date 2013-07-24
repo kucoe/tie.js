@@ -21,6 +21,13 @@ describe('handle', function () {
             });
         }.should.throw();
     });
+    it('should have name', function () {
+        var a = tie.handle("a", function (obj, config) {
+            config.name = this.$name;
+            return config;
+        });
+        a({}, {}).name.should.eql("a");
+    });
     it('should have dependencies', function () {
         tie.handle("a", function (obj, config) {
             config.name = "John";
@@ -86,10 +93,11 @@ describe('handle', function () {
     });
     it('should watch property', function () {
         tie.handle("a", function (obj, config, watcher) {
-            var w = watcher.add('name', function() {
-                this.total = config + ' ' + this.name;
-            });
-            w.call(obj);
+            var w = function(obj) {
+                obj.total = config + ' ' + obj.name;
+            };
+            watcher.add('name', this.$name, w);
+            w.call(obj, obj);
             return config;
         });
         var test = tie("test", {$a: "Hello", name:'Jack'});

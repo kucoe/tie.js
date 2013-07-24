@@ -438,11 +438,13 @@
         if (_.isUndefined(fn)) {
             return  p;
         }
-        if (p && p.sealed) {
+        if (p && p.$sealed) {
             throw new Error(name + ' pipe already registered and sealed. Please choose another name for your pipe');
         }
         p = pipe(name, fn, dependencies || []);
-        p.sealed = sealed;
+        p.$name = name;
+        p.$sealed = sealed || false;
+        p.$deps = dependencies || [];
         p = _.extend(p, _);
         pipesRegistry[name] = p;
         return p;
@@ -506,12 +508,13 @@
         if (_.isUndefined(fn)) {
             return  h;
         }
-        if (h && h.sealed) {
+        if (h && h.$sealed) {
             throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
         }
         h = handle(name, fn, dependencies || []);
-        h.sealed = sealed;
-        h.dependencies = dependencies || [];
+        h.$name = name;
+        h.$sealed = sealed || false;
+        h.$deps = dependencies || [];
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
@@ -584,31 +587,46 @@
 
     /** WATCHER **/
 
-    var watcher = function () {
+    var watcher = function (bind) {
         this.watchers = {};
+        this.bind = bind;
     };
 
     watcher.prototype = {
-        add: function (prop, fn) {
-            var prev = this.watchers[prop];
-            var w = function () {
-                if(prev){
-                    prev();
-                }
-                fn();
-            };
-            this.watchers[prop] = w;
-            return w;
+        add: function (prop, source, fn) {
+            var points = this.watchers[prop];
+            if (!points) {
+                points = this.watchers[prop] = {};
+            }
+            points[source] = fn;
+        },
+
+        remove: function (prop, source) {
+            var points = this.watchers[prop];
+            if (points) {
+                delete points[source];
+            }
         },
 
         clear: function (prop) {
-            this.watchers[prop] = function () {};
+            this.watchers[prop] = {}
         },
 
         call: function (prop, obj) {
-            var point = this.watchers[prop];
-            if (point) {
-                safeCall(point, obj);
+            var points = this.watchers[prop];
+            if (points) {
+                var ready = obj.$ready();
+                _.forIn(points, function (point) {
+                    if(_.isFunction(point)){
+                        safeCall(point, obj, ready, obj);
+                    }
+                });
+            }
+        },
+
+        inspect: function () {
+            if (this.bind) {
+                proxy(this.bind);
             }
         }
     };
@@ -622,7 +640,7 @@
         this.applyCount = 0;
         this.timeout = null;
         this.currentProperty = null;
-        this.watcher = new watcher();
+        this.watcher = new watcher(this);
     };
 
     bind.prototype = {
@@ -677,7 +695,7 @@
         },
 
         resolveHandle: function (obj, prop, handle, processed) {
-            _.forEach(handle.dependencies, function (item) {
+            _.forEach(handle.$deps, function (item) {
                 if (processed.indexOf(item) == -1) {
                     var h = handlesRegistry[item];
                     this.resolveHandle(obj, item, h, processed);
@@ -778,9 +796,6 @@
             _.debug("Tie " + name, name);
             var r = new bind(name);
             r.obj = this.check(tiedObject);
-            r.obj.$inspect = function () {
-                proxy(r);
-            };
             this.resolveDependencies(r, dependencies);
             r.obj.$deps = Object.freeze(dependencies || []);
             proxy(r);

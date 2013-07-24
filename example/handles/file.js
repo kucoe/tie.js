@@ -13,7 +13,7 @@ tie.handle("file", function(obj, config, watcher){
     config.read = function() {
         var data = fs.readFileSync(this.path, 'utf-8');
         self.extend(obj, JSON.parse(data));
-        obj.$inspect();
+        watcher.inspect();
     };
     config.write = function() {
         var data = fs.readFileSync(this.path, 'utf-8');
@@ -25,7 +25,7 @@ tie.handle("file", function(obj, config, watcher){
     };
     if(config.sync) {
         config.read();
-        watcher.add('*', function() {
+        watcher.add('*', this.$name, function() {
             config.write();
         });
     }
@@ -35,9 +35,11 @@ tie.handle("file", function(obj, config, watcher){
 
 var test = tie("test", {$file:'../person.json'});
 test.$file.read();
-console.log(test.age);
+console.log(test);
 var test2 = tie("test2", {$file:{path:'../person.json', sync:true}});
-console.log(test2.age);
+console.log(test2);
 test2.age = 12;
+console.log(fs.readFileSync('../person.json', 'utf-8'));
+test2.name = 'Wolf';
 console.log(fs.readFileSync('../person.json', 'utf-8'));
 
