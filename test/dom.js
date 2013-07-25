@@ -6,7 +6,7 @@ var should = require('should');
 var html = "<!doctype html><body>Hello World!</body></html>";
 
 describe('dom', function () {
-    describe('definition', function () {
+    describe('bootstrap', function () {
         it('jsdom should work', function (done) {
             render(html , "" , function(errors,window) {
                 window.document.body.innerHTML.should.eql("Hello World!", "html");
