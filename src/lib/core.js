@@ -810,6 +810,7 @@
     module.tie.enableDebug = function (enable) {
         _.debugEnabled = enable;
     };
+    module.tie._ = _;
     if (typeof module.exports === 'object') {
         module.exports = function (test) {
             var res = module.tie;

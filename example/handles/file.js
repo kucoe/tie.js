@@ -1,5 +1,5 @@
 var fs = require('fs');
-var tie = require('../../src/next/core')();
+var tie = require('../../src/lib/core')();
 
 
 tie.handle("file", function(obj, config, watcher){

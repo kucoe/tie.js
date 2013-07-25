@@ -3,6 +3,8 @@ tie.js
 
 Smart binding framework
 
+https://github.com/tmpvar/jsdom#contextify to install jsdom for running tests
+
 
 ## License
 

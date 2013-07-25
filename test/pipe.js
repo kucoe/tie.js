@@ -1,4 +1,4 @@
-var tie = require('../src/next/core')(true);
+var tie = require('../src/lib/core')(true);
 var pipes = tie.pipesRegistry;
 
 var should = require('should');

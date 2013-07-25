@@ -10,7 +10,7 @@
     "dependencies": {
     },
     "devDependencies": {
-        "uglify-js":  "~2.2",
+        "uglify-js":  "*",
         "mocha": "*",
         "should": "*",
         "jsdom": "*",
