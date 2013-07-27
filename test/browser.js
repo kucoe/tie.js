@@ -1,4 +1,6 @@
 var jsdom = require('jsdom');
+var tie = require('../src/lib/core')(true);
+var _ = tie.util;
 
 jsdom.env(
     {
@@ -13,9 +15,38 @@ jsdom.env(
     }
 );
 
+function sendKey(element, key) {
+    var x = key.charCodeAt(0);
+    element.focus();
+    var prev = element.value || '';
+    element.value = prev + key;
+    fireEvent(element, 'keypress', {keyCode:x, which:x, charCode:x});
+}
+
+function fireEvent(element, event, opts) {
+    var evt;
+    var document = global.window.document;
+    if (document.createEventObject) {
+        // dispatch for IE
+        evt = document.createEventObject();
+        if(opts) {
+            evt = _.extend(evt, opts);
+        }
+        return element.fireEvent('on' + event, evt)
+    } else {
+        // dispatch for firefox + others
+        evt = document.createEvent("HTMLEvents");
+        evt.initEvent(event, true, true); // event type,bubbling,cancelable
+        if(opts) {
+           evt = _.extend(evt, opts);
+        }
+        return !element.dispatchEvent(evt);
+    }
+}
+
 module.exports = function (callback, handles) {
     var h = handles || [];
-    h.forEach(function (elem) {
+    _.forEach(h, function (elem) {
         require('../src/lib/' + elem + '.js');
     });
     var timeout = !global.window ? 500 : 0;
@@ -23,6 +54,9 @@ module.exports = function (callback, handles) {
         call(global.window, callback);
     }, timeout);
 };
+
+module.exports.fireEvent = fireEvent;
+module.exports.sendKey = sendKey;
 
 var call = function (window, callback) {
     window.document.body.innerHTML = 'Hello World!';

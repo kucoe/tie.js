@@ -51,23 +51,23 @@ describe('handle', function () {
         a({}, {name: 'John'}).age.should.eql(12);
     });
     it('should handle property', function () {
-        tie.handle("name", function (obj, config) {
+        tie.handle("a", function (obj, config) {
             obj.name = config;
             return {name: config};
         });
-        var a = tie("a", {$name: 'John'});
-        a.$name.should.eql({name: 'John'}, 'config');
+        var a = tie("a", {$a: 'John'});
+        a.$a.should.eql({name: 'John'}, 'config');
         a.name.should.eql('John', 'name');
     });
     it('should handle property from app', function () {
-        tie.handle("name", function (obj, config) {
+        tie.handle("a", function (obj, config) {
             obj.name = config;
             return {name: config};
         });
-        tie("app", {$name: 'John'});
+        tie("app", {$a: 'John'});
         var a = tie("a", {});
         a.name.should.eql('John', 'name');
-        a.$name.should.eql({name: 'John'}, 'config');
+        a.$a.should.eql({name: 'John'}, 'config');
     });
     it('should use dependencies order', function () {
         var b = tie.handle("b", function (obj, config) {

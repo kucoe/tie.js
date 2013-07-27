@@ -441,10 +441,13 @@
         if (p && p.$sealed) {
             throw new Error(name + ' pipe already registered and sealed. Please choose another name for your pipe');
         }
+        if(!name || name[0] == '.') {
+            throw new Error(name + ' is not valid name for your pipe');
+        }
         p = pipe(name, fn, dependencies || []);
         p.$name = name;
         p.$sealed = sealed || false;
-        p.$deps = dependencies || [];
+        p.$deps =  Object.freeze(dependencies || []);
         p = _.extend(p, _);
         pipesRegistry[name] = p;
         return p;
@@ -458,6 +461,7 @@
             });
             if (params && params.length > 0) {
                 var array = _.convert(params, obj);
+                params = [];
                 _.forEach(array, function (param) {
                     param = _.trim(param);
                     params.push(param);
@@ -490,15 +494,63 @@
     var pipeline = function () {
         var p = arguments[0];
         if (_.isString(p)) {
+            var name = p;
             p = pipesRegistry[p];
             if (!p) {
-                throw new Error('Pipe ' + p + ' not found');
+                throw new Error('Pipe ' + name + ' not found');
             }
         } else if (_.isFunction(p)) {
             p = pipes('%tmp%', p);
         }
         var params = args2Array(arguments, 1);
         return p(this, params);
+    };
+
+    var parser = function (string) {
+        string = _.trim(string || "");
+        var tokens = string.split('|');
+        var t = tokens[0];
+        var dot = t.indexOf('.');
+        if(dot != -1) {
+           tokens[0] = t.substring(dot);
+           t = t.substring(0, dot);
+        } else {
+            tokens = tokens.splice(1);
+        }
+        var obj = ties[t].obj;
+        obj = _.clone(obj);
+        _.forEach(tokens, function (item) {
+            var p = parser.prototype.parse(item);
+            var args = [p.name];
+            args = _.extend(args, p.params);
+            _.debug("Parsed pipe" + JSON.stringify(args));
+            obj = pipeline.apply(obj, args);
+        });
+        return obj;
+    };
+
+    parser.prototype = {
+        parse: function (str) {
+            var index = str.indexOf(':');
+            var pipe = {};
+            pipe.name = _.trim(index + 1 ? str.substr(0, index) : str);
+            pipe.params = [];
+            if(pipe.name[0] == '.') {
+                pipe.params = [pipe.name.substring(1)];
+                pipe.name = 'property';
+                index = -1;
+            }
+            if (index >= 0) {
+                var p = _.trim(str.substr(++index));
+                p = '[' + p + ']';
+                var array = _.convert(p, {});
+                _.forEach(array, function (param) {
+                    param = _.trim(param);
+                    pipe.params.push(param);
+                });
+            }
+            return pipe;
+        }
     };
 
     /**  HANDLE **/
@@ -514,7 +566,7 @@
         h = handle(name, fn, dependencies || []);
         h.$name = name;
         h.$sealed = sealed || false;
-        h.$deps = dependencies || [];
+        h.$deps = Object.freeze(dependencies || []);
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
@@ -617,7 +669,7 @@
             if (points) {
                 var ready = obj.$ready();
                 _.forIn(points, function (point) {
-                    if(_.isFunction(point)){
+                    if (_.isFunction(point)) {
                         safeCall(point, obj, ready, obj);
                     }
                 });
@@ -716,27 +768,24 @@
 
     /**  TIE **/
 
-    var tie = function () {
-        return function (name, tiedObject, dependencies, sealed) {
-            if (name != APP && ties[APP] == null) {
-                module.tie(APP, {});
-            }
-            var r = ties[name];
-            if (_.isUndefined(tiedObject)) {
-                return  pipeModel(r.obj);
-            }
-            if (r && r.sealed) {
-                throw new Error(name + ' tie is already registered and sealed. Please choose another name for your tie');
-            }
-            r = tie.prototype.init(name, tiedObject, dependencies);
-            tie.prototype.define(name, r);
-            r.resolveHandles();
-            r.sealed = sealed;
-            if (name == APP) {
-                app = r;
-            }
-            return r.obj;
+    var tie = function (name, tiedObject, dependencies, sealed) {
+        if (name != APP && ties[APP] == null) {
+            module.tie(APP, {});
         }
+        var r = ties[name];
+        if (_.isUndefined(tiedObject)) {
+            return  pipeModel(r.obj);
+        }
+        if (r && r.obj.$sealed) {
+            throw new Error(name + ' tie is already registered and sealed. Please choose another name for your tie');
+        }
+        r = tie.prototype.init(name, tiedObject, dependencies, sealed);
+        tie.prototype.define(name, r);
+        r.resolveHandles();
+        if (name == APP) {
+            app = r;
+        }
+        return r.obj;
     };
 
     tie.prototype = {
@@ -792,24 +841,27 @@
             }
         },
 
-        init: function (name, tiedObject, dependencies) {
+        init: function (name, tiedObject, dependencies, sealed) {
             _.debug("Tie " + name, name);
             var r = new bind(name);
             r.obj = this.check(tiedObject);
+            r.obj.$name = name;
+            r.obj.$sealed = sealed || false;
+            r.obj.$deps =  Object.freeze(dependencies || []);
             this.resolveDependencies(r, dependencies);
-            r.obj.$deps = Object.freeze(dependencies || []);
             proxy(r);
             _.debug("Bind model ready");
             return r;
         }
     };
 
-    module.tie = tie();
+    module.tie = tie;
     module.tie.pipe = pipes;
     module.tie.handle = handles;
     module.tie.enableDebug = function (enable) {
         _.debugEnabled = enable;
     };
+    module.tie.$ = parser;
     module.tie._ = _;
     if (typeof module.exports === 'object') {
         module.exports = function (test) {
@@ -826,5 +878,18 @@
             return res;
         };
     }
+
+    /**
+     * Property pipeline definition
+     */
+    pipes("property", function (obj, params) {
+        if (params && params.length > 0) {
+            var prop = params[0];
+            var target = params.length > 1 ? params[1] : VALUE;
+            obj.$prop(target, obj.$prop(prop))
+        }
+        return obj;
+    });
+
 
 })(typeof exports === 'object' ? module : window);

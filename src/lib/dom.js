@@ -43,29 +43,25 @@
         }
     };
 
-    var $ = function (el, bind) {
+    var $ = function (el, obj) {
         var that = this;
+        var name = obj.$name;
         var listener = function (event) {
-            _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
+            _.debug("Fired '" + event.type + "' listener on '" + name + "' for element " + el.tagName);
             var value = that.value();
             value = _.trim(value);
 
-            if (that.pipes.length > 0) {
-                that.pipeline(function () {
-                }, value);
-            } else {
-                if (bind.obj.value !== value) {
-                    bind.obj.value = value;
-                }
+            //TODO pointcut
+            if (obj.value !== value) {
+                obj.value = value;
             }
         };
-
         var idx = el.getAttribute(INDEX);
         this.$ = el;
         this._id = _.uid();
         this.index = idx ? parseInt(idx) : -1;
         this.tie = el.getAttribute(TIE);
-        this.bind = bind;
+        this.obj = obj;
         this.events = {};
         this.isInput = _.eqi(el.tagName, 'input');
         this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
@@ -76,10 +72,10 @@
         if (this.isInput) {
             if (!this.hasCheck) {
                 if ('oninput' in el) {
-                    _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
+                    _.debug("Added input listener on '" + name + "' for element " + el.tagName);
                     el.addEventListener('input', listener);
                 } else {
-                    _.debug("Added keydown listener on '" + bind.name + "' for element " + el.tagName);
+                    _.debug("Added keydown listener on '" + name + "' for element " + el.tagName);
                     el.addEventListener('keydown', function (event) {
                         var key = event.keyCode;
                         // ignore command         modifiers                   arrows
@@ -88,52 +84,8 @@
                     });
                 }
             } else {
-                _.debug("Added change listener on '" + bind.name + "' for element " + el.tagName);
+                _.debug("Added change listener on '" + name + "' for element " + el.tagName);
                 el.addEventListener('change', listener);
-            }
-        }
-
-        var pipes = this.tie.replace(/\.([^.|]+(\.[^.|]+)*)/g, '|property:"$1"').match(/[^|]+/g).splice(1);
-        this.pipes = [];
-        _.forEach(pipes, function (string) {
-            this.pipes.push(new pipe(string));
-        }, this);
-
-        this.pipeline = function (next, value) {
-            var orig = this.bind.obj;
-            var res = orig;
-            if (this.pipes.length > 0) {
-                _.sequence(this.pipes, function (pipe, next) {
-                    var update = function (data) {
-                        res = data;
-                        if (pipe.updateRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
-                            res.$shown = res.$location().route.has(res);
-                        }
-                        if ((_.isDefined(value) && pipe.updateModel()) || (pipe.fetchModel() && _.isUndefined(value))) {
-                            _.extend(orig, data);
-                            res._fetched  = orig._fetched = true;
-
-                        }
-                        next(res);
-                    };
-                    var c;
-                    var clone = _.clone(res);
-                    if (_.isDefined(value)) {
-                        c = pipe.process(clone, update, value);
-                    } else {
-                        c = pipe.process(clone, update);
-                    }
-                    if (c) {
-                        update(c);
-                    }
-
-                }, function () {
-                    if (next) {
-                        next(res);
-                    }
-                })
-            } else {
-                next(res);
             }
         }
     };
@@ -154,7 +106,7 @@
                 handler = function (event) {
                     event.index = that.index;
                     event.tie = that.tie;
-                    safeCall(value, that.bind.obj, that.bind.obj.$ready(), event);
+                    safeCall(value, that.obj, that.obj.$ready(), event);
                 };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -213,10 +165,8 @@
 
         remove: function () {
             var element = this.$;
-            var array = this.bind.$;
-            array.splice(array.indexOf(this), 1);
             delete this.$;
-            delete this.bind;
+            delete this.obj;
             delete this._id;
             delete this.isInput;
             delete this.hasCheck;
@@ -253,7 +203,7 @@
         window.exports = function () {
             var res = {};
             res.q = q;
-            res.$ = $;
+            res.el = $;
             return res;
         };
     }
