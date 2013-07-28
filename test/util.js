@@ -156,5 +156,15 @@ describe('util', function () {
             util.convert("['a', '#b', 'c']", context).should.eql(['a', context.b, 'c'], "object");
         });
     });
+    describe('forEach', function () {
+        it('should work safely', function () {
+            var arr = ['a', 'b', 'c'];
+            util.forEach(arr, function(item, i, coll) {
+                arr.splice(arr.indexOf(item), 1);
+                coll.length.should.eql(3, "iterate");
+            }, this, true);
+            arr.should.eql([], "array");
+        });
+    });
     //for each, for in, sequence, extend
 });

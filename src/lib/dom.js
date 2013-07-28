@@ -46,8 +46,9 @@
     var $ = function (el, obj) {
         var that = this;
         var name = obj.$name;
+        var tagName = el.tagName;
         var listener = function (event) {
-            _.debug("Fired '" + event.type + "' listener on '" + name + "' for element " + el.tagName);
+            _.debug("Fired '" + event.type + "' listener on '" + name + "' for element " + tagName);
             var value = that.value();
             value = _.trim(value);
 
@@ -63,19 +64,20 @@
         this.tie = el.getAttribute(TIE);
         this.obj = obj;
         this.events = {};
-        this.isInput = _.eqi(el.tagName, 'input');
+        this.isSelect = _.eqi(tagName, 'select');
+        this.isInput = _.eqi(tagName, 'input') || _.eqi(tagName, 'textarea') || this.isSelect;
         this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
         this.display = el.style.display;
         this.shown = true;
         this.textEl = null;
 
         if (this.isInput) {
-            if (!this.hasCheck) {
+            if (!this.hasCheck && !this.isSelect) {
                 if ('oninput' in el) {
-                    _.debug("Added input listener on '" + name + "' for element " + el.tagName);
+                    _.debug("Added input listener on '" + name + "' for element " + tagName);
                     el.addEventListener('input', listener);
                 } else {
-                    _.debug("Added keydown listener on '" + name + "' for element " + el.tagName);
+                    _.debug("Added keydown listener on '" + name + "' for element " + tagName);
                     el.addEventListener('keydown', function (event) {
                         var key = event.keyCode;
                         // ignore command         modifiers                   arrows
@@ -84,7 +86,7 @@
                     });
                 }
             } else {
-                _.debug("Added change listener on '" + name + "' for element " + el.tagName);
+                _.debug("Added change listener on '" + name + "' for element " + tagName);
                 el.addEventListener('change', listener);
             }
         }
@@ -106,7 +108,7 @@
                 handler = function (event) {
                     event.index = that.index;
                     event.tie = that.tie;
-                    safeCall(value, that.obj, that.obj.$ready(), event);
+                    _.safeCall(value, that.obj, that.obj.$ready(), event);
                 };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -120,21 +122,36 @@
         },
 
         value: function (val) {
+            var el = this.$;
             if (this.hasCheck) {
                 if (_.isDefined(val)) {
                     if (val) {
-                        this.$.setAttribute('checked', 'checked');
+                        el.setAttribute('checked', 'checked');
                     } else {
-                        this.$.removeAttribute('checked');
+                        el.removeAttribute('checked');
                     }
                 } else {
-                    return this.$.checked;
+                    return el.checked;
+                }
+            } else if (this.isSelect) {
+                if (_.isDefined(val)) {
+                    var options = Array.prototype.slice.call(el.options);
+                    _.forEach(options, function (item, i) {
+                        console.log(i);
+                        if (_.isEqual(item.value, val)) {
+                            el.selectedIndex = i;
+                            return false;
+                        }
+                        return true;
+                    });
+                } else {
+                    return el.options[el.selectedIndex].value;
                 }
             } else if (this.isInput) {
                 if (_.isDefined(val)) {
-                    this.$.value = val;
+                    el.value = val;
                 } else {
-                    return this.$.value;
+                    return el.value;
                 }
             } else {
                 return this.text(val);
@@ -143,6 +160,7 @@
         },
 
         text: function (text) {
+            var el = this.$;
             if (_.isDefined(text)) {
                 if (this.isInput) {
                     if (this.textEl == null) {
@@ -150,14 +168,24 @@
                         this.next(this.textEl);
                     }
                     this.textEl.textContent = text;
+                } else if (this.isSelect) {
+                    _.forEach(el.options, function (item, i) {
+                        if (_.isEqual(item.text, text)) {
+                            el.selectedIndex = i;
+                            return false;
+                        }
+                        return true;
+                    });
                 } else {
-                    this.$.textContent = text
+                    el.textContent = text
                 }
             } else {
                 if (this.isInput) {
-                    return this.$.nextSibling.textContent || '';
+                    return el.nextSibling.textContent || '';
+                } else if (this.isSelect) {
+                    return el.options[el.selectedIndex].text;
                 } else {
-                    return this.$.textContent || '';
+                    return el.textContent || '';
                 }
             }
             return null;
@@ -198,6 +226,29 @@
             this.shown = show;
         }
     };
+
+    var renderer = function(obj) {
+        this.values = {};
+        this.rendered = false;
+        this.rendering = false;
+        this.loaded = false;
+        this.loading = false;
+        this.selected = false;
+        this.e = 0;
+        this.$ = [];
+    };
+
+    tie.handle("render", function (obj, config) {
+        if(config) {
+            return renderer(obj);
+        }
+        return config;
+    });
+
+    tie.handle("shown", function (obj, config) {
+
+        return config;
+    });
 
     if (typeof window.exports === 'object') {
         window.exports = function () {

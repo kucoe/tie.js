@@ -25,14 +25,16 @@ describe('model', function () {
             var date = new Date();
             res = tie("a", date);
             res.value.should.eql(date, "date");
+        });
+        it('should wrap function', function () {
             var nop = function () {
             };
-            res = tie("a", nop);
+            var res = tie("a", nop);
             res.value.should.eql(nop, "function");
         });
         it('should wrap array', function () {
             var res = tie("a", ['a', 'b']);
-            res.$values.should.eql(['a', 'b'], "array");
+            res.value.should.eql(['a', 'b'], "array");
         });
     });
     describe('bind', function () {

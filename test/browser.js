@@ -20,7 +20,7 @@ function sendKey(element, key) {
     element.focus();
     var prev = element.value || '';
     element.value = prev + key;
-    fireEvent(element, 'keypress', {keyCode:x, which:x, charCode:x});
+    fireEvent(element, 'keydown', {keyCode:x, which:x, charCode:x});
 }
 
 function fireEvent(element, event, opts) {

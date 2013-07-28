@@ -96,8 +96,7 @@ describe('handle', function () {
             var w = function(obj) {
                 obj.total = config + ' ' + obj.name;
             };
-            watcher.add('name', this.$name, w);
-            w.call(obj, obj);
+            watcher.add('name', w);
             return config;
         });
         var test = tie("test", {$a: "Hello", name:'Jack'});

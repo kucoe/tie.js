@@ -10,7 +10,6 @@
 
     var APP = 'app';
     var VALUE = 'value';
-    var VALUES = '$values';
     var DEPS = '$deps';
     var ITEM_NAME = '_item_name';
     var DEP_PREFIX = '$$';
@@ -41,32 +40,6 @@
 
     var args2Array = function (args, start) {
         return Array.prototype.slice.call(args, start);
-    };
-
-    var safeCall = function (fn, fnThis, bindReady) {
-        var res;
-        var spliceArgs = 3;
-        if (_.isUndefined(bindReady) && _.isFunction(fnThis.$ready)) {
-            bindReady = fnThis.$ready();
-            spliceArgs = 2;
-        }
-        try {
-            var args = args2Array(arguments, spliceArgs);
-            res = fn.apply(fnThis, args);
-        } catch (e) {
-            res = undefined;
-            if (bindReady) {
-                if (console.groupCollapsed) {
-                    console.groupCollapsed("User code error");
-                }
-                console.error('Is ready and had an error:' + e.message);
-                console.dir(e);
-                if (console.groupEnd) {
-                    console.groupEnd();
-                }
-            }
-        }
-        return res;
     };
 
     var _ = {
@@ -105,10 +78,11 @@
         },
 
         isCollection: function (value) {
+            var s = Object.prototype.toString.apply(value);
             return this.isArray(value) || value instanceof Array
-                || Object.prototype.toString.apply(value) == '[object NodeList]'
-                || Object.prototype.toString.apply(value) == '[object NamedNodeMap]'
-                || Object.prototype.toString.apply(value) == '[object Arguments]';
+                || s == '[object NodeList]'
+                || s == '[object NamedNodeMap]'
+                || s == '[object Arguments]';
         },
 
         isFunction: function (value) {
@@ -248,15 +222,12 @@
                     var length = collection.length;
                     var coll = [];
                     if (safe) {
-                        while (++index < length) {
-                            coll.push(collection[index]);
-                        }
-                        index = -1;
+                        coll = Array.prototype.slice.call(collection);
                     } else {
                         coll = collection;
                     }
                     while (++index < length) {
-                        if (callback.call(thisArg, coll[index], index, collection) === false) {
+                        if (callback.call(thisArg, coll[index], index, coll) === false) {
                             break;
                         }
                     }
@@ -314,6 +285,32 @@
             }
         },
 
+        safeCall: function (fn, fnThis, bindReady) {
+            var res;
+            var spliceArgs = 3;
+            if (this.isUndefined(bindReady) && this.isFunction(fnThis.$ready)) {
+                bindReady = fnThis.$ready();
+                spliceArgs = 2;
+            }
+            try {
+                var args = args2Array(arguments, spliceArgs);
+                res = fn.apply(fnThis, args);
+            } catch (e) {
+                res = undefined;
+                if (bindReady) {
+                    if (console.groupCollapsed) {
+                        console.groupCollapsed("User code error");
+                    }
+                    console.error('Is ready and had an error:' + e.message);
+                    console.dir(e);
+                    if (console.groupEnd) {
+                        console.groupEnd();
+                    }
+                }
+            }
+            return res;
+        },
+
         uid: function () {
             return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
         },
@@ -353,10 +350,11 @@
 
     var proxy = function (bind) {
 
-        var observe = function (obj, desc, prop) {
+        var observe = function (obj, desc, prop, top) {
             if (desc && desc._proxyMark) {
                 return false; //proxy already set
             }
+            var fullProp = top ?  top + '.' + prop : prop;
             var newGet = function () {
                 if (desc) {
                     if (desc.get) {
@@ -364,7 +362,7 @@
                     }
                     return desc.value;
                 }
-                return void 0; //TODO pointcut
+                return bind.watcher.onGet(fullProp, bind.obj);
             };
             var changed = function (val) {
                 var prev = newGet();
@@ -383,7 +381,7 @@
                 } else {
                     //TODO pointcut
                 }
-                bind.apply(prop);
+                bind.apply(fullProp);
             };
             var enumerable = desc ? desc.enumerable : false;
             Object.defineProperty(obj, prop, {
@@ -396,8 +394,11 @@
             return true;
         };
 
-        var explore = function (obj) {
+        var explore = function (obj, top) {
             var added = [];
+            var watcher = bind.watcher;
+            var main = bind.obj;
+            var ready = main.$ready();
             _.forIn(obj, function (value, prop) {
                 props.push(prop);
                 if ('prototype' == prop) {
@@ -411,13 +412,15 @@
                     return false; // skip readonly
                 }
                 var dep = prop.indexOf(DEP_PREFIX) == 0 && bind.obj.$deps.indexOf(prop.substring(2)) != -1;
-                if (_.isObject(value) && !dep && prop != DEPS && prop != VALUES) {
+                if (_.isObject(value) && !dep && prop != DEPS) {
                     _.debug("Exploring " + prop);
-                    explore(value);
+                    explore(value, prop);
                 }
                 _.debug("Observing " + prop);
-                if (observe(obj, desc, prop)) {
+                if (observe(obj, desc, prop, top)) {
                     added.push(prop);
+                    var fullProp = top ?  top + '.' + prop : prop;
+                    watcher.onChange(fullProp, main, ready);
                 }
                 return true;
             });
@@ -441,13 +444,13 @@
         if (p && p.$sealed) {
             throw new Error(name + ' pipe already registered and sealed. Please choose another name for your pipe');
         }
-        if(!name || name[0] == '.') {
+        if (!name || name[0] == '.') {
             throw new Error(name + ' is not valid name for your pipe');
         }
         p = pipe(name, fn, dependencies || []);
         p.$name = name;
         p.$sealed = sealed || false;
-        p.$deps =  Object.freeze(dependencies || []);
+        p.$deps = Object.freeze(dependencies || []);
         p = _.extend(p, _);
         pipesRegistry[name] = p;
         return p;
@@ -468,7 +471,7 @@
                 });
             }
             if (fn && _.isFunction(fn)) {
-                obj = safeCall(fn, p, true, obj, params);
+                obj = _.safeCall(fn, p, true, obj, params);
             }
             _.debug("Ready pipe " + name);
             return obj;
@@ -511,9 +514,9 @@
         var tokens = string.split('|');
         var t = tokens[0];
         var dot = t.indexOf('.');
-        if(dot != -1) {
-           tokens[0] = t.substring(dot);
-           t = t.substring(0, dot);
+        if (dot != -1) {
+            tokens[0] = t.substring(dot);
+            t = t.substring(0, dot);
         } else {
             tokens = tokens.splice(1);
         }
@@ -535,7 +538,7 @@
             var pipe = {};
             pipe.name = _.trim(index + 1 ? str.substr(0, index) : str);
             pipe.params = [];
-            if(pipe.name[0] == '.') {
+            if (pipe.name[0] == '.') {
                 pipe.params = [pipe.name.substring(1)];
                 pipe.name = 'property';
                 index = -1;
@@ -579,7 +582,7 @@
                 h[DEP_PREFIX + item] = handlesRegistry[item];
             });
             if (fn && _.isFunction(fn)) {
-                obj = safeCall(fn, h, true, obj, config, watcher);
+                obj = _.safeCall(fn, h, true, obj, config, watcher);
             }
             _.debug("Ready handle " + name);
             return obj;
@@ -640,40 +643,80 @@
     /** WATCHER **/
 
     var watcher = function (bind) {
-        this.watchers = {};
+        this.watchers = [];
         this.bind = bind;
     };
 
     watcher.prototype = {
-        add: function (prop, source, fn) {
-            var points = this.watchers[prop];
-            if (!points) {
-                points = this.watchers[prop] = {};
+        add: function (prop, onChange, onGet, onDelete) {
+            if(!prop || prop === '*') {
+                prop = '.*';
             }
-            points[source] = fn;
+            var dyna = {
+                property: new RegExp('^' + prop + '$'),
+                onChange: onChange,
+                onGet: onGet,
+                onDelete: onDelete
+            };
+            this.watchers.push(dyna);
         },
 
-        remove: function (prop, source) {
-            var points = this.watchers[prop];
-            if (points) {
-                delete points[source];
-            }
-        },
-
-        clear: function (prop) {
-            this.watchers[prop] = {}
-        },
-
-        call: function (prop, obj) {
-            var points = this.watchers[prop];
-            if (points) {
-                var ready = obj.$ready();
-                _.forIn(points, function (point) {
-                    if (_.isFunction(point)) {
-                        safeCall(point, obj, ready, obj);
+        remove: function () {
+            var prop = arguments[0];
+            if (_.isString(prop)) {
+                _.forEach(this.watchers, function (dyna, i) {
+                    if (dyna.property.test(prop)) {
+                        this.watchers.splice(i, 1);
                     }
-                });
+                }, this, true);
+            } else {
+                var indexOf = this.watchers.indexOf(prop);
+                if (indexOf != -1) {
+                    this.watchers.splice(indexOf, 1);
+                }
             }
+        },
+
+        onGet: function (prop, obj, ready) {
+            if (!ready) {
+                ready = obj.$ready();
+            }
+            _.forEach(this.watchers, function (dyna) {
+                if (dyna.property.test(prop)) {
+                    var point = dyna.onGet;
+                    if (_.isFunction(point)) {
+                        _.safeCall(point, obj, ready, obj);
+                    }
+                }
+            });
+        },
+
+        onChange: function (prop, obj, ready) {
+            if (!ready) {
+                ready = obj.$ready();
+            }
+            _.forEach(this.watchers, function (dyna) {
+                if (dyna.property.test(prop)) {
+                    var point = dyna.onChange;
+                    if (_.isFunction(point)) {
+                        _.safeCall(point, obj, ready, obj);
+                    }
+                }
+            });
+        },
+
+        onDelete: function (prop, obj, ready) {
+            if (!ready) {
+                ready = obj.$ready();
+            }
+            _.forEach(this.watchers, function (dyna) {
+                if (dyna.property.test(prop)) {
+                    var point = dyna.onDelete;
+                    if (_.isFunction(point)) {
+                        _.safeCall(point, obj, ready, obj);
+                    }
+                }
+            });
         },
 
         inspect: function () {
@@ -713,9 +756,8 @@
                     this.resolveHandle(this.obj, n, h, []);
                 }
             }
-            this.watcher.call('*', this.obj);
-            if (property && property !== '*') {
-                this.watcher.call(property, this.obj);
+            if (property) {
+                this.watcher.onChange(property, this.obj);
             }
             _.forEach(this.touch, function (item) {
                 var bind = ties[item];
@@ -781,7 +823,6 @@
         }
         r = tie.prototype.init(name, tiedObject, dependencies, sealed);
         tie.prototype.define(name, r);
-        r.resolveHandles();
         if (name == APP) {
             app = r;
         }
@@ -794,15 +835,9 @@
             return {value: obj}
         },
 
-        wrapArray: function (array) {
-            return {$values: array};
-        },
-
         check: function (obj) {
-            if (_.isFunction(obj) || !_.isObject(obj) || _.isDate(obj)) {
+            if (_.isFunction(obj) || _.isArray(obj) || !_.isObject(obj) || _.isDate(obj)) {
                 obj = this.wrap(obj);
-            } else if (_.isArray(obj)) {
-                obj = this.wrapArray(obj);
             }
             return new model(obj);
         },
@@ -847,7 +882,8 @@
             r.obj = this.check(tiedObject);
             r.obj.$name = name;
             r.obj.$sealed = sealed || false;
-            r.obj.$deps =  Object.freeze(dependencies || []);
+            r.obj.$deps = Object.freeze(dependencies || []);
+            r.resolveHandles();
             this.resolveDependencies(r, dependencies);
             proxy(r);
             _.debug("Bind model ready");

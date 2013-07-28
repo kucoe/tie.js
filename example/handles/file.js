@@ -25,7 +25,7 @@ tie.handle("file", function(obj, config, watcher){
     };
     if(config.sync) {
         config.read();
-        watcher.add('*', this.$name, function() {
+        watcher.add('*', function() {
             config.write();
         });
     }
