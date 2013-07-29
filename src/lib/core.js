@@ -11,7 +11,6 @@
     var APP = 'app';
     var VALUE = 'value';
     var DEPS = '$deps';
-    var ITEM_NAME = '_item_name';
     var DEP_PREFIX = '$$';
     var HANDLE_PREFIX = '$';
 
@@ -36,6 +35,16 @@
 
     var s4 = function () {
         return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    };
+
+    var defineFrozen = function(obj, prop, value) {
+        Object.defineProperty(obj, prop, {
+            value : value,
+            configurable: false,
+            writable: false,
+            enumerable: true,
+            _proxyMark: true
+        });
     };
 
     var args2Array = function (args, start) {
@@ -354,7 +363,7 @@
             if (desc && desc._proxyMark) {
                 return false; //proxy already set
             }
-            var fullProp = top ?  top + '.' + prop : prop;
+            var fullProp = top ? top + '.' + prop : prop;
             var newGet = function () {
                 if (desc) {
                     if (desc.get) {
@@ -419,7 +428,7 @@
                 _.debug("Observing " + prop);
                 if (observe(obj, desc, prop, top)) {
                     added.push(prop);
-                    var fullProp = top ?  top + '.' + prop : prop;
+                    var fullProp = top ? top + '.' + prop : prop;
                     watcher.onChange(fullProp, main, ready);
                 }
                 return true;
@@ -448,9 +457,9 @@
             throw new Error(name + ' is not valid name for your pipe');
         }
         p = pipe(name, fn, dependencies || []);
-        p.$name = name;
-        p.$sealed = sealed || false;
-        p.$deps = Object.freeze(dependencies || []);
+        defineFrozen(p, '$name', name);
+        defineFrozen(p, '$sealed', sealed || false);
+        defineFrozen(p, '$deps', Object.freeze(dependencies || []));
         p = _.extend(p, _);
         pipesRegistry[name] = p;
         return p;
@@ -567,9 +576,10 @@
             throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
         }
         h = handle(name, fn, dependencies || []);
-        h.$name = name;
-        h.$sealed = sealed || false;
-        h.$deps = Object.freeze(dependencies || []);
+        defineFrozen(h, '$name', name);
+        defineFrozen(h, '$sealed', sealed || false);
+        defineFrozen(h, '$deps', Object.freeze(dependencies || []));
+        defineFrozen(h, '_uid', _.uid());
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
@@ -645,15 +655,17 @@
     var watcher = function (bind) {
         this.watchers = [];
         this.bind = bind;
+        this.handlerId = null;
     };
 
     watcher.prototype = {
         add: function (prop, onChange, onGet, onDelete) {
-            if(!prop || prop === '*') {
+            if (!prop || prop === '*') {
                 prop = '.*';
             }
             var dyna = {
                 property: new RegExp('^' + prop + '$'),
+                handlerId: this.handlerId,
                 onChange: onChange,
                 onGet: onGet,
                 onDelete: onDelete
@@ -662,6 +674,13 @@
         },
 
         remove: function () {
+            if(arguments.length == 0 && this.handlerId) {
+                _.forEach(this.watchers, function (dyna, i) {
+                    if (dyna.handlerId === this.handlerId) {
+                        this.watchers.splice(i, 1);
+                    }
+                }, this, true);
+            }
             var prop = arguments[0];
             if (_.isString(prop)) {
                 _.forEach(this.watchers, function (dyna, i) {
@@ -801,7 +820,10 @@
                 config = app.obj[n];
             }
             this.currentProperty = n; //prevent apply update
+            this.watcher.handlerId = handle._uid;
+            this.watcher.remove();
             obj[n] = handle(obj, config, this.watcher);
+            this.watcher.handlerId = null;
             this.currentProperty = null;
             processed.push(prop);
         }
@@ -869,22 +891,26 @@
         define: function (name, bind) {
             var old = ties[name];
             ties[name] = bind;
-            if (old && old.touch) {
-                bind.touch = old.touch;
-                _.debug("Calling apply on '" + bind.name + "' after define");
-                bind.apply('*');
+            if (old) {
+                old.obj._deleted = true;
+                if (old.touch) {
+                    bind.touch = old.touch;
+                    _.debug("Calling apply on '" + bind.name + "' after define");
+                    bind.apply('*');
+                }
             }
         },
 
         init: function (name, tiedObject, dependencies, sealed) {
             _.debug("Tie " + name, name);
             var r = new bind(name);
-            r.obj = this.check(tiedObject);
-            r.obj.$name = name;
-            r.obj.$sealed = sealed || false;
-            r.obj.$deps = Object.freeze(dependencies || []);
-            r.resolveHandles();
+            var obj = r.obj = this.check(tiedObject);
+            defineFrozen(obj, '$name', name);
+            defineFrozen(obj, '$sealed', sealed || false);
+            defineFrozen(obj, '$deps', Object.freeze(dependencies || []));
+            obj._deleted = false;
             this.resolveDependencies(r, dependencies);
+            r.resolveHandles();
             proxy(r);
             _.debug("Bind model ready");
             return r;

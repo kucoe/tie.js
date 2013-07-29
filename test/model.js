@@ -61,6 +61,11 @@ describe('model', function () {
                 tie("a", {});
             }.should.throw();
         });
+        it('should not override name', function () {
+            var a = tie("a", {});
+            a.$name = 'b';
+            a.$name.should.eql('a', 'not changed');
+        });
         it('should access deep props', function () {
             var res = tie("a", {a:121, b:{c:2}, e:[{j:"blah"}]});
             res.$prop('a').should.eql(121, 'top');

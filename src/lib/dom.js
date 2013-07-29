@@ -12,6 +12,7 @@
 
     var VALUE = 'value';
     var TEXT = 'text';
+    var ITEM_NAME = '_item_name';
 
     var INDEX = "data-index";
     var TIE = "data-tie";
@@ -137,7 +138,6 @@
                 if (_.isDefined(val)) {
                     var options = Array.prototype.slice.call(el.options);
                     _.forEach(options, function (item, i) {
-                        console.log(i);
                         if (_.isEqual(item.value, val)) {
                             el.selectedIndex = i;
                             return false;
@@ -227,7 +227,46 @@
         }
     };
 
-    var renderer = function(obj) {
+    var valueFn = function (obj, idx, bindReady) {
+        var name = this.name;
+        var val = this.value;
+        var property = this.property;
+
+        if (_.isUndefined(bindReady)) {
+            bindReady = obj.$ready();
+        }
+
+        if (_.isFunction(val)) {
+            return _.safeCall(val, obj, bindReady)
+        } else {
+            if (property && _.isUndefined(val)) {
+                return findProperty(obj, property, idx);
+            }
+            if (!name) {
+                throw new Error("Where is your property?")
+            }
+            return findProperty(obj, name, idx);
+        }
+    };
+
+    var findProperty = function (obj, name, idx) {
+        if (_.isUndefined(idx)) {
+            idx = -1;
+        }
+        var values = obj.$values;
+        if (idx >= 0 && values && _.isDefined(values[idx][name])) {
+            return values[idx][name];
+        }
+        if (idx >= 0 && values && VALUE == name) {
+            return values[idx];
+        }
+        return obj.$prop(name);
+    };
+
+    var renders = {};
+
+    var renderer = function (obj) {
+        this.obj = obj;
         this.values = {};
         this.rendered = false;
         this.rendering = false;
@@ -238,15 +277,57 @@
         this.$ = [];
     };
 
-    tie.handle("render", function (obj, config) {
-        if(config) {
-            return renderer(obj);
+    renderer.prototype = {
+        prepareAttrs: function (attrs) {
+            if (attrs) {
+                if (_.isArray(attrs)) {
+                    attrs = attrs._({});
+                }
+                _.forIn(this.obj.$attrs, function (attr, name) {
+                    if (_.isString(attr) && attr[0] == '#') {
+                        attr = {name: name, property: attr.substring(1)}
+                    } else if (_.isFunction(attr)) {
+                        attr = {name: name, value: attr}
+                    } else if (attr[ITEM_NAME]) {
+                        attr = {name: attr[ITEM_NAME]};
+                    } else {
+                        attr = {name: name, value: attr}
+                    }
+                    attr.val = valueFn;
+                    attrs[name] = attr;
+                }, this);
+            }
+            return attrs;
+        },
+
+        show: function (shown) {
+            if (this.rendered) {
+                _.forEach(this.$, function (el) {
+                    if (el) {
+                        el.show(shown);
+                    }
+                }, this);
+            }
+        }
+    };
+
+    var handle = window.tie.handle;
+
+    handle("attrs", function (obj, config, watcher) {
+        if (config) {
+            var r = new renderer(obj);
+            renders[obj.$name] = r;
+            watcher.add('_deleted', function (obj) {
+                delete renders[obj.$name];
+            });
+            obj.$shown;
+            return r.prepareAttrs(config);
         }
         return config;
     });
 
-    tie.handle("shown", function (obj, config) {
-
+    handle("shown", function (obj, config) {
+        var r = renders[obj.$name];
         return config;
     });
 
@@ -255,6 +336,7 @@
             var res = {};
             res.q = q;
             res.el = $;
+            res.renders = renders;
             return res;
         };
     }

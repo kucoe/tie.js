@@ -105,4 +105,39 @@ describe('handle', function () {
         test.name.should.eql("Wolf");
         test.total.should.eql("Hello Wolf");
     });
+    it('should not loose watcher', function () {
+        tie.handle("a", function (obj, config, watcher) {
+            var w = function(obj) {
+                obj.total = config + ' ' + obj.name;
+            };
+            watcher.add('name', w);
+            return config;
+        });
+        tie("test", {$a: "Hello", name:'Jack'});
+        var test = tie("test", {$a: "Bye", name:'Jack'});
+        test.total.should.eql("Bye Jack");
+        test.name = 'Wolf';
+        test.name.should.eql("Wolf");
+        test.total.should.eql("Bye Wolf");
+    });
+    it('should not duplicate watches', function () {
+        var watch = null;
+        tie.handle("a", function (obj, config, watcher) {
+            var w = function(obj) {
+                obj.total = config + ' ' + obj.name;
+            };
+            watch = watcher;
+            watcher.add('name', w);
+            w(obj);
+            return config;
+        });
+        var test = tie("test", {$a: "Hello", name:'Jack'});
+        test.$a = 'Bye';
+        test.total.should.eql("Bye Jack");
+        test.name = 'Wolf';
+        test.name.should.eql("Wolf");
+        test.total.should.eql("Bye Wolf");
+        should.exist(watch);
+        watch.watchers.length.should.eql(1, 'watches')
+    });
 });
