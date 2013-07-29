@@ -305,7 +305,6 @@
             var obj = this.obj;
             var name = obj.$name;
             var query = document.querySelectorAll;
-            console.log("Elements selected: " + query('input').length);
             var nodes = query('[' + TIE + '="' + name + '"]');
             var res = [];
             _.forEach(nodes, function (el) {
@@ -378,13 +377,14 @@
                         }
                     }
                 }
-            });
+            }, this);
             this.rendering = false;
             this.rendered = true;
-            _.debug("Rendered " + name);
+            _.debug("Rendered " + tieName);
         },
 
         show: function (shown) {
+            console.log('Rendered ' + this.rendered);
             if (this.rendered) {
                 _.forEach(this.$, function (el) {
                     if (el) {
@@ -413,13 +413,16 @@
         if (config) {
             var r = add(obj, watcher);
             config = r.prepareAttrs(config);
-            r.render();
+            setTimeout(function () {
+                r.render();
+            }, 200);
         }
         return config;
     });
 
     handle("shown", function (obj, config, watcher) {
         var r = renders[obj.$name];
+        console.log('On show ' + r.rendered);
         if (!r) {
             r = add(obj, watcher);
             r.show(config);

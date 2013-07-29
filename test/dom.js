@@ -1,6 +1,15 @@
 var browser = require('./browser');
 var should = require('should');
 
+function clear(renders) {
+    var prop;
+    for (prop in renders) {
+        if (renders.hasOwnProperty(prop)) {
+            delete renders[prop];
+        }
+    }
+};
+
 
 function prepareA(document) {
     var a = document.createElement("a");
@@ -11,16 +20,17 @@ function prepareA(document) {
 
 function prepareInput(window, $, tag, type) {
     var document = window.document;
-    if(!tag) {
+    if (!tag) {
         tag = 'input';
     }
-    if(!type && tag === 'input') {
+    if (!type && tag === 'input') {
         type = 'text';
     }
     var input = document.createElement(tag);
-    if(type){
+    if (type) {
         input.type = type;
     }
+    input.setAttribute('data-tie', 'a');
     document.body.appendChild(input);
     var obj = window.tie('a', {value: 'lala', style: 'color:blue', $attrs: ['style']});
     var el = new $(input, obj);
@@ -162,11 +172,11 @@ describe('dom', function () {
 
                 var document = window.document;
                 var opt = document.createElement("option");
-                opt.value= 'b';
+                opt.value = 'b';
                 opt.innerHTML = 'baba';
                 el.$.appendChild(opt);
                 opt = document.createElement("option");
-                opt.value= 'l';
+                opt.value = 'l';
                 opt.innerHTML = 'lala';
                 el.$.appendChild(opt);
                 el.value('l');
@@ -260,38 +270,46 @@ describe('dom', function () {
             browser(function (window) {
                 var $ = window.exports().el;
                 var renders = window.exports().renders;
+                clear(renders);
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 var el = __ret.el;
-                el.setAttribute('data-tie', 'a');
                 var r = renders[obj.$name];
                 should.exists(r, 'renderer');
-                var $ = r.$[0];
-                should.exists($, 'element');
+                var element = r.$[0];
+                should.exists(element, 'element');
                 done();
             }, ['dom']);
         });
         it('should process render attributes', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
+                var renders = window.exports().renders;
+                clear(renders);
                 var __ret = prepareInput(window, $);
-                var el = __ret.el;
                 var obj = __ret.obj;
                 should.exists(obj.$attrs.style, 'attrs');
-                el.$.getAttribute('style').should.eql('color:blue', 'attribute');
-                done();
+                setTimeout(function () {
+                    var r = renders[obj.$name];
+                    r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
+                    done();
+                }, 500);
             }, ['dom']);
         });
         it('should react on $shown', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
+                var renders = window.exports().renders;
+                clear(renders);
                 var __ret = prepareInput(window, $);
                 var el = __ret.el;
                 var obj = __ret.obj;
-                obj.$shown = false;
-                el.shown.should.eql(false, 'hidden');
-                el.$.style.display.should.eql('none', 'hidden');
-                done();
+                setTimeout(function () {
+                    obj.$shown = false;
+                    el.shown.should.eql(false, 'hidden');
+                    el.$.style.display.should.eql('none', 'hidden');
+                    done();
+                }, 500);
             }, ['dom']);
         });
     });
