@@ -267,6 +267,7 @@
 
     var renderer = function (obj) {
         this.obj = obj;
+        this.obj.$shown = true;
         this.values = {};
         this.rendered = false;
         this.rendering = false;
@@ -283,7 +284,7 @@
                 if (_.isArray(attrs)) {
                     attrs = attrs._({});
                 }
-                _.forIn(this.obj.$attrs, function (attr, name) {
+                _.forIn(attrs, function (attr, name) {
                     if (_.isString(attr) && attr[0] == '#') {
                         attr = {name: name, property: attr.substring(1)}
                     } else if (_.isFunction(attr)) {
@@ -300,6 +301,89 @@
             return attrs;
         },
 
+        select: function () {
+            var obj = this.obj;
+            var name = obj.$name;
+            var query = document.querySelectorAll;
+            console.log("Elements selected: " + query('input').length);
+            var nodes = query('[' + TIE + '="' + name + '"]');
+            var res = [];
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, obj));
+            });
+            nodes = query('[' + TIE + '^="' + name + '|"]');
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, obj));
+            });
+            nodes = query('[' + TIE + '^="' + name + ' |"]');
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, obj));
+            });
+            nodes = query('[' + TIE + '^="' + name + '."]');
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, obj));
+            });
+            obj.selected = true;
+            return res;
+        },
+
+        load: function () {
+            this.loading = true;
+            if (!this.selected) {
+                this.$ = this.select();
+                this.e = this.$.length;
+                _.debug("Elements selected: " + this.$.length);
+            }
+            this.loaded = true;
+            this.loading = false;
+        },
+
+        renderAttr: function (attr, obj, idx, ready, el) {
+            var name = attr.name;
+            var val = attr.val(obj, idx, ready);
+            _.debug("Render attribute '" + name + "' with value " + val);
+            el.setAttribute(name, val);
+        },
+
+        render: function (property, force) {
+            var obj = this.obj;
+            if (!obj.$shown || (this.rendering && !force)) {
+                return;
+            }
+            this.rendering = true;
+            var tieName = obj.$name;
+            _.debug("Render " + tieName, tieName + " Render");
+            if (!this.loaded && !this.loading) {
+                this.load();
+            }
+            var ready = obj.$ready();
+            _.forEach(this.$, function (el) {
+                if (el) {
+                    var attrs = obj.$attrs;
+                    var idx = el.index;
+                    if (attrs) {
+                        if (property) {
+                            var attr = attrs[property];
+                            if (attr) {
+                                this.renderAttr(attr, obj, idx, ready, el);
+                            }
+                        } else {
+                            _.forIn(attrs, function (attr) {
+                                this.renderAttr(attr, obj, idx, ready, el);
+                            }, this);
+                            el.setAttribute(TIED);
+                            if (el.isInput) {
+                                el.setAttribute('name', tieName);
+                            }
+                        }
+                    }
+                }
+            });
+            this.rendering = false;
+            this.rendered = true;
+            _.debug("Rendered " + name);
+        },
+
         show: function (shown) {
             if (this.rendered) {
                 _.forEach(this.$, function (el) {
@@ -313,21 +397,33 @@
 
     var handle = window.tie.handle;
 
+    var add = function (obj, watcher) {
+        var r = new renderer(obj);
+        renders[obj.$name] = r;
+        watcher.add('_deleted', function (obj) {
+            delete renders[obj.$name];
+        });
+        watcher.add('*', function (obj, prop) {
+            r.render(prop);
+        });
+        return r;
+    };
+
     handle("attrs", function (obj, config, watcher) {
         if (config) {
-            var r = new renderer(obj);
-            renders[obj.$name] = r;
-            watcher.add('_deleted', function (obj) {
-                delete renders[obj.$name];
-            });
-            obj.$shown;
-            return r.prepareAttrs(config);
+            var r = add(obj, watcher);
+            config = r.prepareAttrs(config);
+            r.render();
         }
         return config;
     });
 
-    handle("shown", function (obj, config) {
+    handle("shown", function (obj, config, watcher) {
         var r = renders[obj.$name];
+        if (!r) {
+            r = add(obj, watcher);
+            r.show(config);
+        }
         return config;
     });
 

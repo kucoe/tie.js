@@ -22,7 +22,7 @@ function prepareInput(window, $, tag, type) {
         input.type = type;
     }
     document.body.appendChild(input);
-    var obj = window.tie('a', {value: 'lala'});
+    var obj = window.tie('a', {value: 'lala', style: 'color:blue', $attrs: ['style']});
     var el = new $(input, obj);
     return {input: input, obj: obj, el: el};
 }
@@ -246,7 +246,43 @@ describe('dom', function () {
                 done();
             }, ['dom']);
         });
-        it('should react on $shown ', function (done) {
+        it('should process $attrs', function (done) {
+            browser(function (window) {
+                var $ = window.exports().el;
+                var __ret = prepareInput(window, $);
+                var el = __ret.el;
+                var obj = __ret.obj;
+                should.exists(obj.$attrs.style, 'attrs');
+                done();
+            }, ['dom']);
+        });
+        it('should select element', function (done) {
+            browser(function (window) {
+                var $ = window.exports().el;
+                var renders = window.exports().renders;
+                var __ret = prepareInput(window, $);
+                var obj = __ret.obj;
+                var el = __ret.el;
+                el.setAttribute('data-tie', 'a');
+                var r = renders[obj.$name];
+                should.exists(r, 'renderer');
+                var $ = r.$[0];
+                should.exists($, 'element');
+                done();
+            }, ['dom']);
+        });
+        it('should process render attributes', function (done) {
+            browser(function (window) {
+                var $ = window.exports().el;
+                var __ret = prepareInput(window, $);
+                var el = __ret.el;
+                var obj = __ret.obj;
+                should.exists(obj.$attrs.style, 'attrs');
+                el.$.getAttribute('style').should.eql('color:blue', 'attribute');
+                done();
+            }, ['dom']);
+        });
+        it('should react on $shown', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
                 var __ret = prepareInput(window, $);

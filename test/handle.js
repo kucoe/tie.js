@@ -6,6 +6,9 @@ var should = require('should');
 afterEach(function () {
     var prop;
     for (prop in handles) {
+        if (prop === 'attrs' || prop === 'shown') {
+            continue;
+        }
         if (handles.hasOwnProperty(prop)) {
             delete handles[prop];
         }

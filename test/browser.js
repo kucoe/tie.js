@@ -4,12 +4,15 @@ var _ = tie.util;
 
 jsdom.env(
     {
-        html: "<!doctype html><body>Hello World!</body></html>",
-        scripts: ['../src/lib/core.js'],
+        html: "<!doctype html><html><body>Hello World!</body></html>",
+        scripts: ['../src/lib/core.js', 'https://raw.github.com/jquery/sizzle/master/dist/sizzle.min.js'],
         src: "",
         done: function (err, window) {
             if (err) throw  err;
             window.exports = {};
+            window.document.querySelectorAll = function(selector) {
+                return window.Sizzle(selector);
+            };
             global.window = window;
         }
     }
@@ -49,7 +52,7 @@ module.exports = function (callback, handles) {
     _.forEach(h, function (elem) {
         require('../src/lib/' + elem + '.js');
     });
-    var timeout = !global.window ? 500 : 0;
+    var timeout = !global.window ? 1000 : 0;
     setTimeout(function () {
         call(global.window, callback);
     }, timeout);

@@ -37,16 +37,6 @@
         return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
     };
 
-    var defineFrozen = function(obj, prop, value) {
-        Object.defineProperty(obj, prop, {
-            value : value,
-            configurable: false,
-            writable: false,
-            enumerable: true,
-            _proxyMark: true
-        });
-    };
-
     var args2Array = function (args, start) {
         return Array.prototype.slice.call(args, start);
     };
@@ -311,13 +301,26 @@
                         console.groupCollapsed("User code error");
                     }
                     console.error('Is ready and had an error:' + e.message);
-                    console.dir(e);
+                    if (console.dir) {
+                        console.dir(e);
+                    }
                     if (console.groupEnd) {
                         console.groupEnd();
                     }
                 }
             }
             return res;
+        },
+
+        // define immutable property
+        defineImmutable: function (obj, prop, value) {
+            Object.defineProperty(obj, prop, {
+                value: value,
+                configurable: false,
+                writable: false,
+                enumerable: true,
+                _proxyMark: true
+            });
         },
 
         uid: function () {
@@ -457,9 +460,9 @@
             throw new Error(name + ' is not valid name for your pipe');
         }
         p = pipe(name, fn, dependencies || []);
-        defineFrozen(p, '$name', name);
-        defineFrozen(p, '$sealed', sealed || false);
-        defineFrozen(p, '$deps', Object.freeze(dependencies || []));
+        _.defineImmutable(p, '$name', name);
+        _.defineImmutable(p, '$sealed', sealed || false);
+        _.defineImmutable(p, '$deps', Object.freeze(dependencies || []));
         p = _.extend(p, _);
         pipesRegistry[name] = p;
         return p;
@@ -576,10 +579,10 @@
             throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
         }
         h = handle(name, fn, dependencies || []);
-        defineFrozen(h, '$name', name);
-        defineFrozen(h, '$sealed', sealed || false);
-        defineFrozen(h, '$deps', Object.freeze(dependencies || []));
-        defineFrozen(h, '_uid', _.uid());
+        _.defineImmutable(h, '$name', name);
+        _.defineImmutable(h, '$sealed', sealed || false);
+        _.defineImmutable(h, '$deps', Object.freeze(dependencies || []));
+        _.defineImmutable(h, '_uid', _.uid());
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
@@ -674,7 +677,7 @@
         },
 
         remove: function () {
-            if(arguments.length == 0 && this.handlerId) {
+            if (arguments.length == 0 && this.handlerId) {
                 _.forEach(this.watchers, function (dyna, i) {
                     if (dyna.handlerId === this.handlerId) {
                         this.watchers.splice(i, 1);
@@ -704,7 +707,7 @@
                 if (dyna.property.test(prop)) {
                     var point = dyna.onGet;
                     if (_.isFunction(point)) {
-                        _.safeCall(point, obj, ready, obj);
+                        _.safeCall(point, obj, ready, obj, prop);
                     }
                 }
             });
@@ -718,7 +721,7 @@
                 if (dyna.property.test(prop)) {
                     var point = dyna.onChange;
                     if (_.isFunction(point)) {
-                        _.safeCall(point, obj, ready, obj);
+                        _.safeCall(point, obj, ready, obj, prop);
                     }
                 }
             });
@@ -732,7 +735,7 @@
                 if (dyna.property.test(prop)) {
                     var point = dyna.onDelete;
                     if (_.isFunction(point)) {
-                        _.safeCall(point, obj, ready, obj);
+                        _.safeCall(point, obj, ready, obj, prop);
                     }
                 }
             });
@@ -905,9 +908,9 @@
             _.debug("Tie " + name, name);
             var r = new bind(name);
             var obj = r.obj = this.check(tiedObject);
-            defineFrozen(obj, '$name', name);
-            defineFrozen(obj, '$sealed', sealed || false);
-            defineFrozen(obj, '$deps', Object.freeze(dependencies || []));
+            _.defineImmutable(obj, '$name', name);
+            _.defineImmutable(obj, '$sealed', sealed || false);
+            _.defineImmutable(obj, '$deps', Object.freeze(dependencies || []));
             obj._deleted = false;
             this.resolveDependencies(r, dependencies);
             r.resolveHandles();
