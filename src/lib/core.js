@@ -390,8 +390,6 @@
                     } else {
                         desc.value = val;
                     }
-                } else {
-                    //TODO pointcut
                 }
                 bind.apply(fullProp);
             };
@@ -414,17 +412,17 @@
             _.forIn(obj, function (value, prop) {
                 props.push(prop);
                 if ('prototype' == prop) {
-                    return false;// skip prototype
+                    return true;// skip prototype
                 }
                 var desc = Object.getOwnPropertyDescriptor(obj, prop);
                 if (desc._proxyMark) {
-                    return false; //skip already processed
+                    return true; //skip already processed
                 }
                 if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
-                    return false; // skip readonly
+                    return true; // skip readonly
                 }
                 var dep = prop.indexOf(DEP_PREFIX) == 0 && bind.obj.$deps.indexOf(prop.substring(2)) != -1;
-                if (_.isObject(value) && !dep && prop != DEPS) {
+                if (_.isObject(value) && !dep && prop != DEPS && prop !== (DEP_PREFIX + APP)) {
                     _.debug("Exploring " + prop);
                     explore(value, prop);
                 }
@@ -436,7 +434,6 @@
                 }
                 return true;
             });
-            //TODO pointcut
             return added;
         };
 
@@ -703,14 +700,16 @@
             if (!ready) {
                 ready = obj.$ready();
             }
+            var val = null;
             _.forEach(this.watchers, function (dyna) {
                 if (dyna.property.test(prop)) {
                     var point = dyna.onGet;
                     if (_.isFunction(point)) {
-                        _.safeCall(point, obj, ready, obj, prop);
+                        val = _.safeCall(point, obj, ready, obj, prop, val);
                     }
                 }
             });
+            return val;
         },
 
         onChange: function (prop, obj, ready) {
@@ -721,7 +720,8 @@
                 if (dyna.property.test(prop)) {
                     var point = dyna.onChange;
                     if (_.isFunction(point)) {
-                        _.safeCall(point, obj, ready, obj, prop);
+                        var v = obj[prop];
+                        _.safeCall(point, obj, ready, obj, prop, v);
                     }
                 }
             });
@@ -753,6 +753,7 @@
     var bind = function (name) {
         this.name = name;
         this.touch = [];
+        this.processedHandles = [];
         this.values = {};
         this.applyCount = 0;
         this.timeout = null;
@@ -775,7 +776,7 @@
                 var n = property.substring(1);
                 var h = handlesRegistry[n];
                 if (h) {
-                    this.resolveHandle(this.obj, n, h, []);
+                    this.resolveHandle(this.obj, n, h, this.processedHandles);
                 }
             }
             if (property) {
@@ -801,16 +802,17 @@
             var name = this.name;
             var obj = this.obj;
             if (name != APP) {
-                var processed = [];
+                this.processedHandles = [];
                 _.forIn(handlesRegistry, function (handle, prop) {
-                    if (processed.indexOf(prop) == -1) {
-                        this.resolveHandle(obj, prop, handle, processed);
+                    if (this.processedHandles.indexOf(prop) == -1) {
+                        this.resolveHandle(obj, prop, handle, this.processedHandles);
                     }
                 }, this);
             }
         },
 
         resolveHandle: function (obj, prop, handle, processed) {
+            _.debug("Check handle " + prop);
             _.forEach(handle.$deps, function (item) {
                 if (processed.indexOf(item) == -1) {
                     var h = handlesRegistry[item];
@@ -818,16 +820,19 @@
                 }
             }, this);
             var n = (HANDLE_PREFIX + prop);
-            var config = obj[ n];
+            var config = obj[n];
             if (_.isUndefined(config) && app) {
                 config = app.obj[n];
             }
-            this.currentProperty = n; //prevent apply update
-            this.watcher.handlerId = handle._uid;
-            this.watcher.remove();
-            obj[n] = handle(obj, config, this.watcher);
-            this.watcher.handlerId = null;
-            this.currentProperty = null;
+            _.debug("Got handle config " + config);
+            if (_.isDefined(config)) {
+                this.currentProperty = n; //prevent apply update
+                this.watcher.handlerId = handle._uid;
+                this.watcher.remove();
+                obj[n] = handle(obj, config, this.watcher);
+                this.watcher.handlerId = null;
+                this.currentProperty = null;
+            }
             processed.push(prop);
         }
     };

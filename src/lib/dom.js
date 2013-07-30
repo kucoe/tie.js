@@ -263,11 +263,30 @@
         return obj.$prop(name);
     };
 
+    var attrValue = function (name, value) {
+        if (this.$attrs) {
+            var attr = this.$attrs[name];
+            if (_.isUndefined(value)) {
+                if (attr) {
+                    return attr.val(this);
+                }
+            } else {
+                if (attr && attr.property) {
+                    this.$prop(attr.property, value);
+                } else if (attr) {
+                    this.$prop(name, value);
+                }
+            }
+        }
+        return null;
+    };
+
     var renders = {};
 
     var renderer = function (obj) {
         this.obj = obj;
-        this.obj.$shown = true;
+        obj.$shown = true;
+        obj.$attr = true;
         this.values = {};
         this.rendered = false;
         this.rendering = false;
@@ -345,6 +364,9 @@
         },
 
         render: function (property, force) {
+            if (!this.rendered && property && !force) {
+                return;
+            }
             var obj = this.obj;
             if (!obj.$shown || (this.rendering && !force)) {
                 return;
@@ -384,7 +406,6 @@
         },
 
         show: function (shown) {
-            console.log('Rendered ' + this.rendered);
             if (this.rendered) {
                 _.forEach(this.$, function (el) {
                     if (el) {
@@ -400,14 +421,20 @@
     var add = function (obj, watcher) {
         var r = new renderer(obj);
         renders[obj.$name] = r;
-        watcher.add('_deleted', function (obj) {
-            delete renders[obj.$name];
+        watcher.add('_deleted', function (obj, prop, val) {
+            if(val){
+                delete renders[obj.$name];
+            }
         });
         watcher.add('*', function (obj, prop) {
             r.render(prop);
         });
         return r;
     };
+
+    handle("attr", function () {
+        return attrValue;
+    }, ['attrs'], true);
 
     handle("attrs", function (obj, config, watcher) {
         if (config) {
@@ -418,17 +445,15 @@
             }, 200);
         }
         return config;
-    });
+    }, [], true);
 
-    handle("shown", function (obj, config, watcher) {
+    handle("shown", function (obj, config) {
         var r = renders[obj.$name];
-        console.log('On show ' + r.rendered);
-        if (!r) {
-            r = add(obj, watcher);
+        if (r) {
             r.show(config);
         }
         return config;
-    });
+    }, ['attrs'], true);
 
     if (typeof window.exports === 'object') {
         window.exports = function () {

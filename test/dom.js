@@ -8,15 +8,13 @@ function clear(renders) {
             delete renders[prop];
         }
     }
-};
-
+}
 
 function prepareA(document) {
     var a = document.createElement("a");
     document.body.appendChild(a);
     return a;
 }
-
 
 function prepareInput(window, $, tag, type) {
     var document = window.document;
@@ -256,13 +254,24 @@ describe('dom', function () {
                 done();
             }, ['dom']);
         });
+    });
+    describe('render', function () {
         it('should process $attrs', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
                 var __ret = prepareInput(window, $);
-                var el = __ret.el;
                 var obj = __ret.obj;
                 should.exists(obj.$attrs.style, 'attrs');
+                done();
+            }, ['dom']);
+        });
+        it('should not allow $attr', function (done) {
+            browser(function (window) {
+                var $ = window.exports().el;
+                var __ret = prepareInput(window, $);
+                var obj = __ret.obj;
+                obj.$attr = 'a';
+                (typeof  obj.$attr).should.eql('function', 'attr');
                 done();
             }, ['dom']);
         });
@@ -270,22 +279,21 @@ describe('dom', function () {
             browser(function (window) {
                 var $ = window.exports().el;
                 var renders = window.exports().renders;
-                clear(renders);
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
-                var el = __ret.el;
                 var r = renders[obj.$name];
                 should.exists(r, 'renderer');
-                var element = r.$[0];
-                should.exists(element, 'element');
-                done();
+                setTimeout(function () {
+                    var element = r.$[0];
+                    should.exists(element, 'element');
+                    done();
+                }, 500);
             }, ['dom']);
         });
         it('should process render attributes', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
                 var renders = window.exports().renders;
-                clear(renders);
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 should.exists(obj.$attrs.style, 'attrs');
@@ -300,12 +308,12 @@ describe('dom', function () {
             browser(function (window) {
                 var $ = window.exports().el;
                 var renders = window.exports().renders;
-                clear(renders);
                 var __ret = prepareInput(window, $);
-                var el = __ret.el;
                 var obj = __ret.obj;
                 setTimeout(function () {
                     obj.$shown = false;
+                    var r = renders[obj.$name];
+                    var el = r.$[0];
                     el.shown.should.eql(false, 'hidden');
                     el.$.style.display.should.eql('none', 'hidden');
                     done();

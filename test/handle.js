@@ -6,7 +6,7 @@ var should = require('should');
 afterEach(function () {
     var prop;
     for (prop in handles) {
-        if (prop === 'attrs' || prop === 'shown') {
+        if (prop === 'attrs' || prop === 'shown' || prop === 'attr') {
             continue;
         }
         if (handles.hasOwnProperty(prop)) {
@@ -84,6 +84,20 @@ describe('handle', function () {
         var test = tie("test", {$a: "Jack", $b: "Wolf"});
         test.name.should.eql("Jack Wolf");
     });
+    it('should not recall deps', function () {
+        var b = tie.handle("b", function (obj, config) {
+            obj.name = obj.name + ' ' + config;
+            return config
+        }, ['a']);
+        tie.handle("a", function (obj, config) {
+            obj.name = config == 'Jack' ? 'Wolf' : 'Jack';
+            return config;
+        });
+        var test = tie("test", {$a: "Jack", $b: "Wolf"});
+        test.name.should.eql("Wolf Wolf");
+        test.$b = "Jack";
+        test.name.should.eql("Wolf Wolf Jack");
+    });
     it('should watch config', function () {
         tie.handle("a", function (obj, config) {
             obj.name = config;
@@ -94,15 +108,23 @@ describe('handle', function () {
         test.$a = 'Wolf';
         test.name.should.eql("Wolf");
     });
+    it('should prevent config in handler', function () {
+        tie.handle("a", function () {
+            return 'Me';
+        });
+        var test = tie("test", {$a: 'Wolf'});
+        test.$a = 'Wolf';
+        test.$a.should.eql("Me");
+    });
     it('should watch property', function () {
         tie.handle("a", function (obj, config, watcher) {
-            var w = function(obj) {
+            var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
             watcher.add('name', w);
             return config;
         });
-        var test = tie("test", {$a: "Hello", name:'Jack'});
+        var test = tie("test", {$a: "Hello", name: 'Jack'});
         test.total.should.eql("Hello Jack");
         test.name = 'Wolf';
         test.name.should.eql("Wolf");
@@ -110,14 +132,14 @@ describe('handle', function () {
     });
     it('should not loose watcher', function () {
         tie.handle("a", function (obj, config, watcher) {
-            var w = function(obj) {
+            var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
             watcher.add('name', w);
             return config;
         });
-        tie("test", {$a: "Hello", name:'Jack'});
-        var test = tie("test", {$a: "Bye", name:'Jack'});
+        tie("test", {$a: "Hello", name: 'Jack'});
+        var test = tie("test", {$a: "Bye", name: 'Jack'});
         test.total.should.eql("Bye Jack");
         test.name = 'Wolf';
         test.name.should.eql("Wolf");
@@ -126,7 +148,7 @@ describe('handle', function () {
     it('should not duplicate watches', function () {
         var watch = null;
         tie.handle("a", function (obj, config, watcher) {
-            var w = function(obj) {
+            var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
             watch = watcher;
@@ -134,7 +156,7 @@ describe('handle', function () {
             w(obj);
             return config;
         });
-        var test = tie("test", {$a: "Hello", name:'Jack'});
+        var test = tie("test", {$a: "Hello", name: 'Jack'});
         test.$a = 'Bye';
         test.total.should.eql("Bye Jack");
         test.name = 'Wolf';

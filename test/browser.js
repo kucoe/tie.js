@@ -5,7 +5,7 @@ var _ = tie.util;
 jsdom.env(
     {
         html: "<!doctype html><html><body>Hello World!</body></html>",
-        scripts: ['../src/lib/core.js', 'https://raw.github.com/jquery/sizzle/master/dist/sizzle.min.js'],
+        scripts: ['https://raw.github.com/jquery/sizzle/master/dist/sizzle.min.js'],
         src: "",
         done: function (err, window) {
             if (err) throw  err;
@@ -13,6 +13,8 @@ jsdom.env(
             window.document.querySelectorAll = function(selector) {
                 return window.Sizzle(selector);
             };
+            window.tie = require('../src/lib/core.js')(true);
+            //window.tie.enableDebug(true);
             global.window = window;
         }
     }
@@ -49,11 +51,11 @@ function fireEvent(element, event, opts) {
 
 module.exports = function (callback, handles) {
     var h = handles || [];
-    _.forEach(h, function (elem) {
-        require('../src/lib/' + elem + '.js');
-    });
     var timeout = !global.window ? 1000 : 0;
     setTimeout(function () {
+        _.forEach(h, function (elem) {
+            require('../src/lib/' + elem + '.js');
+        });
         call(global.window, callback);
     }, timeout);
 };
