@@ -424,7 +424,7 @@
                 var dep = prop.indexOf(DEP_PREFIX) == 0 && bind.obj.$deps.indexOf(prop.substring(2)) != -1;
                 if (_.isObject(value) && !dep && prop != DEPS && prop !== (DEP_PREFIX + APP)) {
                     _.debug("Exploring " + prop);
-                    explore(value, prop);
+                    _.extend(added, explore(value, prop));
                 }
                 _.debug("Observing " + prop);
                 if (observe(obj, desc, prop, top)) {
@@ -440,7 +440,24 @@
         var obj = bind.obj;
         var props = [];
         _.debug("Exploring " + bind.name);
-        return explore(obj);
+        var added = explore(obj);
+        if (bind.newDynamicProps) {
+            _.forEach(bind.newDynamicProps, function (prop, i) {
+                    _.debug("Observing dynamic property " + prop);
+                    if (observe(obj, null, prop)) {
+                        added.push(prop);
+                    }
+                    props.push(prop);
+                    bind.newDynamicProps.splice(i, 1);
+            });
+        }
+        _.forEach(bind.props, function (prop, i) {
+            if (_.isUndefined(bind.obj.$prop(prop))) {
+                _.debug("Notify deleted property " + prop);
+                bind.watcher.onDelete(prop, bind.obj);
+            }
+        }, this);
+        return added;
     };
 
     /**  PIPE **/
@@ -612,7 +629,7 @@
                 res = res[split[i - 1]];
                 i++;
                 if (_.isUndefined(res)) {
-                    return null;
+                    return undefined;
                 }
             }
             var last = split[length - 1];
@@ -621,7 +638,7 @@
             } else {
                 res[last] = value;
             }
-            return null;
+            return undefined;
         },
 
         $ready: function () {
@@ -654,30 +671,57 @@
 
     var watcher = function (bind) {
         this.watchers = [];
+        this.getters = [];
         this.bind = bind;
         this.handlerId = null;
     };
 
     watcher.prototype = {
-        add: function (prop, onChange, onGet, onDelete) {
+        watch: function (prop, onChange, onDelete) {
             if (!prop || prop === '*') {
                 prop = '.*';
             }
-            var dyna = {
-                property: new RegExp('^' + prop + '$'),
-                handlerId: this.handlerId,
-                onChange: onChange,
-                onGet: onGet,
-                onDelete: onDelete
-            };
-            this.watchers.push(dyna);
+            if (onChange || onDelete) {
+                var dyna = {
+                    property: new RegExp('^' + prop + '$'),
+                    handlerId: this.handlerId,
+                    onChange: onChange,
+                    onDelete: onDelete
+                };
+                this.watchers.push(dyna);
+            }
+        },
+
+        add: function (prop, valueFn) {
+            if(this.bind.props.indexOf(prop) == -1) {
+                this.bind.newDynamicProps.push(prop);
+                this.inspect();
+            }
+            if(this.bind.newDynamicProps.indexOf(prop) && valueFn) {
+                var dyna = {
+                    property: prop,
+                    handlerId: this.handlerId,
+                    valueFn: valueFn
+                };
+                this.getters.push(dyna);
+            }
         },
 
         remove: function () {
+            var indexOf;
             if (arguments.length == 0 && this.handlerId) {
                 _.forEach(this.watchers, function (dyna, i) {
                     if (dyna.handlerId === this.handlerId) {
                         this.watchers.splice(i, 1);
+                    }
+                }, this, true);
+                _.forEach(this.getters, function (dyna, i) {
+                    if (dyna.handlerId === this.handlerId) {
+                        this.getters.splice(i, 1);
+                        indexOf = this.bind.newDynamicProps.indexOf(dyna.property);
+                        if (indexOf != -1) {
+                            this.bind.newDynamicProps.splice(indexOf, 1);
+                        }
                     }
                 }, this, true);
             }
@@ -688,10 +732,27 @@
                         this.watchers.splice(i, 1);
                     }
                 }, this, true);
+                _.forEach(this.getters, function (dyna, i) {
+                    if (dyna.property === prop) {
+                        this.getters.splice(i, 1);
+                        indexOf = this.bind.newDynamicProps.indexOf(prop);
+                        if (indexOf != -1) {
+                            this.bind.newDynamicProps.splice(indexOf, 1);
+                        }
+                    }
+                }, this, true);
             } else {
-                var indexOf = this.watchers.indexOf(prop);
+                indexOf = this.watchers.indexOf(prop);
                 if (indexOf != -1) {
                     this.watchers.splice(indexOf, 1);
+                }
+                indexOf = this.getters.indexOf(prop);
+                if (indexOf != -1) {
+                    this.getters.splice(indexOf, 1);
+                    indexOf = this.bind.newDynamicProps.indexOf(prop.property);
+                    if (indexOf != -1) {
+                        this.bind.newDynamicProps.splice(indexOf, 1);
+                    }
                 }
             }
         },
@@ -701,9 +762,9 @@
                 ready = obj.$ready();
             }
             var val = null;
-            _.forEach(this.watchers, function (dyna) {
-                if (dyna.property.test(prop)) {
-                    var point = dyna.onGet;
+            _.forEach(this.getters, function (dyna) {
+                if (dyna.property === prop) {
+                    var point = dyna.valueFn;
                     if (_.isFunction(point)) {
                         val = _.safeCall(point, obj, ready, obj, prop, val);
                     }
@@ -753,6 +814,8 @@
     var bind = function (name) {
         this.name = name;
         this.touch = [];
+        this.props = [];
+        this.newDynamicProps = [];
         this.processedHandles = [];
         this.values = {};
         this.applyCount = 0;
@@ -919,7 +982,7 @@
             obj._deleted = false;
             this.resolveDependencies(r, dependencies);
             r.resolveHandles();
-            proxy(r);
+            r.props = proxy(r);
             _.debug("Bind model ready");
             return r;
         }

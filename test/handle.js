@@ -116,12 +116,12 @@ describe('handle', function () {
         test.$a = 'Wolf';
         test.$a.should.eql("Me");
     });
-    it('should watch property', function () {
+    it('should watch property change', function () {
         tie.handle("a", function (obj, config, watcher) {
             var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
-            watcher.add('name', w);
+            watcher.watch('name', w);
             return config;
         });
         var test = tie("test", {$a: "Hello", name: 'Jack'});
@@ -130,12 +130,42 @@ describe('handle', function () {
         test.name.should.eql("Wolf");
         test.total.should.eql("Hello Wolf");
     });
+    it('should watch property get', function () {
+        tie.handle("a", function (obj, config, watcher) {
+            var w = function (obj) {
+                return config + ' ' + obj.name;
+            };
+            watcher.add('total', w);
+            return config;
+        });
+        var test = tie("test", {$a: "Hello", name: 'Jack'});
+        test.total.should.eql("Hello Jack");
+        test.name = 'Wolf';
+        test.total.should.eql("Hello Wolf");
+    });
+    it('should watch property delete', function () {
+        var watch = null;
+        tie.handle("a", function (obj, config, watcher) {
+            var w = function (obj) {
+                obj.total = config + ' deleted';
+            };
+            watch = watcher;
+            watcher.watch('name', {}, w);
+            return config;
+        });
+        var test = tie("test", {$a: "Hello", name: 'Jack'});
+        if(watch) {
+            delete test.name;
+            watch.inspect();
+        }
+        test.total.should.eql("Hello deleted");
+    });
     it('should not loose watcher', function () {
         tie.handle("a", function (obj, config, watcher) {
             var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
-            watcher.add('name', w);
+            watcher.watch('name', w);
             return config;
         });
         tie("test", {$a: "Hello", name: 'Jack'});
@@ -152,7 +182,7 @@ describe('handle', function () {
                 obj.total = config + ' ' + obj.name;
             };
             watch = watcher;
-            watcher.add('name', w);
+            watcher.watch('name', w);
             w(obj);
             return config;
         });

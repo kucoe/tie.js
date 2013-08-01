@@ -421,12 +421,12 @@
     var add = function (obj, watcher) {
         var r = new renderer(obj);
         renders[obj.$name] = r;
-        watcher.add('_deleted', function (obj, prop, val) {
+        watcher.watch('_deleted', function (obj, prop, val) {
             if(val){
                 delete renders[obj.$name];
             }
         });
-        watcher.add('*', function (obj, prop) {
+        watcher.watch('*', function (obj, prop) {
             r.render(prop);
         });
         return r;
