@@ -10,7 +10,7 @@ jsdom.env(
         done: function (err, window) {
             if (err) throw  err;
             window.exports = {};
-            window.document.querySelectorAll = function(selector) {
+            window.document.querySelectorAll = function (selector) {
                 return window.Sizzle(selector);
             };
             window.tie = require('../src/lib/core.js')(true);
@@ -25,7 +25,7 @@ function sendKey(element, key) {
     element.focus();
     var prev = element.value || '';
     element.value = prev + key;
-    fireEvent(element, 'keydown', {keyCode:x, which:x, charCode:x});
+    fireEvent(element, 'keydown', {keyCode: x, which: x, charCode: x});
 }
 
 function fireEvent(element, event, opts) {
@@ -34,7 +34,7 @@ function fireEvent(element, event, opts) {
     if (document.createEventObject) {
         // dispatch for IE
         evt = document.createEventObject();
-        if(opts) {
+        if (opts) {
             evt = _.extend(evt, opts);
         }
         return element.fireEvent('on' + event, evt)
@@ -42,8 +42,8 @@ function fireEvent(element, event, opts) {
         // dispatch for firefox + others
         evt = document.createEvent("HTMLEvents");
         evt.initEvent(event, true, true); // event type,bubbling,cancelable
-        if(opts) {
-           evt = _.extend(evt, opts);
+        if (opts) {
+            evt = _.extend(evt, opts);
         }
         return !element.dispatchEvent(evt);
     }
@@ -51,13 +51,10 @@ function fireEvent(element, event, opts) {
 
 module.exports = function (callback, handles) {
     var h = handles || [];
-    var timeout = !global.window ? 1000 : 0;
-    setTimeout(function () {
-        _.forEach(h, function (elem) {
-            require('../src/lib/' + elem + '.js');
-        });
-        call(global.window, callback);
-    }, timeout);
+    _.forEach(h, function (elem) {
+        require('../src/lib/' + elem + '.js');
+    });
+    call(global.window, callback);
 };
 
 module.exports.fireEvent = fireEvent;

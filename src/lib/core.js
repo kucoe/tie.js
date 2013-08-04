@@ -38,7 +38,7 @@
     };
 
     var args2Array = function (args, start) {
-        return Array.prototype.slice.call(args, start);
+        return [].slice.call(args, start);
     };
 
     var _ = {
@@ -65,19 +65,19 @@
         },
 
         isDate: function (value) {
-            return Object.prototype.toString.apply(value) == '[object Date]';
+            return {}.toString.apply(value) == '[object Date]';
         },
 
         isRegExp: function (value) {
-            return Object.prototype.toString.apply(value) == '[object RegExp]';
+            return {}.toString.apply(value) == '[object RegExp]';
         },
 
         isArray: function (value) {
-            return Array.isArray(value) || Object.prototype.toString.apply(value) == '[object Array]';
+            return Array.isArray(value) || {}.toString.apply(value) == '[object Array]';
         },
 
         isCollection: function (value) {
-            var s = Object.prototype.toString.apply(value);
+            var s = {}.toString.apply(value);
             return this.isArray(value) || value instanceof Array
                 || s == '[object NodeList]'
                 || s == '[object NamedNodeMap]'
@@ -221,7 +221,7 @@
                     var length = collection.length;
                     var coll = [];
                     if (safe) {
-                        coll = Array.prototype.slice.call(collection);
+                        coll = [].slice.call(collection);
                     } else {
                         coll = collection;
                     }
@@ -443,12 +443,12 @@
         var added = explore(obj);
         if (bind.newDynamicProps) {
             _.forEach(bind.newDynamicProps, function (prop, i) {
-                    _.debug("Observing dynamic property " + prop);
-                    if (observe(obj, null, prop)) {
-                        added.push(prop);
-                    }
-                    props.push(prop);
-                    bind.newDynamicProps.splice(i, 1);
+                _.debug("Observing dynamic property " + prop);
+                if (observe(obj, null, prop)) {
+                    added.push(prop);
+                }
+                props.push(prop);
+                bind.newDynamicProps.splice(i, 1);
             });
         }
         _.forEach(bind.props, function (prop, i) {
@@ -535,7 +535,7 @@
         return p(this, params);
     };
 
-    var parser = function (string) {
+    var parser = function (string, obj) {
         string = _.trim(string || "");
         var tokens = string.split('|');
         var t = tokens[0];
@@ -546,7 +546,9 @@
         } else {
             tokens = tokens.splice(1);
         }
-        var obj = ties[t].obj;
+        if (!obj) {
+            obj = ties[t].obj;
+        }
         obj = _.clone(obj);
         _.forEach(tokens, function (item) {
             var p = parser.prototype.parse(item);
@@ -693,11 +695,11 @@
         },
 
         add: function (prop, valueFn) {
-            if(this.bind.props.indexOf(prop) == -1) {
+            if (this.bind.props.indexOf(prop) == -1) {
                 this.bind.newDynamicProps.push(prop);
                 this.inspect();
             }
-            if(this.bind.newDynamicProps.indexOf(prop) && valueFn) {
+            if (this.bind.newDynamicProps.indexOf(prop) && valueFn) {
                 var dyna = {
                     property: prop,
                     handlerId: this.handlerId,
@@ -728,12 +730,12 @@
             var prop = arguments[0];
             if (_.isString(prop)) {
                 _.forEach(this.watchers, function (dyna, i) {
-                    if (dyna.property.test(prop)) {
+                    if (dyna.property.test(prop) || dyna.handlerId === prop) {
                         this.watchers.splice(i, 1);
                     }
                 }, this, true);
                 _.forEach(this.getters, function (dyna, i) {
-                    if (dyna.property === prop) {
+                    if (dyna.property === prop || dyna.handlerId === prop) {
                         this.getters.splice(i, 1);
                         indexOf = this.bind.newDynamicProps.indexOf(prop);
                         if (indexOf != -1) {

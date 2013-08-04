@@ -12,13 +12,25 @@
 
     var VALUE = 'value';
     var TEXT = 'text';
-    var ITEM_NAME = '_item_name';
 
     var INDEX = "data-index";
     var TIE = "data-tie";
     var TIED = "data-tied";
 
     var q = {
+
+        domReady: false,
+
+        isListenersSet: false,
+
+        readyListeners: [],
+
+        readyFn: function () {
+            _.forEach(this.readyListeners, function (listener) {
+                setTimeout(listener, 100);
+            });
+            this.domReady = true;
+        },
 
         next: function (index, newElements) {
             var parent = index.parentNode;
@@ -34,13 +46,22 @@
         },
 
         ready: function (fn) {
-            // check if document already is loaded
-            if (document.readyState === 'complete') {
-                setTimeout(fn, 0);
-            } else {
-                window.addEventListener('load', fn);
+            if (fn) {
+                // check if document already is loaded
+                if (document.readyState === 'complete') {
+                    setTimeout(fn, 0);
+                } else {
+                    if (this.isListenersSet) {
+                        window.addEventListener('load', this.readyFn);
+                    }
+                }
+                if (this.isListenersSet) {
+                    window.addEventListener('hashchange', this.readyFn);
+                    this.isListenersSet = true;
+                }
+                this.readyListeners.push(fn);
             }
-            window.addEventListener('hashchange', fn);
+            return this.domReady;
         }
     };
 
@@ -281,12 +302,27 @@
         return null;
     };
 
+    var checkProperty = function (attr) {
+        var name = attr.name;
+        var index = name.indexOf('#');
+        if (index != -1) {
+            attr.name = name.substring(0, index);
+            attr.property = name.substring(index + 1);
+            attr.deps.push(attr.property);
+        } else {
+            attr.deps.push(name);
+        }
+        return attr;
+    };
+
+    var parse = window.tie.$;
+
     var renders = {};
 
     var renderer = function (obj) {
         this.obj = obj;
         obj.$shown = true;
-        obj.$attr = true;
+        obj.$attr = attrValue;
         this.values = {};
         this.rendered = false;
         this.rendering = false;
@@ -298,24 +334,39 @@
     };
 
     renderer.prototype = {
-        prepareAttrs: function (attrs) {
-            if (attrs) {
-                if (_.isArray(attrs)) {
-                    attrs = attrs._({});
-                }
-                _.forIn(attrs, function (attr, name) {
-                    if (_.isString(attr) && attr[0] == '#') {
-                        attr = {name: name, property: attr.substring(1)}
-                    } else if (_.isFunction(attr)) {
-                        attr = {name: name, value: attr}
-                    } else if (attr[ITEM_NAME]) {
-                        attr = {name: attr[ITEM_NAME]};
-                    } else {
-                        attr = {name: name, value: attr}
+        prepareAttrs: function (attrs, watcher) {
+            if (attrs && _.isArray(attrs)) {
+                var res = {};
+                var r = this;
+                _.forEach(attrs, function (attr) {
+                    if (_.isString(attr)) {
+                        attr = {
+                            name: attr,
+                            property: null,
+                            deps: [],
+                            value: null,
+                            val: valueFn
+                        };
+                        attr = checkProperty(attr);
                     }
-                    attr.val = valueFn;
-                    attrs[name] = attr;
-                }, this);
+                    var name = attr.name;
+                    if (attr.property || attr.value) {
+                        watcher.add(name, function (obj) {
+                            return obj.$attr(name);
+                        });
+                        watcher.watch(name, function (obj, prop, val) {
+                            obj.$attr(name, val);
+                        });
+                    }
+                    if (attr.deps.length > 0) {
+                        var d = attr.deps.join('|');
+                        watcher.watch(d, function () {
+                            r.render(name);
+                        });
+                    }
+                    res[name] = attr;
+                });
+                attrs = res;
             }
             return attrs;
         },
@@ -380,6 +431,7 @@
             var ready = obj.$ready();
             _.forEach(this.$, function (el) {
                 if (el) {
+                    obj = parse(el.tie, obj);
                     var attrs = obj.$attrs;
                     var idx = el.index;
                     if (attrs) {
@@ -418,17 +470,30 @@
 
     var handle = window.tie.handle;
 
-    var add = function (obj, watcher) {
+    var onReady = function () {
+        _.debug("Render app");
+        _.forIn(renders, function (r) {
+            if (!r.rendered) {
+                r.render();
+            }
+        });
+        _.debug("Rendered app");
+    };
+
+    var add = function (obj, watcher, handlerId) {
         var r = new renderer(obj);
         renders[obj.$name] = r;
         watcher.watch('_deleted', function (obj, prop, val) {
-            if(val){
+            if (val) {
                 delete renders[obj.$name];
+                watcher.remove(handlerId)
             }
         });
-        watcher.watch('*', function (obj, prop) {
-            r.render(prop);
-        });
+        if (!q.ready()) {
+            setTimeout(function () {
+                r.render();
+            }, 100);
+        }
         return r;
     };
 
@@ -438,11 +503,8 @@
 
     handle("attrs", function (obj, config, watcher) {
         if (config) {
-            var r = add(obj, watcher);
-            config = r.prepareAttrs(config);
-            setTimeout(function () {
-                r.render();
-            }, 200);
+            var r = add(obj, watcher, this._uid);
+            config = r.prepareAttrs(config, watcher);
         }
         return config;
     }, [], true);
@@ -454,6 +516,26 @@
         }
         return config;
     }, ['attrs'], true);
+
+
+    q.ready(onReady);
+
+    window.tie.attr = function (name, value, dependencies) {
+        var attr = {
+            name: name,
+            property: null,
+            deps: dependencies || [],
+            value: value,
+            val: valueFn
+        };
+        if (value && name.indexOf('#') != -1) {
+            throw new Error('Property and calculated value combination is not supported');
+        }
+        if (!value) {
+            attr = checkProperty(attr);
+        }
+        return attr;
+    };
 
     if (typeof window.exports === 'object') {
         window.exports = function () {
