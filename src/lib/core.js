@@ -322,7 +322,7 @@
         extend: function (destination, source, fn) {
             if (this.isCollection(destination) && this.isCollection(source)) {
                 this.forEach(source, function (item, i) {
-                    destination.push(fn ? fn(item, i) : item);
+                    [].push.call(destination, fn ? fn(item, i) : item);
                 });
             } else {
                 this.forIn(source, function (value, prop) {

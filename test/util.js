@@ -159,11 +159,19 @@ describe('util', function () {
     describe('forEach', function () {
         it('should work safely', function () {
             var arr = ['a', 'b', 'c'];
-            util.forEach(arr, function(item, i, coll) {
+            util.forEach(arr, function (item, i, coll) {
                 arr.splice(arr.indexOf(item), 1);
                 coll.length.should.eql(3, "iterate");
             }, this, true);
             arr.should.eql([], "array");
+        });
+    });
+    describe('extend', function () {
+        it('should combine arrays', function () {
+            var arr = ['a', 'b', 'c'];
+            var arr2 = ['d', 'e', 'f'];
+            util.extend(arr, arr2);
+            arr.should.eql(['a', 'b', 'c', 'd', 'e', 'f' ], "combined");
         });
     });
     //for each, for in, sequence, extend
