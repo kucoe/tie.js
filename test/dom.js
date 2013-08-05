@@ -264,7 +264,7 @@ describe('dom', function () {
                 var $ = window.exports().el;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
-                should.exists(obj.$attrs.style, 'attrs');
+                should.exist(obj.$attrs.style, 'attrs');
                 done();
             }, ['dom']);
         });
@@ -309,10 +309,10 @@ describe('dom', function () {
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 var r = renders[obj.$name];
-                should.exists(r, 'renderer');
+                should.exist(r, 'renderer');
                 setTimeout(function () {
                     var element = r.$[0];
-                    should.exists(element, 'element');
+                    should.exist(element, 'element');
                     done();
                 }, 200);
             }, ['dom']);
@@ -323,7 +323,7 @@ describe('dom', function () {
                 var renders = window.exports().renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
-                should.exists(obj.$attrs.style, 'attrs');
+                should.exist(obj.$attrs.style, 'attrs');
                 setTimeout(function () {
                     var r = renders[obj.$name];
                     r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
@@ -337,7 +337,7 @@ describe('dom', function () {
                 var renders = window.exports().renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
-                should.exists(obj.$attrs.style, 'attrs');
+                should.exist(obj.$attrs.style, 'attrs');
                 setTimeout(function () {
                     var r = renders[obj.$name];
                     r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
@@ -449,7 +449,52 @@ describe('dom', function () {
                 document.body.appendChild(input);
                 window.tie('a', {value: 'lala', $attrs: ['value']});
                 setTimeout(function () {
-                    input.getAttribute('value').should.eql('LALA', 'value attribute');
+                    input.getAttribute('value').should.eql('LALA', 'pipe');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should process property pipe', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a.name');
+                document.body.appendChild(input);
+                window.tie('a', {value: 'lala', name:'baba', $attrs: ['value']});
+                setTimeout(function () {
+                    input.getAttribute('value').should.eql('baba', 'property pipe');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should update property', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a.name');
+                document.body.appendChild(input);
+                var obj = window.tie('a', {value: 'lala', name:'baba', $attrs: ['value']});
+                setTimeout(function () {
+                    input.getAttribute('value').should.eql('baba', 'pipes');
+                    browser.sendKey(input, 'l');
+                    input.getAttribute('value').should.eql('babal', 'input');
+                    obj.name.should.eql('babal', 'updated');
+                    obj.value.should.eql('lala', 'not updated');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should work with app defaults', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a.name');
+                document.body.appendChild(input);
+                window.tie('app', {$attrs:['value']});
+                var obj = window.tie('a', 'lala');
+                setTimeout(function () {
+                    should.exist(obj.$attrs);
+                    input.getAttribute('value').should.eql('lala', 'pipes');
                     done();
                 }, 200);
             }, ['dom']);

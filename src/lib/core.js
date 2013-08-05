@@ -451,7 +451,7 @@
                 bind.newDynamicProps.splice(i, 1);
             });
         }
-        _.forEach(bind.props, function (prop, i) {
+        _.forEach(bind.props, function (prop) {
             if (_.isUndefined(bind.obj.$prop(prop))) {
                 _.debug("Notify deleted property " + prop);
                 bind.watcher.onDelete(prop, bind.obj);

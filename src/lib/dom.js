@@ -74,9 +74,9 @@
             var value = that.value();
             value = _.trim(value);
 
-            //TODO pointcut
-            if (obj.value !== value) {
-                obj.value = value;
+            var prop = that.getProperty();
+            if (obj.$prop(prop) !== value) {
+                obj.$prop(prop, value);
             }
         };
         var idx = el.getAttribute(INDEX);
@@ -115,6 +115,28 @@
     };
 
     $.prototype = {
+
+        getProperty: function () {
+            var string = this.tie;
+            string = _.trim(string || '');
+            var tokens = string.split('|');
+            var t = tokens[0];
+            var dot = t.indexOf('.');
+            if (dot != -1) {
+                return t.substring(dot + 1);
+            }
+            var index = t.indexOf(':');
+            var name = _.trim(index + 1 ? t.substr(0, index) : t);
+            if (name === 'property') {
+                if (index >= 0) {
+                    var p = _.trim(t.substr(++index));
+                    p = '[' + p + ']';
+                    var array = _.convert(p, {});
+                    return array[0];
+                }
+            }
+            return VALUE;
+        },
 
         setAttribute: function (name, value) {
             if (VALUE === name) {
@@ -519,6 +541,8 @@
 
 
     q.ready(onReady);
+
+    window.tie.domReady = q.ready;
 
     window.tie.attr = function (name, value, dependencies) {
         var attr = {
