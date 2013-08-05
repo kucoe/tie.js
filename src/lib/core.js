@@ -297,16 +297,8 @@
             } catch (e) {
                 res = undefined;
                 if (bindReady) {
-                    if (console.groupCollapsed) {
-                        console.groupCollapsed("User code error");
-                    }
                     console.error('Is ready and had an error:' + e.message);
-                    if (console.dir) {
-                        console.dir(e);
-                    }
-                    if (console.groupEnd) {
-                        console.groupEnd();
-                    }
+                    _.debug(e, 'User code error');
                 }
             }
             return res;
@@ -330,17 +322,11 @@
         extend: function (destination, source, fn) {
             if (this.isCollection(destination) && this.isCollection(source)) {
                 this.forEach(source, function (item, i) {
-                    if (fn) {
-                        item = fn(item, i);
-                    }
-                    destination.push(item);
+                    destination.push(fn ? fn(item, i) : item);
                 });
             } else {
                 this.forIn(source, function (value, prop) {
-                    if (fn) {
-                        value = fn(value, prop);
-                    }
-                    destination[prop] = value;
+                    destination[prop] = fn ? fn(value, prop) : value;
                 }, this);
             }
             return destination;
@@ -448,8 +434,8 @@
                     added.push(prop);
                 }
                 props.push(prop);
-                bind.newDynamicProps.splice(i, 1);
             });
+            bind.newDynamicProps = [];
         }
         _.forEach(bind.props, function (prop) {
             if (_.isUndefined(bind.obj.$prop(prop))) {
@@ -459,6 +445,13 @@
         }, this);
         return added;
     };
+
+    function fillSystemFields(obj, name, sealed, dependencies) {
+        _.defineImmutable(obj, '$name', name);
+        _.defineImmutable(obj, '$sealed', sealed || false);
+        _.defineImmutable(obj, '$deps', Object.freeze(dependencies || []));
+        _.defineImmutable(obj, '_uid', _.uid());
+    }
 
     /**  PIPE **/
 
@@ -474,9 +467,7 @@
             throw new Error(name + ' is not valid name for your pipe');
         }
         p = pipe(name, fn, dependencies || []);
-        _.defineImmutable(p, '$name', name);
-        _.defineImmutable(p, '$sealed', sealed || false);
-        _.defineImmutable(p, '$deps', Object.freeze(dependencies || []));
+        fillSystemFields(p, name, sealed, dependencies);
         p = _.extend(p, _);
         pipesRegistry[name] = p;
         return p;
@@ -595,10 +586,7 @@
             throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
         }
         h = handle(name, fn, dependencies || []);
-        _.defineImmutable(h, '$name', name);
-        _.defineImmutable(h, '$sealed', sealed || false);
-        _.defineImmutable(h, '$deps', Object.freeze(dependencies || []));
-        _.defineImmutable(h, '_uid', _.uid());
+        fillSystemFields(h, name, sealed, dependencies);
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
@@ -779,11 +767,11 @@
             if (!ready) {
                 ready = obj.$ready();
             }
+            var v = obj[prop];
             _.forEach(this.watchers, function (dyna) {
                 if (dyna.property.test(prop)) {
                     var point = dyna.onChange;
                     if (_.isFunction(point)) {
-                        var v = obj[prop];
                         _.safeCall(point, obj, ready, obj, prop, v);
                     }
                 }
@@ -978,9 +966,7 @@
             _.debug("Tie " + name, name);
             var r = new bind(name);
             var obj = r.obj = this.check(tiedObject);
-            _.defineImmutable(obj, '$name', name);
-            _.defineImmutable(obj, '$sealed', sealed || false);
-            _.defineImmutable(obj, '$deps', Object.freeze(dependencies || []));
+            fillSystemFields(obj, name, sealed, dependencies);
             obj._deleted = false;
             this.resolveDependencies(r, dependencies);
             r.resolveHandles();

@@ -499,6 +499,23 @@ describe('dom', function () {
                 }, 200);
             }, ['dom']);
         });
+        it('should work with function', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a');
+                document.body.appendChild(input);
+                window.tie('app', {$attrs:['value']});
+                var obj = window.tie('a', function () {
+                    return 'color:blue';
+                });
+                setTimeout(function () {
+                    should.exist(obj.$attrs);
+                    input.getAttribute('value').should.eql('color:blue', 'fn value');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
         it('should react on $shown', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;

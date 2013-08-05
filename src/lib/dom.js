@@ -50,6 +50,7 @@
                 // check if document already is loaded
                 if (document.readyState === 'complete') {
                     setTimeout(fn, 0);
+                    this.domReady = true;
                 } else {
                     if (this.isListenersSet) {
                         window.addEventListener('load', this.readyFn);
@@ -179,7 +180,7 @@
                 }
             } else if (this.isSelect) {
                 if (_.isDefined(val)) {
-                    var options = Array.prototype.slice.call(el.options);
+                    var options = [].slice.call(el.options);
                     _.forEach(options, function (item, i) {
                         if (_.isEqual(item.value, val)) {
                             el.selectedIndex = i;
@@ -356,7 +357,7 @@
     };
 
     renderer.prototype = {
-        prepareAttrs: function (attrs, watcher) {
+        prepareAttrs: function (attrs, obj, watcher) {
             if (attrs && _.isArray(attrs)) {
                 var res = {};
                 var r = this;
@@ -372,6 +373,10 @@
                         attr = checkProperty(attr);
                     }
                     var name = attr.name;
+                    if(VALUE === name && _.isFunction(obj.value)) {
+                        attr.value = obj.value;
+                        delete obj.value;
+                    }
                     if (attr.property || attr.value) {
                         watcher.add(name, function (obj) {
                             return obj.$attr(name);
@@ -393,27 +398,22 @@
             return attrs;
         },
 
+        query: function (q, obj, res) {
+            var nodes = document.querySelectorAll(q);
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, obj));
+            });
+            return res;
+        },
+
         select: function () {
             var obj = this.obj;
             var name = obj.$name;
-            var query = document.querySelectorAll;
-            var nodes = query('[' + TIE + '="' + name + '"]');
             var res = [];
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, obj));
-            });
-            nodes = query('[' + TIE + '^="' + name + '|"]');
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, obj));
-            });
-            nodes = query('[' + TIE + '^="' + name + ' |"]');
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, obj));
-            });
-            nodes = query('[' + TIE + '^="' + name + '."]');
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, obj));
-            });
+            res = this.query('[' + TIE + '="' + name + '"]', obj, res);
+            res = this.query('[' + TIE + '^="' + name + '|"]', obj, res);
+            res = this.query('[' + TIE + '^="' + name + ' |"]', obj, res);
+            res = this.query('[' + TIE + '^="' + name + '."]', obj, res);
             obj.selected = true;
             return res;
         },
@@ -511,7 +511,7 @@
                 watcher.remove(handlerId)
             }
         });
-        if (!q.ready()) {
+        if (q.ready()) {
             setTimeout(function () {
                 r.render();
             }, 100);
@@ -526,7 +526,7 @@
     handle("attrs", function (obj, config, watcher) {
         if (config) {
             var r = add(obj, watcher, this._uid);
-            config = r.prepareAttrs(config, watcher);
+            config = r.prepareAttrs(config, obj, watcher);
         }
         return config;
     }, [], true);
