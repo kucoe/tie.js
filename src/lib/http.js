@@ -22,29 +22,6 @@
         text: "text/plain"
     };
 
-    var http = function (options, obj) {
-        this.memoize = {};
-        this.cache = true;
-        this.obj = obj;
-        if (options) {
-            if (options.url) {
-                this.url = options.url;
-            }
-            if (options.params) {
-                this.params = options.params;
-            }
-            if (options.headers) {
-                this.headers = options.headers;
-            }
-            if (options.dataType) {
-                this.dataType = options.dataType;
-            }
-            if (_.isDefined(options.cache)) {
-                this.cache = options.cache;
-            }
-        }
-    };
-
     var headers = function (xhr, headers, dataType, contentType) {
         if (contentType) {
             headers["Content-Type"] = contentType;
@@ -128,26 +105,6 @@
         }
     };
 
-    /**
-     * Default responding function, will log error or plain response in console
-     * and update model specified in case of JSON response
-     *
-     * @param {model} model to update with response data
-     */
-    var defaultResponder = function (model) {
-        return function (data, err) {
-            if (err) {
-                console.error(err);
-            } else if (_.isObject(data)) {
-                _.extend(model, data);
-                model._fetched = true;
-            } else {
-                console.log('Response received:' + data);
-            }
-        };
-    };
-
-
     var prepareURL = function (url, params) {
         if (!url) {
             return url;
@@ -168,13 +125,6 @@
         return url;
     };
 
-    /**
-     * Return parameters body string. If url is passed - calculate value to be appended to url.
-     *
-     * @param {Object} params
-     * @param {string} [url]
-     * @returns {string}
-     */
     var gatherParams = function (params, url) {
         var sign = "";
         if (url) {
@@ -187,10 +137,7 @@
             }
             res += name + "=" + param;
         });
-        if (res === sign) {
-            return "";
-        }
-        return res;
+        return res === sign ? '' : res;
     };
 
     var prepareOpts = function(opts, params) {
@@ -215,6 +162,24 @@
         return opts;
     };
 
+    var getReadyFn = function(onReady) {
+        var fn = null;
+        if (_.isFunction(onReady)) {
+            fn = onReady;
+        } else if (_.isObject(onReady)) {
+            fn = function (data, err) {
+                if (err) {
+                    console.error(err);
+                } else if (_.isObject(data)) {
+                    _.extend(onReady, data);
+                } else {
+                    console.log('Response received:' + data);
+                }
+            };
+        }
+        return fn;
+    };
+
     var ajax = function (opts, onReady, refetch) {
         var type = opts.getType();
         var url = opts.getUrl();
@@ -236,13 +201,7 @@
             return this.jsonp(url, data);
         }
         var xhr = new window.XMLHttpRequest();
-        var fn = null;
-        if (_.isFunction(onReady)) {
-            fn = onReady;
-        } else if (_.isObject(onReady)) {
-            fn = defaultResponder(onReady);
-        }
-        var req = new request(xhr, fn);
+        var req = new request(xhr, getReadyFn(onReady));
         if (cached) {
             _.debug("Got cached result");
             req.done(cached, null);
@@ -272,13 +231,7 @@
         if (opts.cache && !refetch) {
             cached = opts.memo(url, defaults.mime);
         }
-        var fn = null;
-        if (_.isFunction(onReady)) {
-            fn = onReady;
-        } else if (_.isObject(onReady)) {
-            fn = defaultResponder(onReady);
-        }
-        var req = new request(null, fn);
+        var req = new request(null, getReadyFn(onReady));
         if (cached) {
             _.debug("Got cached result");
             req.done(cached, null);
@@ -307,13 +260,33 @@
         return ajax(opts, onReady);
     };
 
-    /**
-     * Http prototype
-     */
+    var http = function (options, obj) {
+        this.memoize = {};
+        this.cache = true;
+        this.obj = obj;
+        //skip app config now, it will be used later in prepareOpts
+        if (options && obj.$http){
+            if (options.url) {
+                this.url = options.url;
+            }
+            if (options.params) {
+                this.params = options.params;
+            }
+            if (options.headers) {
+                this.headers = options.headers;
+            }
+            if (options.dataType) {
+                this.dataType = options.dataType;
+            }
+            if (_.isDefined(options.cache)) {
+                this.cache = options.cache;
+            }
+        }
+    };
+
     http.prototype = {
 
-        // url with '=$JSONP' to replace by callback name
-        // params request params to be joined to URL. ('$JSONP' as value also works)
+        // url with '=$JSONP' to replace by callback name or '$JSONP' as value in params
         jsonp: function (url, params, onReady, refetch) {
             var opts = _.extend({}, this);
             opts.url = url;
@@ -353,14 +326,7 @@
     var handle = window.tie.handle;
 
     handle("http", function (obj, config) {
-        return new http(config);
+        return new http(config, obj);
     }, ['attrs'], true);
-
-    if (typeof window.exports === 'function') {
-        var tmp = window.exports();
-        window.exports = function () {
-            return tmp;
-        };
-    }
 
 })(window);

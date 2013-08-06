@@ -6,7 +6,7 @@ var should = require('should');
 afterEach(function () {
     var prop;
     for (prop in handles) {
-        if (prop === 'attrs' || prop === 'shown' || prop === 'attr') {
+        if (prop === 'attrs' || prop === 'shown' || prop === 'attr' || prop === 'http') {
             continue;
         }
         if (handles.hasOwnProperty(prop)) {
