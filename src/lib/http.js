@@ -8,6 +8,7 @@
     'use strict';
 
     var _ = window.tie._;
+    var app;
 
     var defaults = {
         type: "GET",
@@ -141,25 +142,25 @@
     };
 
     var prepareOpts = function(opts, params) {
-        var obj = opts.obj;
-        var top = obj.$$app ? obj.$app.$http : null;
+        var res = {};
+        var top = app ? app.$http : null;
         var topURL = top ? top.url : '';
-        opts.url = opts.url ? (topURL + opts.url) : topURL;
-        if (!opts.url) {
+        res.url = opts.url ? (topURL + opts.url) : topURL;
+        if (!res.url) {
             throw new Error("URL is not defined");
         }
         var topParams = top ? top.params : {};
-        opts.params = opts.params ? _.extend(topParams, opts.params) : topParams;
+        res.params = opts.params ? _.extend(topParams, opts.params) : topParams;
         if (params) {
-            _.extend(opts.params, params);
+            _.extend(res.params, params);
         }
-        opts.url = prepareURL(opts.url, params);
+        res.url = prepareURL(res.url, res.params);
         var topHeader = top ? top.header : {};
-        opts.header = opts.header ? _.extend(topParams, opts.header) : topHeader;
-        opts.type = opts.type ? opts.type : (top ? top.type : defaults.type);
-        opts.contentType = opts.contentType ? opts.contentType : (top ? top.contentType : null);
-        opts.dataType = opts.dataType ? opts.dataType : (top ? top.dataType : defaults.mime);
-        return opts;
+        res.header = opts.header ? _.extend(topHeader, opts.header) : topHeader;
+        res.type = opts.type ? opts.type : (top ? top.type : defaults.type);
+        res.contentType = opts.contentType ? opts.contentType : (top ? top.contentType : null);
+        res.dataType = opts.dataType ? opts.dataType : (top ? top.dataType : defaults.mime);
+        return res;
     };
 
     var getReadyFn = function(onReady) {
@@ -263,7 +264,9 @@
     var http = function (options, obj) {
         this.memoize = {};
         this.cache = true;
-        this.obj = obj;
+        if(obj.$name === 'app') {
+            app = obj;
+        }
         //skip app config now, it will be used later in prepareOpts
         if (options && obj.$http){
             if (options.url) {
@@ -296,7 +299,7 @@
 
         get: function (params, onReady, refetch) {
             this.type = defaults.type;
-            delete this.contentType;
+            this.contentType = null;
             var opts = prepareOpts(this, params);
             return ajax(opts, onReady, refetch);
         },
