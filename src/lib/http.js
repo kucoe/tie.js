@@ -67,10 +67,8 @@
                 } catch (error) {
                     request.done(response, error);
                 }
-            } else {
-                if (dataType === "xml") {
-                    response = xhr.responseXML;
-                }
+            } else if (dataType === "xml") {
+                response = xhr.responseXML;
             }
         }
         return response;
@@ -99,7 +97,7 @@
             this.err = err;
             _.debug('Request ready with response:' + data + ' and error:' + err);
             if (this.fn) {
-                safeCall(this.fn, this, true, data, err);
+                _.safeCall(this.fn, this, true, data, err);
             } else {
                 console.log('Response received:' + data);
             }
@@ -142,25 +140,24 @@
     };
 
     var prepareOpts = function(opts, params) {
-        var res = {};
         var top = app ? app.$http : null;
         var topURL = top ? top.url : '';
-        res.url = opts.url ? (topURL + opts.url) : topURL;
-        if (!res.url) {
+        opts.url = opts.url ? (topURL + opts.url) : topURL;
+        if (!opts.url) {
             throw new Error("URL is not defined");
         }
         var topParams = top ? top.params : {};
-        res.params = opts.params ? _.extend(topParams, opts.params) : topParams;
+        opts.params = opts.params ? _.extend(topParams, opts.params) : topParams;
         if (params) {
-            _.extend(res.params, params);
+            _.extend(opts.params, params);
         }
-        res.url = prepareURL(res.url, res.params);
-        var topHeader = top ? top.header : {};
-        res.header = opts.header ? _.extend(topHeader, opts.header) : topHeader;
-        res.type = opts.type ? opts.type : (top ? top.type : defaults.type);
-        res.contentType = opts.contentType ? opts.contentType : (top ? top.contentType : null);
-        res.dataType = opts.dataType ? opts.dataType : (top ? top.dataType : defaults.mime);
-        return res;
+        opts.url = prepareURL(opts.url, opts.params);
+        var topHeaders = top ? top.headers : {};
+        opts.headers = opts.headers ? _.extend(topHeaders, opts.headers) : topHeaders;
+        opts.type = opts.type ? opts.type : (top ? top.type : defaults.type);
+        opts.contentType = opts.contentType ? opts.contentType : (top ? top.contentType : null);
+        opts.dataType = opts.dataType ? opts.dataType : (top ? top.dataType : defaults.mime);
+        return opts;
     };
 
     var getReadyFn = function(onReady) {
@@ -182,12 +179,12 @@
     };
 
     var ajax = function (opts, onReady, refetch) {
-        var type = opts.getType();
-        var url = opts.getUrl();
-        var params = opts.getParams();
-        var dataType = opts.getDataType();
-        var contentType = opts.getContentType();
-        var heads = opts.getHeaders();
+        var type = opts.type;
+        var url = opts.url;
+        var params = opts.params;
+        var dataType = opts.dataType;
+        var contentType = opts.contentType;
+        var heads = opts.headers;
         var cached = null;
         _.debug("Ajax call to " + url);
         if (type === defaults.type) {
@@ -199,7 +196,7 @@
             params = gatherParams(params);
         }
         if (/=\$JSONP/ig.test(url)) {
-            return this.jsonp(url, data);
+            return opts.jsonp(url, data);
         }
         var xhr = new window.XMLHttpRequest();
         var req = new request(xhr, getReadyFn(onReady));
@@ -255,6 +252,7 @@
     };
 
     var form = function (opts, type, params, onReady) {
+        opts = _.extend({}, opts);
         opts.type = type;
         opts.contentType = "application/x-www-form-urlencoded";
         opts = prepareOpts(opts, params);
@@ -298,9 +296,10 @@
         },
 
         get: function (params, onReady, refetch) {
+            var opts = _.extend({}, this);
             this.type = defaults.type;
             this.contentType = null;
-            var opts = prepareOpts(this, params);
+            opts = prepareOpts(this, params);
             return ajax(opts, onReady, refetch);
         },
 
