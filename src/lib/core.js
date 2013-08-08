@@ -593,13 +593,13 @@
     };
 
     var handle = function (name, fn, dependencies) {
-        var h = function (obj, config, watcher) {
+        var h = function (obj, config, watcher, appConfig) {
             _.debug("Process handle " + name);
             _.forEach(dependencies, function (item) {
                 h[DEP_PREFIX + item] = handlesRegistry[item];
             });
             if (fn && _.isFunction(fn)) {
-                obj = _.safeCall(fn, h, true, obj, config, watcher);
+                obj = _.safeCall(fn, h, true, obj, config, watcher, appConfig);
             }
             _.debug("Ready handle " + name);
             return obj;
@@ -874,15 +874,16 @@
             }, this);
             var n = (HANDLE_PREFIX + prop);
             var config = obj[n];
-            if (_.isUndefined(config) && app) {
-                config = app.obj[n];
+            var appConfig = app ? app.obj[n] : undefined;
+            if (_.isUndefined(config) && _.isDefined(appConfig)) {
+                config = appConfig;
             }
             _.debug("Got handle config " + config);
             if (_.isDefined(config)) {
                 this.currentProperty = n; //prevent apply update
                 this.watcher.handlerId = handle._uid;
                 this.watcher.remove();
-                obj[n] = handle(obj, config, this.watcher);
+                obj[n] = handle(obj, config, this.watcher, appConfig);
                 this.watcher.handlerId = null;
                 this.currentProperty = null;
             }

@@ -8,7 +8,6 @@
     'use strict';
 
     var _ = window.tie._;
-    var app;
 
     var defaults = {
         type: "GET",
@@ -37,7 +36,7 @@
 
     var stateChange = function (req, url, dataType, type, opts) {
         return function () {
-            var xhr = request.xhr;
+            var xhr = req.xhr;
             if (xhr.readyState === 4) {
                 _.debug("Process response");
                 var status = xhr.status;
@@ -141,6 +140,7 @@
 
     var prepareOpts = function(opts, params) {
         var top = app ? app.$http : null;
+        console.log(top);
         var topURL = top ? top.url : '';
         opts.url = opts.url ? (topURL + opts.url) : topURL;
         if (!opts.url) {
@@ -259,12 +259,9 @@
         return ajax(opts, onReady);
     };
 
-    var http = function (options, obj) {
+    var http = function (options, obj, appConfig) {
         this.memoize = {};
         this.cache = true;
-        if(obj.$name === 'app') {
-            app = obj;
-        }
         //skip app config now, it will be used later in prepareOpts
         if (options && obj.$http){
             if (options.url) {
@@ -299,7 +296,7 @@
             var opts = _.extend({}, this);
             this.type = defaults.type;
             this.contentType = null;
-            opts = prepareOpts(this, params);
+            opts = prepareOpts(opts, params);
             return ajax(opts, onReady, refetch);
         },
 
@@ -327,8 +324,8 @@
 
     var handle = window.tie.handle;
 
-    handle("http", function (obj, config) {
-        return new http(config, obj);
+    handle("http", function (obj, config, watcher, appConfig) {
+        return new http(config, obj, appConfig);
     }, ['attrs'], true);
 
 })(window);
