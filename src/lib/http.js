@@ -22,7 +22,7 @@
         text: "text/plain"
     };
 
-    var headers = function (xhr, headers, dataType, contentType) {
+    var headers = function (xhr, headers, contentType, dataType) {
         if (contentType) {
             headers["Content-Type"] = contentType;
         }
@@ -34,7 +34,7 @@
         });
     };
 
-    var stateChange = function (req, url, dataType, type, opts) {
+    var stateChange = function (req, url, dataType, type, http) {
         return function () {
             var xhr = req.xhr;
             if (xhr.readyState === 4) {
@@ -47,8 +47,8 @@
                     data = xhr.responseText;
                     err = status;
                 }
-                if (!err && _.isObject(data) && type === defaults.type && opts.cache) {
-                    opts.memo(url, dataType, data);
+                if (!err && _.isObject(data) && type === defaults.type && http.cache) {
+                    http.memo(url, dataType, data);
                 }
                 req.done(data, err);
             }
@@ -138,29 +138,29 @@
         return res === sign ? '' : res;
     };
 
-    var prepareOpts = function(opts, params) {
-        var top = app ? app.$http : null;
-        console.log(top);
-        var topURL = top ? top.url : '';
-        opts.url = opts.url ? (topURL + opts.url) : topURL;
-        if (!opts.url) {
+    var prepareOpts = function (opts, params) {
+        var res = {};
+        var app = opts.app;
+        var appURL = app && app.url ? app.url : '';
+        res.url = opts.url ? (appURL + opts.url) : appURL;
+        if (!res.url) {
             throw new Error("URL is not defined");
         }
-        var topParams = top ? top.params : {};
-        opts.params = opts.params ? _.extend(topParams, opts.params) : topParams;
+        var appParams = app && app.params ? app.params : {};
+        res.params = opts.params ? _.extend(appParams, opts.params) : appParams;
         if (params) {
-            _.extend(opts.params, params);
+            _.extend(res.params, params);
         }
-        opts.url = prepareURL(opts.url, opts.params);
-        var topHeaders = top ? top.headers : {};
-        opts.headers = opts.headers ? _.extend(topHeaders, opts.headers) : topHeaders;
-        opts.type = opts.type ? opts.type : (top ? top.type : defaults.type);
-        opts.contentType = opts.contentType ? opts.contentType : (top ? top.contentType : null);
-        opts.dataType = opts.dataType ? opts.dataType : (top ? top.dataType : defaults.mime);
-        return opts;
+        res.url = prepareURL(res.url, res.params);
+        var appHeaders = app && app.headers ? app.headers : {};
+        res.headers = opts.headers ? _.extend(appHeaders, opts.headers) : appHeaders;
+        res.type = opts.type ? opts.type : (app && app.type ? app.type : defaults.type);
+        res.contentType = opts.contentType ? opts.contentType : (app && app.contentType ? app.contentType : null);
+        res.dataType = opts.dataType ? opts.dataType : (app && app.dataType ? app.dataType : defaults.mime);
+        return res;
     };
 
-    var getReadyFn = function(onReady) {
+    var getReadyFn = function (onReady) {
         var fn = null;
         if (_.isFunction(onReady)) {
             fn = onReady;
@@ -178,7 +178,7 @@
         return fn;
     };
 
-    var ajax = function (opts, onReady, refetch) {
+    var ajax = function (opts, http, onReady, refetch) {
         var type = opts.type;
         var url = opts.url;
         var params = opts.params;
@@ -189,14 +189,15 @@
         _.debug("Ajax call to " + url);
         if (type === defaults.type) {
             url += gatherParams(params, url);
-            if (opts.cache && !refetch) {
-                cached = opts.memo(url, dataType);
+            params = null;
+            if (http.cache && !refetch) {
+                cached = http.memo(url, dataType);
             }
         } else {
             params = gatherParams(params);
         }
         if (/=\$JSONP/ig.test(url)) {
-            return opts.jsonp(url, data);
+            return http.jsonp(url, params, onReady, refetch);
         }
         var xhr = new window.XMLHttpRequest();
         var req = new request(xhr, getReadyFn(onReady));
@@ -204,7 +205,7 @@
             _.debug("Got cached result");
             req.done(cached, null);
         } else {
-            xhr.onreadystatechange = stateChange(req, url, dataType, type, opts);
+            xhr.onreadystatechange = stateChange(req, url, dataType, type, http);
             xhr.open(type, url);
             headers(xhr, heads, contentType, dataType);
             try {
@@ -217,7 +218,7 @@
         return req;
     };
 
-    var jsonp = function (opts, onReady, refetch) {
+    var jsonp = function (opts, http, onReady, refetch) {
         var url = opts.url;
         var params = opts.params;
         var head = window.document.getElementsByTagName("head")[0];
@@ -226,8 +227,8 @@
         url += gatherParams(params, url);
         _.debug("JSONP call to " + url);
         var cached = null;
-        if (opts.cache && !refetch) {
-            cached = opts.memo(url, defaults.mime);
+        if (http.cache && !refetch) {
+            cached = http.memo(url, defaults.mime);
         }
         var req = new request(null, getReadyFn(onReady));
         if (cached) {
@@ -239,7 +240,7 @@
                 head.removeChild(script);
                 delete window[callbackName];
                 _.debug("Process response");
-                opts.memo(url, defaults.mime, response);
+                http.memo(url, defaults.mime, response);
                 return req.done(response, null);
             };
 
@@ -251,19 +252,19 @@
         return req;
     };
 
-    var form = function (opts, type, params, onReady) {
-        opts = _.extend({}, opts);
+    var form = function (http, type, params, onReady) {
+        var opts = prepareOpts(http, params);
         opts.type = type;
         opts.contentType = "application/x-www-form-urlencoded";
-        opts = prepareOpts(opts, params);
-        return ajax(opts, onReady);
+        return ajax(opts, http, onReady);
     };
 
-    var http = function (options, obj, appConfig) {
+    var http = function (options, ownConfig, appConfig) {
         this.memoize = {};
         this.cache = true;
+        this.app = appConfig;
         //skip app config now, it will be used later in prepareOpts
-        if (options && obj.$http){
+        if (options && ownConfig) {
             if (options.url) {
                 this.url = options.url;
             }
@@ -286,18 +287,17 @@
 
         // url with '=$JSONP' to replace by callback name or '$JSONP' as value in params
         jsonp: function (url, params, onReady, refetch) {
-            var opts = _.extend({}, this);
+            var opts = {};
             opts.url = url;
             opts.params = params;
-            return jsonp(opts, onReady, refetch);
+            return jsonp(opts, this, onReady, refetch);
         },
 
         get: function (params, onReady, refetch) {
-            var opts = _.extend({}, this);
-            this.type = defaults.type;
-            this.contentType = null;
-            opts = prepareOpts(opts, params);
-            return ajax(opts, onReady, refetch);
+            var opts = prepareOpts(this, params);
+            opts.type = defaults.type;
+            opts.contentType = null;
+            return ajax(opts, this, onReady, refetch);
         },
 
         post: function (params, onReady) {
@@ -325,7 +325,7 @@
     var handle = window.tie.handle;
 
     handle("http", function (obj, config, watcher, appConfig) {
-        return new http(config, obj, appConfig);
+        return new http(config, _.isDefined(obj.$http), appConfig);
     }, ['attrs'], true);
 
 })(window);

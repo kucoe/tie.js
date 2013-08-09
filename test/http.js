@@ -52,4 +52,93 @@ describe('http', function () {
             done();
         }, ['dom', 'http']);
     });
+    it('should combine params in url', function (done) {
+        var xhr = new XHRMockFactory(200, "{}", "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            window.tie('app', {$http: {params: {a: 1}}});
+            var obj = window.tie('a', {$http: {url: 'data.json', params: {b: 2}}});
+            var req = obj.$http.get({c: 3}, {});
+            req.xhr.url.should.eql('data.json?a=1&b=2&c=3', 'http params');
+            done();
+        }, ['dom', 'http']);
+    });
+    it('should combine params', function (done) {
+        var xhr = new XHRMockFactory(200, "{}", "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            window.tie('app', {$http: {params: {a: 1}}});
+            var obj = window.tie('a', {$http: {url: 'data.json', params: {b: 2}}});
+            var req = obj.$http.post({c: 3}, {});
+            req.xhr.params.should.eql('a=1&b=2&c=3', 'http params');
+            done();
+        }, ['dom', 'http']);
+    });
+    it('should combine headers', function (done) {
+        var xhr = new XHRMockFactory(200, "{}", "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            window.tie('app', {$http: {headers: {'X-Requested-With': 'XMLHttpRequest'}}});
+            var obj = window.tie('a', {$http: {url: 'data.json', headers: {'Content-Length': 348}}});
+            var req = obj.$http.get({}, {});
+            req.xhr.headers.should.eql({'X-Requested-With': 'XMLHttpRequest',
+                'Content-Length': 348,
+                'Accept': 'application/json'}, 'http headers');
+            done();
+        }, ['dom', 'http']);
+    });
+    it('should memo result', function (done) {
+        var xhr = new XHRMockFactory(200, '{"a":12}', "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            var obj = window.tie('a', {$http: {url: 'data.json'}});
+            obj.$http.get({}, {});
+            obj.$http.memo('data.json', 'json').should.eql({a: 12}, 'http memo');
+            done();
+        }, ['dom', 'http']);
+    });
+    it('should use memo', function (done) {
+        var xhr = new XHRMockFactory(200, '{"a":12}', "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            var obj = window.tie('a', {$http: {url: 'data.json'}});
+            obj.$http.get({}, {});
+            window.XMLHttpRequest = new XHRMockFactory(200, '{"a":13}', "");
+            var a = {};
+            obj.$http.get({}, a);
+            a.should.eql({a: 12}, 'http use memo');
+            done();
+        }, ['dom', 'http']);
+    });
+    it('should refetch when needed', function (done) {
+        var xhr = new XHRMockFactory(200, '{"a":12}', "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            var obj = window.tie('a', {$http: {url: 'data.json'}});
+            obj.$http.get({}, {});
+            window.XMLHttpRequest = new XHRMockFactory(200, '{"a":13}', "");
+            var a = {};
+            obj.$http.get({}, a, true);
+            a.should.eql({a: 13}, 'http refetch');
+            done();
+        }, ['dom', 'http']);
+    });
+    it('should map correct type', function (done) {
+        var xhr = new XHRMockFactory(200, '{"a":12}', "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            var obj = window.tie('a', {$http: {url: 'data.json'}});
+            var req = obj.$http.get({}, {});
+            req.xhr.type.should.eql('GET', 'http get');
+            req = obj.$http.post({}, {});
+            req.xhr.type.should.eql('POST', 'http post');
+            req = obj.$http.put({}, {});
+            req.xhr.type.should.eql('PUT', 'http put');
+            req = obj.$http.delete({}, {});
+            req.xhr.type.should.eql('DELETE', 'http delete');
+            done();
+        }, ['dom', 'http']);
+    });
+
+    //JSONP tests
 });
