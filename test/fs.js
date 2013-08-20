@@ -4,8 +4,10 @@ var fs = require('fs');
 
 
 describe('file', function () {
-    beforeEach(function () {
-        fs.writeFileSync('person.json', '{"style":"color:blue","name":"John","age":25}', 'utf-8');
+    beforeEach(function (done) {
+        fs.writeFile('person.json', '{"style":"color:blue","name":"John","age":25}', 'utf-8', function() {
+            done();
+        });
     });
 
     afterEach(function () {

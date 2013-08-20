@@ -195,4 +195,10 @@ describe('handle', function () {
         should.exist(watch);
         watch.watchers.length.should.eql(1, 'watches')
     });
+    it('should work with require', function () {
+        var test = tie("a", { value: function () {
+            return this.$$b.value;
+        }, $require: '../../example/require_test.js'}, ['b']);
+        test.value().should.eql('b', 'dynamic value');
+    });
 });

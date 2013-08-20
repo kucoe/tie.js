@@ -679,7 +679,9 @@
                     onDelete: onDelete
                 };
                 this.watchers.push(dyna);
+                return dyna;
             }
+            return null;
         },
 
         add: function (prop, valueFn) {
@@ -694,7 +696,9 @@
                     valueFn: valueFn
                 };
                 this.getters.push(dyna);
+                return dyna;
             }
+            return null;
         },
 
         remove: function () {
@@ -938,8 +942,10 @@
                 return;
             }
             _.forEach(dependencies, function (dep) {
+                _.debug("Check dependency " + dep);
                 var found = ties[dep];
                 if (!found) {
+                    _.debug("Dependency stub " + dep);
                     found = {name: dep, touch: [], obj: {_empty: true}};
                     this.define(dep, found);
                 }
@@ -969,8 +975,8 @@
             var obj = r.obj = this.check(tiedObject);
             fillSystemFields(obj, name, sealed, dependencies);
             obj._deleted = false;
-            this.resolveDependencies(r, dependencies);
             r.resolveHandles();
+            this.resolveDependencies(r, dependencies);
             r.props = proxy(r);
             _.debug("Bind model ready");
             return r;
@@ -1011,6 +1017,15 @@
             obj.$prop(target, obj.$prop(prop))
         }
         return obj;
+    });
+
+    handles("require", function (obj, config) {
+        if (_.isFunction(module.require)) {
+            module.require(config);
+        }  else {
+            console.error('Require is undefined');
+        }
+        return config;
     });
 
 
