@@ -3,19 +3,18 @@ var pipes = tie.pipesRegistry;
 
 var should = require('should');
 
-afterEach(function () {
-    var prop;
-    for (prop in pipes) {
-        if (prop === 'property') {
-            continue;
-        }
-        if (pipes.hasOwnProperty(prop)) {
-            delete pipes[prop];
-        }
-    }
-});
-
 describe('pipe', function () {
+    afterEach(function () {
+        var prop;
+        for (prop in pipes) {
+            if (prop === 'property') {
+                continue;
+            }
+            if (pipes.hasOwnProperty(prop)) {
+                delete pipes[prop];
+            }
+        }
+    });
     it('should prevent existing', function () {
         tie.pipe("a", function () {
         }, [], true);
@@ -172,7 +171,7 @@ describe('pipe', function () {
             obj.value = this.uppercase(obj.value);
             return obj;
         });
-        var a = tie("a", {value: "aral", name:'uu'});
+        var a = tie("a", {value: "aral", name: 'uu'});
         var b = tie.$("a|upper|.name");
         a.value.should.eql("aral", "original");
         b.value.should.eql("uu", "pipe");

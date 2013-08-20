@@ -3,19 +3,19 @@ var handles = tie.handlesRegistry;
 
 var should = require('should');
 
-afterEach(function () {
-    var prop;
-    for (prop in handles) {
-        if (prop === 'attrs' || prop === 'shown' || prop === 'attr' || prop === 'http') {
-            continue;
-        }
-        if (handles.hasOwnProperty(prop)) {
-            delete handles[prop];
-        }
-    }
-});
-
 describe('handle', function () {
+    afterEach(function () {
+        var prop;
+        for (prop in handles) {
+            if (prop === 'attrs' || prop === 'shown' || prop === 'attr' || prop === 'http'
+                || prop === 'require' || prop === 'file' || prop === 'view') {
+                continue;
+            }
+            if (handles.hasOwnProperty(prop)) {
+                delete handles[prop];
+            }
+        }
+    });
     it('should prevent existing', function () {
         tie.handle("a", function () {
         }, [], true);
@@ -154,7 +154,7 @@ describe('handle', function () {
             return config;
         });
         var test = tie("test", {$a: "Hello", name: 'Jack'});
-        if(watch) {
+        if (watch) {
             delete test.name;
             watch.inspect();
         }
