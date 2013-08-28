@@ -52,6 +52,28 @@ describe('http', function () {
             done();
         }, ['dom', 'http']);
     });
+    it('should combine url with url template', function (done) {
+        var xhr = new XHRMockFactory(200, "{}", "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            window.tie('app', {$http: {url: 'data/{url}?lang=de'}});
+            var obj = window.tie('a', {$http: {url: 'data.json'}});
+            var req = obj.$http.get({}, {});
+            req.xhr.url.should.eql('data/data.json?lang=de', 'http url');
+            done();
+        }, ['dom', 'http']);
+    });
+    it('should combine url with url template and empty url', function (done) {
+        var xhr = new XHRMockFactory(200, "{}", "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            window.tie('app', {$http: {url: 'data/{url}?lang=de'}});
+            var obj = window.tie('a', {});
+            var req = obj.$http.get({}, {});
+            req.xhr.url.should.eql('data/?lang=de', 'http url');
+            done();
+        }, ['dom', 'http']);
+    });
     it('should combine params in url', function (done) {
         var xhr = new XHRMockFactory(200, "{}", "");
         browser(function (window) {

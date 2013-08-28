@@ -142,7 +142,11 @@
         var res = {};
         var app = opts.app;
         var appURL = app && app.url ? app.url : '';
-        res.url = opts.url ? (appURL + opts.url) : appURL;
+        if (/\{url\}/ig.test(appURL)) {
+            res.url = appURL.replace(/\{url\}/ig, (opts.url || ''));
+        } else {
+            res.url = opts.url ? (appURL + opts.url) : appURL;
+        }
         if (!res.url) {
             throw new Error("URL is not defined");
         }
