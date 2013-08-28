@@ -162,9 +162,9 @@ describe('pipe', function () {
             return obj;
         });
         var a = tie("a", {value: "aral"});
-        var b = function () {
+        (function () {
             tie.$("a|upper.name");
-        }.should.throw('Pipe upper.name not found');
+        }.should.throw('Pipe upper.name not found'));
     });
     it('should allow pipe for properties', function () {
         tie.pipe("upper", function (obj) {

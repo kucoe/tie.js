@@ -428,7 +428,7 @@
         _.debug("Exploring " + bind.name);
         var added = explore(obj);
         if (bind.newDynamicProps) {
-            _.forEach(bind.newDynamicProps, function (prop, i) {
+            _.forEach(bind.newDynamicProps, function (prop) {
                 _.debug("Observing dynamic property " + prop);
                 if (observe(obj, null, prop)) {
                     added.push(prop);
