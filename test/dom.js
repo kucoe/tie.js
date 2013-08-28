@@ -532,6 +532,104 @@ describe('dom', function () {
                 }, 200);
             }, ['dom']);
         });
+        it('should default $shown', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                window.tie('a', {value:'lala', $attrs:['value'], $shown:false});
+                setTimeout(function () {
+                    div.style.display.should.eql('none', 'hidden');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should not allow html as value', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                window.tie('app', {$attrs:['value']});
+                window.tie('a', '<span>lala</span>');
+                setTimeout(function () {
+                    div.textContent.should.eql('<span>lala</span>', 'inner text');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should use view html', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var div2 = document.createElement("div");
+                div2.setAttribute('data-tie', 'b');
+                var input = document.createElement('input');
+                input.type = 'text';
+                div2.appendChild(input);
+                document.body.appendChild(div2);
+                window.tie('app', {$attrs:['value']});
+                window.tie('a', {value :'a',$view: 'b'});
+                window.tie('b', 'b');
+                setTimeout(function () {
+                    div.innerHTML.should.eql('<input type="text" />', 'view');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should combine view html', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var div2 = document.createElement("div");
+                div2.setAttribute('data-tie', 'b');
+                var input = document.createElement('input');
+                input.type = 'text';
+                div2.appendChild(input);
+                document.body.appendChild(div2);
+                var div3 = document.createElement("div");
+                div3.setAttribute('data-tie', 'b');
+                var a = document.createElement('a');
+                a.href = 'd.html';
+                div3.appendChild(a);
+                document.body.appendChild(div3);
+                window.tie('app', {$attrs:['value']});
+                window.tie('a', {value :'a',$view: 'b'});
+                window.tie('b', 'b');
+                setTimeout(function () {
+                    div.innerHTML.should.eql('<input type="text" /><a href="d.html"></a>', 'view');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should process tie in html', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var div2 = document.createElement("div");
+                div2.setAttribute('data-tie', 'b');
+                var input = document.createElement('input');
+                input.type = 'text';
+                input.setAttribute('data-tie', 'c');
+                div2.appendChild(input);
+                document.body.appendChild(div2);
+                window.tie('app', {$attrs:['value']});
+                window.tie('a', {value :'a',$view: 'b'});
+                window.tie('b', 'b');
+                window.tie('c', 'c');
+                setTimeout(function () {
+                    div.innerHTML.should.eql('<input type="text" data-tie="c" style="" value="c" data-tied="" class="c" name="c" />', 'view');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
     });
 });
 

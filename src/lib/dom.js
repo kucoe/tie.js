@@ -16,6 +16,8 @@
     var INDEX = "data-index";
     var TIE = "data-tie";
     var TIED = "data-tied";
+    var CLASS = "class";
+    var NAME = "name";
 
     var q = {
 
@@ -43,6 +45,25 @@
         remove: function (element) {
             var parent = element.parentNode;
             if (parent) parent.removeChild(element);
+        },
+
+        hasClass: function (el, cls) {
+            return el.className.match(new RegExp('(\\s|^)' + cls + '(\\s|$)'));
+        },
+
+        addClass: function (el, cls) {
+            if (!this.hasClass(el, cls)) {
+                el.className += " " + cls;
+                el.className = _.trim(el.className);
+            }
+        },
+
+        removeClass: function (el, cls) {
+            if (this.hasClass(el, cls)) {
+                var reg = new RegExp('(\\s|^)' + cls + '(\\s|$)');
+                el.className = el.className.replace(reg, ' ');
+                el.className = _.trim(el.className);
+            }
         },
 
         ready: function (fn) {
@@ -139,11 +160,17 @@
             return VALUE;
         },
 
+        isTied: function () {
+            return this.$.getAttribute(TIED);
+        },
+
         setAttribute: function (name, value) {
             if (VALUE === name) {
                 this.value(value);
             } else if (TEXT === name) {
                 this.text(value);
+            } else if (CLASS === name) {
+                q.addClass(this.$, value);
             } else if (_.isFunction(value)) {
                 var handler = this.events[name];
                 if (handler) {
@@ -230,6 +257,20 @@
                     return el.options[el.selectedIndex].text;
                 } else {
                     return el.textContent || '';
+                }
+            }
+            return null;
+        },
+
+        html: function (html) {
+            var el = this.$;
+            if (_.isDefined(html)) {
+                if (!this.isInput && !this.isSelect) {
+                    el.innerHTML = html;
+                }
+            } else {
+                if (!this.isInput && !this.isSelect) {
+                    return el.innerHTML || '';
                 }
             }
             return null;
@@ -344,7 +385,9 @@
 
     var renderer = function (obj) {
         this.obj = obj;
-        obj.$shown = true;
+        if (_.isUndefined(obj.$shown)) {
+            obj.$shown = true;
+        }
         obj.$attr = attrValue;
         this.values = {};
         this.rendered = false;
@@ -373,7 +416,7 @@
                         attr = checkProperty(attr);
                     }
                     var name = attr.name;
-                    if(VALUE === name && _.isFunction(obj.value)) {
+                    if (VALUE === name && _.isFunction(obj.value)) {
                         attr.value = obj.value;
                         delete obj.value;
                     }
@@ -398,27 +441,33 @@
             return attrs;
         },
 
-        query: function (q, obj, res) {
-            var nodes = document.querySelectorAll(q);
+        query: function (q, obj, res, base) {
+            var nodes = base.querySelectorAll(q);
             _.forEach(nodes, function (el) {
                 res.push(new $(el, obj));
             });
             return res;
         },
 
-        select: function () {
+        select: function (base) {
             var obj = this.obj;
             var name = obj.$name;
             var res = [];
-            res = this.query('[' + TIE + '="' + name + '"]', obj, res);
-            res = this.query('[' + TIE + '^="' + name + '|"]', obj, res);
-            res = this.query('[' + TIE + '^="' + name + ' |"]', obj, res);
-            res = this.query('[' + TIE + '^="' + name + '."]', obj, res);
+            if (!base) {
+                base = document;
+            }
+            res = this.query('[' + TIE + '="' + name + '"]', obj, res, base);
+            res = this.query('[' + TIE + '^="' + name + '|"]', obj, res, base);
+            res = this.query('[' + TIE + '^="' + name + ' |"]', obj, res, base);
+            res = this.query('[' + TIE + '^="' + name + '."]', obj, res, base);
             obj.selected = true;
             return res;
         },
 
         load: function () {
+            if (this.loading) {
+                return;
+            }
             this.loading = true;
             if (!this.selected) {
                 this.$ = this.select();
@@ -427,6 +476,36 @@
             }
             this.loaded = true;
             this.loading = false;
+        },
+
+        renderView: function () {
+            if (this.obj.$view && this.e > 0) {
+                var html = this.viewHtml();
+                if (html) {
+                    _.forEach(this.$, function (el) {
+                        if (el) {
+                            el.html(html);
+                        }
+                    });
+                }
+            }
+        },
+
+        viewHtml: function () {
+            var view = this.obj.$view;
+            var r = renders[view.name];
+            var html = '';
+            if (r) {
+                if (!r.loaded) {
+                    r.load();
+                }
+                _.forEach(r.$, function (el) {
+                    if (el) {
+                        html += el.html();
+                    }
+                });
+            }
+            return html;
         },
 
         renderAttr: function (attr, obj, idx, ready, el) {
@@ -441,36 +520,41 @@
                 return;
             }
             var obj = this.obj;
-            if (!obj.$shown || (this.rendering && !force)) {
+            if (this.rendering && !force) {
                 return;
             }
             this.rendering = true;
             var tieName = obj.$name;
             _.debug("Render " + tieName, tieName + " Render");
-            if (!this.loaded && !this.loading) {
+            if (!this.loaded) {
                 this.load();
             }
             var ready = obj.$ready();
             _.forEach(this.$, function (el) {
-                if (el) {
-                    obj = parse(el.tie, obj);
-                    var attrs = obj.$attrs;
-                    var idx = el.index;
-                    if (attrs) {
-                        if (property) {
-                            var attr = attrs[property];
-                            if (attr) {
-                                this.renderAttr(attr, obj, idx, ready, el);
-                            }
-                        } else {
-                            _.forIn(attrs, function (attr) {
-                                this.renderAttr(attr, obj, idx, ready, el);
-                            }, this);
-                            el.setAttribute(TIED);
-                            if (el.isInput) {
-                                el.setAttribute('name', tieName);
+                if (el && (!el.isTied() || force)) {
+                    if (obj.$shown) {
+                        obj = parse(el.tie, obj);
+                        var attrs = obj.$attrs;
+                        var idx = el.index;
+                        if (attrs) {
+                            if (property) {
+                                var attr = attrs[property];
+                                if (attr) {
+                                    this.renderAttr(attr, obj, idx, ready, el);
+                                }
+                            } else {
+                                _.forIn(attrs, function (attr) {
+                                    this.renderAttr(attr, obj, idx, ready, el);
+                                }, this);
+                                el.setAttribute(TIED);
+                                el.setAttribute(CLASS, tieName);
+                                if (el.isInput) {
+                                    el.setAttribute(NAME, tieName);
+                                }
                             }
                         }
+                    } else {
+                        el.show(obj.$shown)
                     }
                 }
             }, this);
@@ -497,6 +581,7 @@
         _.forIn(renders, function (r) {
             if (!r.rendered) {
                 r.render();
+                r.renderView();
             }
         });
         _.debug("Rendered app");
@@ -514,6 +599,7 @@
         if (q.ready()) {
             setTimeout(function () {
                 r.render();
+                r.renderView()
             }, 100);
         }
         return r;
@@ -529,7 +615,7 @@
             config = r.prepareAttrs(config, obj, watcher);
         }
         return config;
-    }, [], true);
+    }, ['view'], true);
 
     handle("shown", function (obj, config) {
         var r = renders[obj.$name];
@@ -538,6 +624,19 @@
         }
         return config;
     }, ['attrs'], true);
+
+    handle("view", function (obj, config, watcher, appConfig) {
+        if (_.isString(config)) {
+            config = {
+                name: config,
+                url: appConfig ? appConfig.url : ''
+            };
+        }
+        if (!config.name) {
+            return undefined;
+        }
+        return config;
+    }, [], true);
 
 
     q.ready(onReady);
