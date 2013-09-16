@@ -116,9 +116,10 @@ var prepareOpts = function (opts, params) {
     res.url = prepareURL(res.url, res.params);
     var appHeaders = app && app.headers ? app.headers : {};
     res.headers = opts.headers ? _.extend(appHeaders, opts.headers) : appHeaders;
-    res.type = opts.type ? opts.type : (app && app.type ? app.type : defaults.type);
+    res.type = res.method = opts.type ? opts.type : (app && app.type ? app.type : defaults.type);
     res.contentType = opts.contentType ? opts.contentType : (app && app.contentType ? app.contentType : null);
     res.dataType = opts.dataType ? opts.dataType : (app && app.dataType ? app.dataType : defaults.mime);
+    res = _.extend(res, require('url').parse(res.url));
     return res;
 };
 
@@ -165,6 +166,7 @@ var connect = function (opts, http, onReady, refetch) {
         _.debug("Got cached result");
         req.done(cached, null);
     } else {
+        console.log(opts);
         var main = require(url.substr(0, 8) == 'https://' ? 'https' : 'http').request(opts, function (res) {
             res.setEncoding('utf8');
             res.on('data', function (chunk) {

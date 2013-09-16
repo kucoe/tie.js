@@ -5,18 +5,19 @@ var request = require('../src/lib/request')(tie);
 
 describe.only('request', function () {
     it('should process $request', function () {
-        var obj = tie('a', {$request: {url: 'data.json'}});
+        var obj = tie('a', {$request: {url: 'http://api.randomuser.me/?results=1'}});
         (typeof obj.$request.get).should.eql('function', 'request get');
     });
     it('should default cache', function () {
-        var obj = tie('a', {$request: {url: 'data.json'}});
+        var obj = tie('a', {$request: {url: 'http://api.randomuser.me/?results=1'}});
         obj.$request.cache.should.eql(true, 'request cache');
     });
     it('should combine url', function () {
-        tie('app', {$request: {url: 'data/'}});
-        var obj = tie('a', {$request: {url: 'data.json'}});
+        tie('app', {$request: {url: 'http://api.randomuser.me/'}});
+        var obj = tie('a', {$request: {url: '?results=1'}});
         var req = obj.$request.get({}, {});
-        req.request.url.should.eql('data/data.json', 'request url');
+        console.log(req.request);
+        req.request.url.should.eql('http://api.randomuser.me/?results=1', 'request url');
     });
     it('should combine url with url template', function () {
         tie('app', {$request: {url: 'data/{url}?lang=de'}});
