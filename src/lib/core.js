@@ -458,7 +458,7 @@
     var pipes = function (name, fn, dependencies, sealed) {
         var p = pipesRegistry[name];
         if (_.isUndefined(fn)) {
-            return  p;
+            return p;
         }
         if (p && p.$sealed) {
             throw new Error(name + ' pipe already registered and sealed. Please choose another name for your pipe');

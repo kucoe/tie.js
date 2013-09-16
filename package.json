@@ -3,14 +3,19 @@
     "version": "0.0.3",
     "description": "Smart binding framework",
     "author": "Wolf Bas <becevka@kucoe.net>",
+    "main": "index.js",
     "repository": {
         "type": "git",
         "url": "git://github.com/kucoe/tie.js.git"
     },
+    "engines": {
+        "node": "node >= 0.8.x"
+    },
     "dependencies": {
+        "cline": "*"
     },
     "devDependencies": {
-        "uglify-js":  "*",
+        "uglify-js": "*",
         "mocha": "*",
         "should": "*",
         "jsdom": "*",

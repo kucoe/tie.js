@@ -1,5 +1,5 @@
-var tie = require('../src/lib/core')(true);
-require('../src/lib/fs');
+var tie = require('../src/lib/core')();
+require('../src/lib/fs')(tie);
 var fs = require('fs');
 
 
@@ -35,8 +35,7 @@ describe('file', function () {
         fs.readFileSync('person.json', 'utf-8').should.eql('{"style":"color:blue","name":"John","age":12}', 'auto write change');
     });
     it('should get from file', function (done) {
-        this.timeout(3000);
-        var test = tie("test", {$file:{path:'person.json', sync:1000}});
+        var test = tie("test", {$file:{path:'person.json', sync:100}});
         setTimeout(function() {
             //need to modify file at least 1 sec after creation
             fs.writeFileSync('person.json', '{"style":"color:blue","name":"John","age":12}', 'utf-8');
@@ -44,7 +43,7 @@ describe('file', function () {
                 //need to wait for sync interval
                 test.age.should.eql(12, 'age from file');
                 done();
-            }, 1000);
+            }, 200);
         }, 1000);
     });
 

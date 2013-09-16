@@ -460,7 +460,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
-                window.tie('a', {value: 'lala', name:'baba', $attrs: ['value']});
+                window.tie('a', {value: 'lala', name: 'baba', $attrs: ['value']});
                 setTimeout(function () {
                     input.getAttribute('value').should.eql('baba', 'property pipe');
                     done();
@@ -473,7 +473,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', name:'baba', $attrs: ['value']});
+                var obj = window.tie('a', {value: 'lala', name: 'baba', $attrs: ['value']});
                 setTimeout(function () {
                     input.getAttribute('value').should.eql('baba', 'pipes');
                     browser.sendKey(input, 'l');
@@ -490,7 +490,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
-                window.tie('app', {$attrs:['value']});
+                window.tie('app', {$attrs: ['value']});
                 var obj = window.tie('a', 'lala');
                 setTimeout(function () {
                     should.exist(obj.$attrs);
@@ -505,7 +505,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                window.tie('app', {$attrs:['value']});
+                window.tie('app', {$attrs: ['value']});
                 var obj = window.tie('a', function () {
                     return 'color:blue';
                 });
@@ -538,20 +538,22 @@ describe('dom', function () {
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                window.tie('a', {value:'lala', $attrs:['value'], $shown:false});
+                window.tie('a', {value: 'lala', $attrs: ['value'], $shown: false});
                 setTimeout(function () {
                     div.style.display.should.eql('none', 'hidden');
                     done();
                 }, 200);
             }, ['dom']);
         });
+    });
+    describe('view', function () {
         it('should not allow html as value', function (done) {
             browser(function (window) {
                 var document = window.document;
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                window.tie('app', {$attrs:['value']});
+                window.tie('app', {$attrs: ['value']});
                 window.tie('a', '<span>lala</span>');
                 setTimeout(function () {
                     div.textContent.should.eql('<span>lala</span>', 'inner text');
@@ -571,9 +573,9 @@ describe('dom', function () {
                 input.type = 'text';
                 div2.appendChild(input);
                 document.body.appendChild(div2);
-                window.tie('app', {$attrs:['value']});
-                window.tie('a', {value :'a',$view: 'b'});
-                window.tie('b', 'b');
+                window.tie('app', {$attrs: ['value']});
+                window.tie('a', {value: 'a', $view: 'b'});
+                window.tie('b', {});
                 setTimeout(function () {
                     div.innerHTML.should.eql('<input type="text" />', 'view');
                     done();
@@ -598,17 +600,51 @@ describe('dom', function () {
                 a.href = 'd.html';
                 div3.appendChild(a);
                 document.body.appendChild(div3);
-                window.tie('app', {$attrs:['value']});
-                window.tie('a', {value :'a',$view: 'b'});
-                window.tie('b', 'b');
+                window.tie('app', {$attrs: ['value']});
+                window.tie('a', {value: 'a', $view: 'b'});
+                window.tie('b', {});
                 setTimeout(function () {
                     div.innerHTML.should.eql('<input type="text" /><a href="d.html"></a>', 'view');
                     done();
                 }, 200);
             }, ['dom']);
         });
+        it('should react on view change', function (done) {
+            browser(function (window) {
+                window.exports().clean();
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var div2 = document.createElement("div");
+                div2.setAttribute('data-tie', 'b');
+                var input = document.createElement('input');
+                input.type = 'text';
+                div2.appendChild(input);
+                document.body.appendChild(div2);
+                var div3 = document.createElement("div");
+                div3.setAttribute('data-tie', 'c');
+                var a = document.createElement('a');
+                a.href = 'd.html';
+                div3.appendChild(a);
+                document.body.appendChild(div3);
+                window.tie('app', {$attrs: ['value']});
+                var obj = window.tie('a', {value: 'a', $view: 'b'});
+                window.tie('b', {});
+                window.tie('c', {});
+                setTimeout(function () {
+                    div.innerHTML.should.eql('<input type="text" />', 'view');
+                    obj.$view = 'c';
+                    setTimeout(function () {
+                        div.innerHTML.should.eql('<a href="d.html"></a>', 'view change');
+                        done();
+                    }, 200);
+                }, 200);
+            }, ['dom']);
+        });
         it('should process tie in html', function (done) {
             browser(function (window) {
+                window.exports().clean();
                 var document = window.document;
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
@@ -620,14 +656,14 @@ describe('dom', function () {
                 input.setAttribute('data-tie', 'c');
                 div2.appendChild(input);
                 document.body.appendChild(div2);
-                window.tie('app', {$attrs:['value']});
-                window.tie('a', {value :'a',$view: 'b'});
-                window.tie('b', 'b');
+                window.tie('app', {$attrs: ['value']});
+                window.tie('a', {value: 'a', $view: 'b'});
+                window.tie('b', {});
                 window.tie('c', 'c');
                 setTimeout(function () {
                     div.innerHTML.should.eql('<input type="text" data-tie="c" style="" value="c" data-tied="" class="c" name="c" />', 'view');
                     done();
-                }, 200);
+                }, 400);
             }, ['dom']);
         });
     });

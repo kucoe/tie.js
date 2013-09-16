@@ -1,4 +1,3 @@
-var fs = require('fs');
 var spawn = require('child_process').spawn;
 var mocha = 'node_modules/mocha/bin/mocha';
 var args = [mocha];

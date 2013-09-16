@@ -635,6 +635,12 @@
         if (!config.name) {
             return undefined;
         }
+        var r = renders[obj.$name];
+        if (r && q.ready() && r.rendered) {
+            setTimeout(function() {
+                r.renderView();
+            },100);
+        }
         return config;
     }, [], true);
 
@@ -666,6 +672,9 @@
             res.q = q;
             res.el = $;
             res.renders = renders;
+            res.clean = function() {
+                res.renders = renders = {};
+            };
             return res;
         };
     }

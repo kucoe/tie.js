@@ -1,46 +1,23 @@
 /**
  * Tie.js
- * Smart binding, routes, pipes, properties, templates, resources.
+ * Simple model driven binding library
  *
  * Copyright 2013, Wolfgang Bas
  * Released under the MIT License
  */
-(function (window) {
+(function (module) {
     'use strict';
 
-    /**
-     * Properties constants
-     */
     var APP = 'app';
     var VALUE = 'value';
-    var VALUES = '$values';
-    var TEXT = 'text';
-    var SHOWN = '$shown';
     var DEPS = '$deps';
-    var ATTRS = '$attrs';
-    var ROUTES = '$routes';
-    var HTTP = '$http';
-    var TMPL = '$tmpl';
-    var FORM = '$form';
-    var ITEM_NAME = '_item_name';
-    var FETCHED = '_fetched';
-    var RESERVED = [FETCHED, VALUES, SHOWN, DEPS, ATTRS, ROUTES, HTTP, TMPL , FORM, '$attr', '$prop', '$location'];
+    var DEP_PREFIX = '$$';
+    var HANDLE_PREFIX = '$';
 
-    /**
-     * Attribute constants
-     */
-    var INDEX = "data-index";
-    var TIE = "data-tie";
-    var TIED = "data-tied";
-
-    /**
-     * Generates 4 chars hex string
-     *
-     * @returns {string}
-     */
-    var s4 = function () {
-        return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
-    };
+    var app = null;
+    var ties = {};
+    var pipesRegistry = {};
+    var handlesRegistry = {};
 
     /**
      * Allow convert array to configuration object extending object passed with array values as properties
@@ -56,27 +33,326 @@
         return obj;
     };
 
-    /**
-     * Properties watcher proxy. Inspects object own properties and attributes from bind and define watching property.
-     *
-     * @namespace proxy
-     * @param {bind} bind element bound tie
-     */
+    var s4 = function () {
+        return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    };
+
+    var args2Array = function (args, start) {
+        return [].slice.call(args, start);
+    };
+
+    var _ = {
+        debugEnabled: false,
+
+        isUndefined: function (value) {
+            return value == undefined;
+        },
+
+        isDefined: function (value) {
+            return value != undefined;
+        },
+
+        isObject: function (value) {
+            return value != null && typeof value == 'object';
+        },
+
+        isString: function (value) {
+            return typeof value == 'string';
+        },
+
+        isNumber: function (value) {
+            return typeof value == 'number';
+        },
+
+        isDate: function (value) {
+            return {}.toString.apply(value) == '[object Date]';
+        },
+
+        isRegExp: function (value) {
+            return {}.toString.apply(value) == '[object RegExp]';
+        },
+
+        isArray: function (value) {
+            return Array.isArray(value) || {}.toString.apply(value) == '[object Array]';
+        },
+
+        isCollection: function (value) {
+            var s = {}.toString.apply(value);
+            return this.isArray(value) || value instanceof Array
+                || s == '[object NodeList]'
+                || s == '[object NamedNodeMap]'
+                || s == '[object Arguments]';
+        },
+
+        isFunction: function (value) {
+            return typeof value == 'function';
+        },
+
+        isBoolean: function (value) {
+            return typeof value == 'boolean';
+        },
+
+        trim: function (value) {
+            return this.isString(value) ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
+        },
+
+        lowercase: function (string) {
+            return this.isString(string) ? string.toLowerCase() : string;
+        },
+
+        uppercase: function (string) {
+            return this.isString(string) ? string.toUpperCase() : string;
+        },
+
+        toInt: function (string) {
+            return parseInt(string, 10);
+        },
+
+        toFloat: function (string) {
+            return parseFloat(string);
+        },
+
+        // string equals ignore case
+        eqi: function (string1, string2) {
+            return this.lowercase(string1) === this.lowercase(string2);
+        },
+
+        //deep equals
+        isEqual: function (a, b) {
+            if (a === b) {
+                return true;
+            } else if (this.isUndefined(a) || a == null || this.isUndefined(b) || b == null) {
+                return false;
+            } else if (typeof  a !== typeof  b) {
+                return false;
+            } else if (this.isDate(a) && this.isDate(b)) {
+                return a.getTime() === b.getTime();
+            } else if (this.isRegExp(a) && this.isRegExp(b)) {
+                return a.source === b.source &&
+                    a.global === b.global &&
+                    a.multiline === b.multiline &&
+                    a.lastIndex === b.lastIndex &&
+                    a.ignoreCase === b.ignoreCase;
+            } else if (this.isFunction(a) && this.isFunction(b)) {
+                return a.toString() == b.toString();
+            } else if (!this.isObject(a) && !this.isObject(b)) {
+                return a == b;
+            } else if (a.prototype !== b.prototype) {
+                return false;
+            } else {
+                try {
+                    var ka = Object.keys(a);
+                    var kb = Object.keys(b);
+                    if (ka.length != kb.length) {
+                        return false;
+                    }
+                    ka.sort();
+                    kb.sort();
+                    var i;
+                    for (i = ka.length - 1; i >= 0; i--) {
+                        if (ka[i] != kb[i]) {
+                            return false;
+                        }
+                    }
+                    var key;
+                    for (i = ka.length - 1; i >= 0; i--) {
+                        key = ka[i];
+                        if (!this.isEqual(a[key], b[key])) {
+                            return false;
+                        }
+                    }
+                } catch (e) {
+                    return false;
+                }
+            }
+            return true;
+        },
+
+        //deep clone
+        clone: function (obj) {
+            if (!obj || !this.isObject(obj)) {
+                return obj;
+            }
+            var newObj = this.isCollection(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
+            newObj = this.extend(newObj, obj, function (item) {
+                return _.clone(item);
+            });
+            return newObj;
+        },
+
+        //string to type
+        convert: function (string, context) {
+            var res = string;
+            var reviver = function (k, v) {
+                if (_.isString(v) && v[0] == '#') {
+                    return context[v.substring(1)];
+                }
+                return v;
+            };
+            if ('true' === string) {
+                res = true
+            } else if ('false' === string) {
+                res = false
+            } else if (/^\d*$/.test(string)) {
+                if (string.indexOf('.') != -1) {
+                    res = this.toFloat(string);
+                } else {
+                    res = this.toInt(string);
+                }
+            } else if (string[0] == '[' && string[string.length - 1] == "]") {
+                string = string.replace(/'/g, '"');
+                res = JSON.parse(string, reviver);
+            } else if (string[0] == '{' && string[string.length - 1] == "}") {
+                string = string.replace(/'/g, '"');
+                res = JSON.parse(string, reviver);
+            } else if (string[0] == '"' || string[0] == "'") {
+                res = string.substring(1, string.length - 1);
+            }
+            return res;
+        },
+
+        forEach: function (collection, callback, thisArg, safe) {
+            if (!thisArg) {
+                thisArg = this;
+            }
+            if (callback) {
+                if (this.isCollection(collection)) {
+                    var index = -1;
+                    var length = collection.length;
+                    var coll = [];
+                    if (safe) {
+                        coll = [].slice.call(collection);
+                    } else {
+                        coll = collection;
+                    }
+                    while (++index < length) {
+                        if (callback.call(thisArg, coll[index], index, coll) === false) {
+                            break;
+                        }
+                    }
+                } else {
+                    callback.call(thisArg, collection, 0, [collection]);
+                }
+            }
+            return collection;
+        },
+
+        forIn: function (object, callback, thisArg, all) {
+            if (!thisArg) {
+                thisArg = this;
+            }
+            if (callback) {
+                for (var prop in object) {
+                    if (object.hasOwnProperty(prop) || all) {
+                        if (callback.call(thisArg, object[prop], prop, object) === false) {
+                            break;
+                        }
+                    }
+                }
+            }
+            return object;
+        },
+
+        sequence: function (obj, callback, last, thisArg) {
+            var keys = [];
+            if (!thisArg) {
+                thisArg = this;
+            }
+            if (callback) {
+                if (this.isCollection(obj)) {
+                    var index = -1;
+                    var length = obj.length;
+                    while (++index < length) {
+                        keys.push(index);
+                    }
+                } else {
+                    keys = Object.keys(obj);
+                }
+
+                var next = function () {
+                    var key = keys.shift();
+                    if (key === 0 || key) {
+                        var value = obj[key];
+                        callback.call(thisArg, value, next);
+                    } else {
+                        if (last) {
+                            last.call(thisArg, obj);
+                        }
+                    }
+                };
+                next();
+            }
+        },
+
+        safeCall: function (fn, fnThis, bindReady) {
+            var res;
+            var spliceArgs = 3;
+            if (this.isUndefined(bindReady) && this.isFunction(fnThis.$ready)) {
+                bindReady = fnThis.$ready();
+                spliceArgs = 2;
+            }
+            try {
+                var args = args2Array(arguments, spliceArgs);
+                res = fn.apply(fnThis, args);
+            } catch (e) {
+                res = undefined;
+                if (bindReady) {
+                    console.error('Is ready and had an error:' + e.message);
+                    _.debug(e, 'User code error');
+                }
+            }
+            return res;
+        },
+
+        // define immutable property
+        defineImmutable: function (obj, prop, value) {
+            Object.defineProperty(obj, prop, {
+                value: value,
+                configurable: false,
+                writable: false,
+                enumerable: true,
+                _proxyMark: true
+            });
+        },
+
+        uid: function () {
+            return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
+        },
+
+        extend: function (destination, source, fn) {
+            if (this.isCollection(destination) && this.isCollection(source)) {
+                this.forEach(source, function (item, i) {
+                    [].push.call(destination, fn ? fn(item, i) : item);
+                });
+            } else {
+                this.forIn(source, function (value, prop) {
+                    destination[prop] = fn ? fn(value, prop) : value;
+                }, this);
+            }
+            return destination;
+        },
+
+        debug: function (message, group) {
+            if (this.debugEnabled) {
+                if (group) {
+                    if (console.groupCollapsed) {
+                        console.groupEnd();
+                        console.groupCollapsed(group);
+                    }
+                }
+                console.log(message);
+            }
+        }
+
+    };
+
     var proxy = function (bind) {
-    
-        /**
-         * Defines new watcher property
-         *
-         * @param {model} obj inspected object
-         * @param {Object} desc property descriptor if any
-         * @param {string} prop property name
-         * @param {boolean} [dependency] whether the property refers to dependent tie
-         * @returns boolean whether proxy was added
-         */
-        var observe = function (obj, desc, prop, dependency) {
+
+        var observe = function (obj, desc, prop, top) {
             if (desc && desc._proxyMark) {
                 return false; //proxy already set
             }
+            var fullProp = top ? top + '.' + prop : prop;
             var newGet = function () {
                 if (desc) {
                     if (desc.get) {
@@ -84,14 +360,14 @@
                     }
                     return desc.value;
                 }
-                return obj.$attr(prop);
+                return bind.watcher.onGet(fullProp, bind.obj);
             };
-            var changed = function(val) {
+            var changed = function (val) {
                 var prev = newGet();
                 return !_.isEqual(prev, val);
             };
             var newSet = function (val) {
-                if(!changed(val)) {
+                if (!changed(val)) {
                     return;
                 }
                 if (desc) {
@@ -100,27 +376,8 @@
                     } else {
                         desc.value = val;
                     }
-                } else {
-                    obj.$attr(prop, val);
                 }
-                if (prop == SHOWN) {
-                    bind.show(val);
-                } else if(prop == FETCHED) {
-                    var added = proxy(bind);
-                    if (added.length > 0) {
-                        bind.apply();
-                    }
-                } else {
-                    if (prop == ATTRS) {
-                        bind.prepareAttrs();
-                    } else if (prop == ROUTES) {
-                        bind.prepareRoutes();
-                    } else if (prop == VALUES) {
-                        bind.prepareValues();
-                    }
-                    _.debug("Calling apply on '" + bind.name + "' after changed property '" + prop + "'");
-                    bind.apply(prop);
-                }
+                bind.apply(fullProp);
             };
             var enumerable = desc ? desc.enumerable : false;
             Object.defineProperty(obj, prop, {
@@ -132,914 +389,685 @@
             });
             return true;
         };
-    
-        /**
-         * Visits object own properties and attributes and add watchers.
-         *
-         * Note: will recursively observe property of {Object} type
-         *
-         * @param {model} obj inspected object
-         * @returns Array list of added properties
-         */
-        var explore = function (obj) {
+
+        var explore = function (obj, top) {
             var added = [];
+            var watcher = bind.watcher;
+            var main = bind.obj;
+            var ready = main.$ready();
             _.forIn(obj, function (value, prop) {
                 props.push(prop);
                 if ('prototype' == prop) {
-                    return false;// skip prototype
+                    return true;// skip prototype
                 }
                 var desc = Object.getOwnPropertyDescriptor(obj, prop);
                 if (desc._proxyMark) {
-                    return false; //skip already processed
+                    return true; //skip already processed
                 }
                 if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
-                    return false; // skip readonly
+                    return true; // skip readonly
                 }
-                var dep = prop.charAt(0) === '$' && bind.depends.indexOf(prop.substring(1)) != -1;
-                if (_.isObject(value) && !dep && prop != ATTRS && prop != ROUTES && prop != DEPS && prop != VALUES && prop != HTTP) {
+                var dep = prop.indexOf(DEP_PREFIX) == 0 && bind.obj.$deps.indexOf(prop.substring(2)) != -1;
+                if (_.isObject(value) && !dep && prop != DEPS && prop !== (DEP_PREFIX + APP)) {
                     _.debug("Exploring " + prop);
-                    explore(value);
+                    _.extend(added, explore(value, prop));
                 }
                 _.debug("Observing " + prop);
-                if (observe(obj, desc, prop, dep)) {
+                if (observe(obj, desc, prop, top)) {
                     added.push(prop);
+                    var fullProp = top ? top + '.' + prop : prop;
+                    watcher.onChange(fullProp, main, ready);
                 }
                 return true;
             });
-            if (obj.$attrs) {
-                _.forIn(obj.$attrs, function (attr, prop) {
-                    // do not override real properties from object and only when attributes have something to change.
-                    if (props.indexOf(prop) == -1 && (attr.property || attr.value)) {
-                        _.debug("Observing attribute " + prop);
-                        if(observe(obj, null, prop)) {
-                            added.push(prop);
-                        }
-                        props.push(prop);
-                    }
-                }, this);
-            }
             return added;
         };
-    
+
         var obj = bind.obj;
         var props = [];
         _.debug("Exploring " + bind.name);
-        return explore(obj);
-    };
-    
-    /**
-     * Routes utilities
-     *
-     * @type {{list: {}, init: Function, locate: Function, find: Function, move: Function}}
-     */
-    var routes = {
-        /**
-         * List of application defined routes
-         */
-        list: {},
-    
-        /**
-         * Initializes list of routes using application info.
-         *
-         * @param {bind} app info
-         */
-        init: function (app) {
-            if (app.obj.$routes) {
-                _.forIn(app.obj.$routes, function (r, path) {
-                    path = path.toLowerCase();
-                    this.list[path] = new route(path, r.handler);
-                }, this);
-                _.debug("Routes init");
-            }
-        },
-    
-        /**
-         * Processes current route using window location hash.<br/>
-         * If application has no routes configured process default route.<br/>
-         * Else tries to find route, if no configured route found moves to default '#/' route.<br/>
-         * When configured route is found, iterates through all registered ties and analyses theirs routes configuration
-         * and show/hide them accordingly.<br/>
-         *
-         * During this processing every tie got a $location utility function available that returns object with properties href
-         * and route, calling $location(my-path) will change window location to '#my-path'.
-         *
-         *
-         *
-         * @param {Object} ties already registered ties dictionary
-         */
-        locate: function (ties) {
-            var current = window.location.hash.substring(1);
-            current = this.find(current);
-            if (!current) {
-                if (app.obj.$routes) {
-                    this.move('/');
-                } else {
-                    _.debug("Process default route");
-                    _.forIn(ties, function (bind) {
-                        if (!bind.rendered) {
-                            bind.render();
-                        }
-                        bind.obj.$location = function () {
-                            return {
-                                route: {
-                                    has: function () {
-                                        return true
-                                    }
-                                }
-                            }
-                        };
-                        bind.obj.$shown = true;
-                    });
-                    _.debug("Processed default route");
+        var added = explore(obj);
+        if (bind.newDynamicProps) {
+            _.forEach(bind.newDynamicProps, function (prop) {
+                _.debug("Observing dynamic property " + prop);
+                if (observe(obj, null, prop)) {
+                    added.push(prop);
                 }
-            } else {
-                _.debug("Process route " + current.path);
-                var that = this;
-                app.$location = function (url) {
-                    if (url) {
-                        that.move(url);
-                        return null;
-                    }
-                    return {
-                        href: window.location.href,
-                        route: current
-                    };
-                };
-                if (current.handler) {
-                    safeCall(current.handler, app.obj);
-                }
-                _.forIn(ties, function (bind) {
-                    var obj = bind.obj;
-                    obj.$location = app.$location;
-                    var shown = current.has(obj);
-                    obj.$shown = shown;
-                    if (!bind.rendered) {
-                        bind.render();
-                    }
-                    bind.validateShow();
-                    var bindRoutes = obj.$routes;
-                    if (bindRoutes && shown) {
-                        var r = bindRoutes[current.path];
-                        if (r && r.handler) {
-                            safeCall(r.handler, obj);
-                        }
-                    }
-                });
-                _.debug("Processed route " + current.path);
-            }
-        },
-    
-        /**
-         * Finds route in configured routes list
-         *
-         * @param path route path
-         * @returns {route}
-         */
-        find: function (path) {
-            return this.list[path];
-        },
-    
-        /**
-         * Moves location to route specified.
-         *
-         * @param {string} url will be appended to hash using '#'+url
-         */
-        move: function (url) {
-            setTimeout(function () {
-                window.location.hash = '#' + url;
-            }, 100);
+                props.push(prop);
+            });
+            bind.newDynamicProps = [];
         }
-    };
-    
-    /**
-     * Constructs new route
-     *
-     * @constructor
-     * @class route
-     * @this route
-     * @param {string} path route path
-     * @param {Function} handler route handle will be executed every time the location is moved to this route
-     */
-    var route = function (path, handler) {
-        this.path = path;
-        this.handler = handler;
-    };
-    
-    /**
-     * Route prototype
-     *
-     * @type {{has: Function}}
-     */
-    route.prototype = {
-    
-        /**
-         * Returns whether the model specified has current route among it's routes configuration. <br/>
-         * By default model inherit all application's routes.
-         *
-         * @param {model} obj
-         * @returns {boolean}
-         */
-        has: function (obj) {
-            var routes = obj.$routes;
-            if (routes) {
-                var exclude = routes['-'] != null;
-                var contains = false;
-                _.forIn(routes, function (route, path) {
-                    if (path.toLowerCase() == this.path) {
-                        contains = true;
-                        return false;
-                    }
-                    return true;
-                }, this);
-                return exclude != contains;
+        _.forEach(bind.props, function (prop) {
+            if (_.isUndefined(bind.obj.$prop(prop))) {
+                _.debug("Notify deleted property " + prop);
+                bind.watcher.onDelete(prop, bind.obj);
             }
-            return false;
-        }
+        }, this);
+        return added;
     };
-    
-    
-    var pipesRegistry = {};
-    
-    /**
-     * Pipes helpers. Exported to allow create and access pipes.
-     *
-     * @param {string} name pipe name
-     * @param {Function} [fn] pipe function that will accept. If not defined existed pipe will return.
-     * @param {Object} [opts] options (updateModel, updateRoute, fetchModel) default to false
-     */
-    var pipes = function (name, fn, opts) {
+
+    function fillSystemFields(obj, name, sealed, dependencies) {
+        _.defineImmutable(obj, '$name', name);
+        _.defineImmutable(obj, '$sealed', sealed || false);
+        _.defineImmutable(obj, '$deps', Object.freeze(dependencies || []));
+        _.defineImmutable(obj, '_uid', _.uid());
+    }
+
+    /**  PIPE **/
+
+    var pipes = function (name, fn, dependencies, sealed) {
+        var p = pipesRegistry[name];
         if (_.isUndefined(fn)) {
-            return pipesRegistry[name];
+            return p;
         }
-        var defOpts = {
-            fetchModel: false,
-            updateModel: false,
-            updateRoutes: false
-        };
-        if (_.isDefined(opts)) {
-            _.extend(defOpts, opts);
+        if (p && p.$sealed) {
+            throw new Error(name + ' pipe already registered and sealed. Please choose another name for your pipe');
         }
-        var pipe = {
-            fn: fn,
-            opts: defOpts
-        };
-        var m = new model(pipe);
-        pipesRegistry[name] = m;
-        return m;
+        if (!name || name[0] == '.') {
+            throw new Error(name + ' is not valid name for your pipe');
+        }
+        p = pipe(name, fn, dependencies || []);
+        fillSystemFields(p, name, sealed, dependencies);
+        p = _.extend(p, _);
+        pipesRegistry[name] = p;
+        return p;
     };
-    
-    /**
-     * Pipe descriptor. Pipe is the way of transforming input model into new model and hijack new values when rendering element
-     * attributes. Here is a pipe example : <i>data|property:'name', 'a'</i>. The result will be model with changed property name to 'a'.
-     * <br><i>data|property:'name'</i> will replace property 'value' with value from property 'name'.
-     * <br>Simpler form is <i>data.name</i>.
-     *
-     * @constructor
-     * @class pipe
-     * @this pipe
-     * @param {string} str pipe string.
-     */
-    var pipe = function (str) {
-        var index = str.indexOf(':');
-        this.name = _.trim(index + 1 ? str.substr(0, index) : str);
-        this.params = '';
-        if (index >= 0) {
-            var p = _.trim(str.substr(++index));
-            p = '[' + p + ']';
-            this.params = p;
-        }
-    
-    };
-    
-    pipe.prototype = {
-    
-        /**
-         * Process model from bind and passed it result to next function
-         *
-         * @this pipe
-         * @param {model} obj tied model
-         * @param {Function} next function to be passed to pipe
-         * @param {Object} [value] new object value
-         */
-        process: function (obj, next, value) {
-            var name = this.name;
+
+    var pipe = function (name, fn, dependencies) {
+        var p = function (obj, params) {
             _.debug("Process pipe " + name);
-            var pipe = pipesRegistry[name];
-            if (!pipe) {
-                throw new Error('Pipe ' + name + ' not found');
-            }
-            var fn = pipe.fn;
-            var params = [];
-            if (this.params.length > 0) {
-                var context = _.extend({}, obj);
-                context = _.extend(context, pipe);
-                var array = _.convert(this.params, context);
+            _.forEach(dependencies, function (item) {
+                p[DEP_PREFIX + item] = pipesRegistry[item];
+            });
+            if (params && params.length > 0) {
+                var array = _.convert(params, obj);
+                params = [];
                 _.forEach(array, function (param) {
                     param = _.trim(param);
                     params.push(param);
                 });
             }
-            var res = obj;
             if (fn && _.isFunction(fn)) {
-                res = safeCall(fn, pipe, true, res, params, next, value);
+                obj = _.safeCall(fn, p, true, obj, params);
             }
             _.debug("Ready pipe " + name);
-            return res;
-        },
-    
-        /**
-         * Returns whether this pipe can fetch object model.
-         *
-         * @this pipe
-         * @return boolean
-         */
-        fetchModel: function () {
-            var pipe = pipesRegistry[this.name];
-            return pipe ? pipe.opts.fetchModel : false;
-        },
-    
-        /**
-         * Returns whether this pipe can change object model.
-         *
-         * @this pipe
-         * @return boolean
-         */
-        updateModel: function () {
-            var pipe = pipesRegistry[this.name];
-            return pipe ? pipe.opts.updateModel : false;
-        },
-    
-        /**
-         * Returns whether this pipe can change routes.
-         *
-         * @this pipe
-         * @return boolean
-         */
-        updateRoutes: function () {
-            var pipe = pipesRegistry[this.name];
-            return pipe ? pipe.opts.updateRoutes : false;
-        }
-    
+            return obj;
+        };
+        return p;
     };
-    
-    
-    /**
-     * Default values for http
-     */
-    var defaults = {
-        type: "GET",
-        mime: "json"
+
+    var pipeModel = function (obj) {
+        obj = _.clone(obj);
+        return chain(obj);
     };
-    
-    /**
-     * Supported MIME types
-     */
-    var mimeTypes = {
-        script: "text/javascript, application/javascript",
-        json: "application/json",
-        xml: "application/xml, text/xml",
-        html: "text/html",
-        text: "text/plain"
-    };
-    
-    /**
-     * Creates http wrapper based on user described options
-     *
-     * @constructor
-     * @class http
-     * @this http
-     * @param {Object} options
-     */
-    var http = function (options) {
-        this.memoize = {};
-        this.cache = true;
-        if (options) {
-            if (options.url) {
-                this.url = options.url;
-            }
-            if (options.params) {
-                this.params = options.params;
-            }
-            if (options.headers) {
-                this.headers = options.headers;
-            }
-            if (options.dataType) {
-                this.dataType = options.dataType;
-            }
-            if (_.isDefined(options.cache)) {
-                this.cache = options.cache;
-            }
-        }
-    };
-    
-    
-    /**
-     * Reads status, response and callback with results.
-     *
-     * @param {request} request
-     * @param {string} dataType
-     * @returns {Array}
-     */
-    var status = function (request, dataType) {
-        var xhr = request.xhr;
-        var status = xhr.status;
-        var err, data;
-        if ((status >= 200 && status < 300) || status === 0) {
-            data = response(request, xhr, dataType);
-        } else {
-            data = xhr.responseText;
-            err = status;
-        }
-        return [data, err];
-    };
-    
-    /**
-     * Calls request with results
-     *
-     * @param {request} request
-     * @param {Object|string} data
-     * @param {Error|string} err
-     */
-    var callback = function (request, data, err) {
-        request.done(data, err);
-    };
-    
-    var headers = function (xhr, headers, dataType, contentType) {
-        if (contentType) {
-            headers["Content-Type"] = contentType;
-        }
-        if (dataType) {
-            headers["Accept"] = mimeTypes[dataType];
-        }
-        _.forIn(headers, function (header, name) {
-            xhr.setRequestHeader(name, header);
-        });
-    };
-    
-    var stateChange = function (req, xhr, url, dataType, type, opts) {
+
+    var chain = function (obj) {
         return function () {
-            if (xhr.readyState === 4) {
-                _.debug("Process response");
-                var st = status(req, dataType);
-                var data = st[0];
-                var err = st[1];
-                if (!err && _.isObject(data) && type === defaults.type && opts.cache) {
-                    opts.memo(url, dataType, data);
+            if (arguments.length == 0) {
+                return obj;
+            }
+            obj = pipeline.apply(obj, args2Array(arguments));
+            return chain(obj);
+        }
+    };
+
+    var pipeline = function () {
+        var p = arguments[0];
+        if (_.isString(p)) {
+            var name = p;
+            p = pipesRegistry[p];
+            if (!p) {
+                throw new Error('Pipe ' + name + ' not found');
+            }
+        } else if (_.isFunction(p)) {
+            p = pipes('%tmp%', p);
+        }
+        var params = args2Array(arguments, 1);
+        return p(this, params);
+    };
+
+    var parser = function (string, obj) {
+        string = _.trim(string || "");
+        var tokens = string.split('|');
+        var t = tokens[0];
+        var dot = t.indexOf('.');
+        if (dot != -1) {
+            tokens[0] = t.substring(dot);
+            t = t.substring(0, dot);
+        } else {
+            tokens = tokens.splice(1);
+        }
+        if (!obj) {
+            obj = ties[t].obj;
+        }
+        obj = _.clone(obj);
+        _.forEach(tokens, function (item) {
+            var p = parser.prototype.parse(item);
+            var args = [p.name];
+            args = _.extend(args, p.params);
+            _.debug("Parsed pipe" + JSON.stringify(args));
+            obj = pipeline.apply(obj, args);
+        });
+        return obj;
+    };
+
+    parser.prototype = {
+        parse: function (str) {
+            var index = str.indexOf(':');
+            var pipe = {};
+            pipe.name = _.trim(index + 1 ? str.substr(0, index) : str);
+            pipe.params = [];
+            if (pipe.name[0] == '.') {
+                pipe.params = [pipe.name.substring(1)];
+                pipe.name = 'property';
+                index = -1;
+            }
+            if (index >= 0) {
+                var p = _.trim(str.substr(++index));
+                p = '[' + p + ']';
+                var array = _.convert(p, {});
+                _.forEach(array, function (param) {
+                    param = _.trim(param);
+                    pipe.params.push(param);
+                });
+            }
+            return pipe;
+        }
+    };
+
+    /**  HANDLE **/
+
+    var handles = function (name, fn, dependencies, sealed) {
+        var h = handlesRegistry[name];
+        if (_.isUndefined(fn)) {
+            return  h;
+        }
+        if (h && h.$sealed) {
+            throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
+        }
+        h = handle(name, fn, dependencies || []);
+        fillSystemFields(h, name, sealed, dependencies);
+        h = _.extend(h, _);
+        handlesRegistry[name] = h;
+        return h;
+    };
+
+    var handle = function (name, fn, dependencies) {
+        var h = function (obj, config, watcher, appConfig) {
+            _.debug("Process handle " + name);
+            _.forEach(dependencies, function (item) {
+                h[DEP_PREFIX + item] = handlesRegistry[item];
+            });
+            if (fn && _.isFunction(fn)) {
+                obj = _.safeCall(fn, h, true, obj, config, watcher, appConfig);
+            }
+            _.debug("Ready handle " + name);
+            return obj;
+        };
+        return h;
+    };
+
+    /**  MODEL **/
+
+    var modelUtil = {
+        $prop: function (name, value) {
+            var res = this;
+            var split = name.split('.');
+            var i = 1;
+            var length = split.length;
+            while (i < length) {
+                res = res[split[i - 1]];
+                i++;
+                if (_.isUndefined(res)) {
+                    return undefined;
                 }
-                callback(req, data, err);
+            }
+            var last = split[length - 1];
+            if (_.isUndefined(value)) {
+                return res[last];
+            } else {
+                res[last] = value;
+            }
+            return undefined;
+        },
+
+        $ready: function () {
+            var ready = true;
+            _.forEach(this.$deps, function (dep) {
+                var d = this[DEP_PREFIX + dep];
+                if (!d || d._empty) {
+                    ready = false;
+                    return false;
+                }
+                return true;
+            }, this);
+            return ready;
+        }
+    };
+
+    var handler = function () {
+        _.extend(this, modelUtil);
+    };
+
+    handler.prototype = _;
+
+    var model = function (obj) {
+        _.extend(this, obj);
+    };
+
+    model.prototype = new handler();
+
+    /** WATCHER **/
+
+    var watcher = function (bind) {
+        this.watchers = [];
+        this.getters = [];
+        this.bind = bind;
+        this.handlerId = null;
+    };
+
+    watcher.prototype = {
+        watch: function (prop, onChange, onDelete) {
+            if (!prop || prop === '*') {
+                prop = '.*';
+            }
+            if (onChange || onDelete) {
+                var dyna = {
+                    property: new RegExp('^' + prop + '$'),
+                    handlerId: this.handlerId,
+                    onChange: onChange,
+                    onDelete: onDelete
+                };
+                this.watchers.push(dyna);
+                return dyna;
             }
             return null;
-        }
-    };
-    
-    var response = function (request, xhr, dataType) {
-        var response;
-        response = xhr.responseText;
-        if (response) {
-            if (dataType === defaults.mime) {
-                try {
-                    response = JSON.parse(response);
-                } catch (error) {
-                    callback(request, response, error);
-                }
-            } else {
-                if (dataType === "xml") {
-                    response = xhr.responseXML;
-                }
-            }
-        }
-        return response;
-    };
-    
-    var thisOrApp = function (obj, property, defaultValue) {
-        var res = defaultValue;
-        if (app && app.connect && app.connect[property]) {
-            var a = app.connect[property];
-            if (_.isObject(res)) {
-                res = _.extend(res, a);
-            } else {
-                res = tmp;
-            }
-        }
-        var tmp = obj[property];
-        if (tmp) {
-            if (_.isObject(res)) {
-                res = _.extend(res, tmp);
-            } else {
-                res = tmp;
-            }
-        }
-        return res;
-    };
-    
-    /**
-     * Creates http request object based on XHR
-     *
-     * @constructor
-     * @class request
-     * @this request
-     * @param {XMLHttpRequest} xhr
-     * @param {Function} fn callback function
-     */
-    var request = function (xhr, fn) {
-        this.xhr = xhr;
-        this.ready = false;
-        this.fn = fn;
-    };
-    
-    /**
-     * Request prototype
-     */
-    request.prototype = {
-    
-        /**
-         * Cancels request
-         *
-         * @this request
-         */
-        cancel: function () {
-            if (this.xhr) {
-                this.xhr.abort();
-            }
-            this.ready = false;
-            delete  this.data;
-            delete  this.err;
         },
-    
-        /**
-         * Call callback when request is done.<br/>
-         * After this called the data and error are stored in request properties.
-         *
-         * @this request
-         * @param {Object|string} data response data
-         * @param {Error|string} err response error
-         */
-        done: function (data, err) {
-            this.ready = true;
-            this.data = data;
-            this.err = err;
-            if (this.fn) {
-                safeCall(this.fn, this, true, data, err);
+
+        add: function (prop, valueFn) {
+            if (this.bind.props.indexOf(prop) == -1) {
+                this.bind.newDynamicProps.push(prop);
+                this.inspect();
+            }
+            if (this.bind.newDynamicProps.indexOf(prop) && valueFn) {
+                var dyna = {
+                    property: prop,
+                    handlerId: this.handlerId,
+                    valueFn: valueFn
+                };
+                this.getters.push(dyna);
+                return dyna;
+            }
+            return null;
+        },
+
+        remove: function () {
+            var indexOf;
+            if (arguments.length == 0 && this.handlerId) {
+                _.forEach(this.watchers, function (dyna, i) {
+                    if (dyna.handlerId === this.handlerId) {
+                        this.watchers.splice(i, 1);
+                    }
+                }, this, true);
+                _.forEach(this.getters, function (dyna, i) {
+                    if (dyna.handlerId === this.handlerId) {
+                        this.getters.splice(i, 1);
+                        indexOf = this.bind.newDynamicProps.indexOf(dyna.property);
+                        if (indexOf != -1) {
+                            this.bind.newDynamicProps.splice(indexOf, 1);
+                        }
+                    }
+                }, this, true);
+            }
+            var prop = arguments[0];
+            if (_.isString(prop)) {
+                _.forEach(this.watchers, function (dyna, i) {
+                    if (dyna.property.test(prop) || dyna.handlerId === prop) {
+                        this.watchers.splice(i, 1);
+                    }
+                }, this, true);
+                _.forEach(this.getters, function (dyna, i) {
+                    if (dyna.property === prop || dyna.handlerId === prop) {
+                        this.getters.splice(i, 1);
+                        indexOf = this.bind.newDynamicProps.indexOf(prop);
+                        if (indexOf != -1) {
+                            this.bind.newDynamicProps.splice(indexOf, 1);
+                        }
+                    }
+                }, this, true);
             } else {
-                console.log('Response received:' + data);
+                indexOf = this.watchers.indexOf(prop);
+                if (indexOf != -1) {
+                    this.watchers.splice(indexOf, 1);
+                }
+                indexOf = this.getters.indexOf(prop);
+                if (indexOf != -1) {
+                    this.getters.splice(indexOf, 1);
+                    indexOf = this.bind.newDynamicProps.indexOf(prop.property);
+                    if (indexOf != -1) {
+                        this.bind.newDynamicProps.splice(indexOf, 1);
+                    }
+                }
+            }
+        },
+
+        onGet: function (prop, obj, ready) {
+            if (!ready) {
+                ready = obj.$ready();
+            }
+            var val = null;
+            _.forEach(this.getters, function (dyna) {
+                if (dyna.property === prop) {
+                    var point = dyna.valueFn;
+                    if (_.isFunction(point)) {
+                        val = _.safeCall(point, obj, ready, obj, prop, val);
+                    }
+                }
+            });
+            return val;
+        },
+
+        onChange: function (prop, obj, ready) {
+            if (!ready) {
+                ready = obj.$ready();
+            }
+            var v = obj[prop];
+            _.forEach(this.watchers, function (dyna) {
+                if (dyna.property.test(prop)) {
+                    var point = dyna.onChange;
+                    if (_.isFunction(point)) {
+                        _.safeCall(point, obj, ready, obj, prop, v);
+                    }
+                }
+            });
+        },
+
+        onDelete: function (prop, obj, ready) {
+            if (!ready) {
+                ready = obj.$ready();
+            }
+            _.forEach(this.watchers, function (dyna) {
+                if (dyna.property.test(prop)) {
+                    var point = dyna.onDelete;
+                    if (_.isFunction(point)) {
+                        _.safeCall(point, obj, ready, obj, prop);
+                    }
+                }
+            });
+        },
+
+        inspect: function () {
+            if (this.bind) {
+                proxy(this.bind);
             }
         }
     };
-    
-    /**
-     * Default responding function, will log error or plain response in console
-     * and update model specified in case of JSON response
-     *
-     * @param {model} model to update with response data
-     */
-    var defaultResponder = function (model) {
-        return function (data, err) {
-            if (err) {
-                console.error(err);
-            } else if (_.isObject(data)) {
-                _.extend(model, data);
-                model._fetched = true;
-            } else {
-                console.log('Response received:' + data);
+
+    /**  BIND **/
+
+    var bind = function (name) {
+        this.name = name;
+        this.touch = [];
+        this.props = [];
+        this.newDynamicProps = [];
+        this.processedHandles = [];
+        this.values = {};
+        this.applyCount = 0;
+        this.timeout = null;
+        this.currentProperty = null;
+        this.watcher = new watcher(this);
+    };
+
+    bind.prototype = {
+        apply: function (property) {
+            if (property === this.currentProperty) {
+                return;
             }
+            this.currentProperty = property;
+            this.applyCount++;
+            if (this.applyCount > 10) {
+                _.debug("Too many apply :" + this.name + " - " + this.applyCount);
+            }
+            _.debug("Calling apply on '" + this.name + "' after changed property '" + property + "'");
+            if (property && property[0] == HANDLE_PREFIX) {
+                var n = property.substring(1);
+                var h = handlesRegistry[n];
+                if (h) {
+                    this.resolveHandle(this.obj, n, h, this.processedHandles);
+                }
+            }
+            if (property) {
+                this.watcher.onChange(property, this.obj);
+            }
+            _.forEach(this.touch, function (item) {
+                var bind = ties[item];
+                if (bind) {
+                    bind.obj[DEP_PREFIX + this.name] = this.obj;
+                }
+            }, this);
+            this.currentProperty = null;
+            if (!this.timeout) {
+                var that = this;
+                this.timeout = setTimeout(function () {
+                    that.timeout = null;
+                    that.applyCount = 0;
+                }, 3000);
+            }
+        },
+
+        resolveHandles: function () {
+            var name = this.name;
+            var obj = this.obj;
+            if (name != APP) {
+                this.processedHandles = [];
+                _.forIn(handlesRegistry, function (handle, prop) {
+                    if (this.processedHandles.indexOf(prop) == -1) {
+                        this.resolveHandle(obj, prop, handle, this.processedHandles);
+                    }
+                }, this);
+            }
+        },
+
+        resolveHandle: function (obj, prop, handle, processed) {
+            _.debug("Check handle " + prop);
+            _.forEach(handle.$deps, function (item) {
+                if (processed.indexOf(item) == -1) {
+                    var h = handlesRegistry[item];
+                    this.resolveHandle(obj, item, h, processed);
+                }
+            }, this);
+            var n = (HANDLE_PREFIX + prop);
+            var config = obj[n];
+            var appConfig = app ? app.obj[n] : undefined;
+            if (_.isUndefined(config) && _.isDefined(appConfig)) {
+                config = appConfig;
+            }
+            _.debug("Got handle config " + config);
+            if (_.isDefined(config)) {
+                this.currentProperty = n; //prevent apply update
+                this.watcher.handlerId = handle._uid;
+                this.watcher.remove();
+                obj[n] = handle(obj, config, this.watcher, appConfig);
+                this.watcher.handlerId = null;
+                this.currentProperty = null;
+            }
+            processed.push(prop);
+        }
+    };
+
+
+    /**  TIE **/
+
+    var tie = function (name, tiedObject, dependencies, sealed) {
+        if (name != APP && ties[APP] == null) {
+            module.tie(APP, {});
+        }
+        var r = ties[name];
+        if (_.isUndefined(tiedObject)) {
+            return  pipeModel(r.obj);
+        }
+        if (r && r.obj.$sealed) {
+            throw new Error(name + ' tie is already registered and sealed. Please choose another name for your tie');
+        }
+        r = tie.prototype.init(name, tiedObject, dependencies, sealed);
+        tie.prototype.define(name, r);
+        if (name == APP) {
+            app = r;
+        }
+        return r.obj;
+    };
+
+    tie.prototype = {
+
+        wrap: function (obj) {
+            return {value: obj}
+        },
+
+        check: function (obj) {
+            if (_.isFunction(obj) || _.isArray(obj) || !_.isObject(obj) || _.isDate(obj)) {
+                obj = this.wrap(obj);
+            }
+            return new model(obj);
+        },
+
+        resolveDependencies: function (bind, dependencies) {
+            var name = bind.name;
+            if (name != APP) {
+                bind.obj[DEP_PREFIX + APP] = app.obj;
+                if (app.touch.indexOf(name) == -1) {
+                    app.touch.push(name);
+                }
+            }
+            if (!dependencies) {
+                return;
+            }
+            _.forEach(dependencies, function (dep) {
+                _.debug("Check dependency " + dep);
+                var found = ties[dep];
+                if (!found) {
+                    _.debug("Dependency stub " + dep);
+                    found = {name: dep, touch: [], obj: {_empty: true}};
+                    this.define(dep, found);
+                }
+                bind.obj[DEP_PREFIX + dep] = found.obj;
+                if (found.touch.indexOf(name) == -1) {
+                    found.touch.push(name);
+                }
+            }, this);
+        },
+
+        define: function (name, bind) {
+            var old = ties[name];
+            ties[name] = bind;
+            if (old) {
+                old.obj._deleted = true;
+                if (old.touch) {
+                    bind.touch = old.touch;
+                    _.debug("Calling apply on '" + bind.name + "' after define");
+                    bind.apply('*');
+                }
+            }
+        },
+
+        init: function (name, tiedObject, dependencies, sealed) {
+            _.debug("Tie " + name, name);
+            var r = new bind(name);
+            var obj = r.obj = this.check(tiedObject);
+            fillSystemFields(obj, name, sealed, dependencies);
+            obj._deleted = false;
+            r.resolveHandles();
+            this.resolveDependencies(r, dependencies);
+            r.props = proxy(r);
+            _.debug("Bind model ready");
+            return r;
+        }
+    };
+
+    module.tie = tie;
+    module.tie.pipe = pipes;
+    module.tie.handle = handles;
+    module.tie.enableDebug = function (enable) {
+        _.debugEnabled = enable;
+    };
+    module.tie.$ = parser;
+    module.tie._ = _;
+    if (typeof module.exports === 'object') {
+        module.exports = function (test) {
+            var res = module.tie;
+            if (test) {
+                res.tier = tie.prototype;
+                res.util = _;
+                res.model = model;
+                res.ties = ties;
+                res.pipesRegistry = pipesRegistry;
+                res.handlesRegistry = handlesRegistry;
+                res.bind = bind;
+            }
+            return res;
         };
-    };
-    
-    
+    }
+
     /**
-     * Replaces '/:id' like parts of URL with parameter value.<br/>
-     * It removes parameter from list of parameters to avoid duplications.
-     *
-     * @param {string} url
-     * @param {Object} params
-     * @returns {string}
+     * Property pipeline definition
      */
-    var prepareURL = function (url, params) {
-        if (!url) {
-            return url;
+    pipes("property", function (obj, params) {
+        if (params && params.length > 0) {
+            var prop = params[0];
+            var target = params.length > 1 ? params[1] : VALUE;
+            obj.$prop(target, obj.$prop(prop))
         }
-        var index = url.indexOf('?');
-        var clearUrl = url.substring(0, index + 1 ? index : url.length);
-        var splits = clearUrl.split('/');
-        _.forEach(splits, function (split) {
-            if (split[0] === ':') {
-                var name = split.substr(1);
-                var val = params[ name];
-                if (_.isDefined(val)) {
-                    url.replace(split, val);
-                    delete  params[name];
-                }
-            }
-        });
-        return url;
-    };
-    
-    /**
-     * Merges parameters with exiting parameters
-     *
-     * @param {Object} opts
-     * @param {Object} params
-     */
-    var prepareParams = function (opts, params) {
-        if (params) {
-            if (opts.params) {
-                _.extend(opts.params, params);
-            } else {
-                opts.params = params;
-            }
+        return obj;
+    });
+
+    handles("require", function (obj, config) {
+        if (_.isFunction(module.require)) {
+            module.require(config);
+        }  else {
+            console.error('Require is undefined');
         }
-    };
-    
-    /**
-     * Return parameters body string. If url is passed - calculate value to be appended to url.
-     *
-     * @param {Object} params
-     * @param {string} [url]
-     * @returns {string}
-     */
-    var gatherParams = function (params, url) {
-        var sign = "";
-        if (url) {
-            sign = url.indexOf("?") + 1 ? "&" : "?";
-        }
-        var res = sign;
-        _.forIn(params, function (param, name) {
-            if (res !== sign) {
-                res += "&";
-            }
-            res += name + "=" + param;
-        });
-        if (res === sign) {
-            return "";
-        }
-        return res;
-    };
-    
-    /**
-     * Executes AJAX request
-     *
-     * @param {Object} opts request options
-     * @param {model|Function} onReady function to be called when response received
-     * or model to be updated with response values
-     * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
-     * Setting http.cache to false will make refetch default behavior
-     * @return request
-     */
-    var ajax = function (opts, onReady, refetch) {
-        var type = opts.getType();
-        var url = opts.getUrl();
-        var params = opts.getParams();
-        var dataType = opts.getDataType();
-        var contentType = opts.getContentType();
-        var heads = opts.getHeaders();
-        var cached = null;
-        url = prepareURL(url, params);
-        _.debug("Ajax call to " + url);
-        if (type === defaults.type) {
-            url += gatherParams(params, url);
-            if (opts.cache && !refetch) {
-                cached = opts.memo(url, dataType);
-            }
-        } else {
-            params = gatherParams(params);
-        }
-        if (/=\$JSONP/ig.test(url)) {
-            return this.jsonp(url, data);
-        }
-        var xhr = new window.XMLHttpRequest();
-        var fn = null;
-        if (_.isFunction(onReady)) {
-            fn = onReady;
-        } else if (_.isObject(onReady)) {
-            fn = defaultResponder(onReady);
-        }
-        var req = new request(xhr, fn);
-        if (cached) {
-            _.debug("Got cached result");
-            callback(req, cached, null);
-        } else {
-            xhr.onreadystatechange = stateChange(req, xhr, url, dataType, type, opts);
-            xhr.open(type, url);
-            headers(xhr, heads, contentType, dataType);
-            try {
-                _.debug("Send request");
-                xhr.send(params);
-            } catch (error) {
-                xhr = error;
-                callback(req, null, error);
-            }
-        }
-        return req;
-    };
-    
-    /**
-     * Executes JSONP request
-     *
-     * @param {Object} opts request options
-     * @param {model|Function} onReady function to be called when response received
-     * or model to be updated with response values
-     * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
-     * Setting http.cache to false will make refetch default behavior
-     * @return request
-     */
-    var jsonp = function (opts, onReady, refetch) {
-        var url = opts.url;
-        var params = opts.params;
-        var head = window.document.getElementsByTagName("head")[0];
-        var script = window.document.createElement("script");
-        url = prepareURL(url, params);
-        url += gatherParams(params, url);
-        _.debug("JSONP call to " + url);
-        var cached = null;
-        if (opts.cache && !refetch) {
-            cached = opts.memo(url, defaults.mime);
-        }
-        var fn = null;
-        if (_.isFunction(onReady)) {
-            fn = onReady;
-        } else if (_.isObject(onReady)) {
-            fn = defaultResponder(onReady);
-        }
-        var req = new request(null, fn);
-        if (cached) {
-            _.debug("Got cached result");
-            req.done(cached, null);
-        } else {
-            var callbackName = "jsonp" + _.uid();
-            window[callbackName] = function (response) {
-                head.removeChild(script);
-                delete window[callbackName];
-                _.debug("Process response");
-                opts.memo(url, defaults.mime, response);
-                return req.done(response, null);
-            };
-    
-            _.debug("Create JSONP request");
-            script.type = "text/javascript";
-            script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
-            head.appendChild(script);
-        }
-        return req;
-    };
-    
-    /**
-     * Executes form url encoded content request
-     *
-     * @param {Object} opts request options
-     * @param {string} type request type ('POST', 'PUT', 'DELETE')
-     * @param {Object} params request params to be set in request body
-     * @param {model|Function} onReady function to be called when response received
-     * or model to be updated with response values
-     * @return request
-     */
-    var form = function (opts, type, params, onReady) {
-        opts.type = type;
-        opts.contentType = "application/x-www-form-urlencoded";
-        prepareParams(opts, params);
-        return ajax(opts, onReady);
-    };
-    
-    /**
-     * Http prototype
-     */
-    http.prototype = {
-    
-        /**
-         * Executes JSONP request
-         *
-         * @this http
-         * @param {string} url request URl (with '=$JSONP' to replace by callback name)
-         * @param {Object} params request params to be joined to URL. ('$JSONP' as value also works)
-         * @param {model|Function} onReady function to be called when response received
-         * or model to be updated with response values
-         * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
-         * Setting http.cache to false will make refetch default behavior
-         * @return request
-         */
-        jsonp: function (url, params, onReady, refetch) {
-            var opts = _.extend({}, this);
-            opts.url = url;
-            opts.params = params;
-            return jsonp(opts, onReady, refetch);
-        },
-    
-        /**
-         * Executes GET request
-         *
-         * @this http
-         * @param {Object} params request params to be joined to URL
-         * @param {model|Function} onReady function to be called when response received
-         * or model to be updated with response values
-         * @param {boolean} [refetch] whether to explicitly fetch data from sever even if cached copy exists.
-         * Setting http.cache to false will make refetch default behavior
-         * @return request
-         */
-        get: function (params, onReady, refetch) {
-            this.type = defaults.type;
-            delete this.contentType;
-            prepareParams(this, params);
-            return ajax(this, onReady, refetch);
-        },
-    
-        /**
-         * Executes POST request
-         *
-         * @this http
-         * @param {Object} params request params to be set in request body
-         * @param {model|Function} onReady function to be called when response received
-         * or model to be updated with response values
-         * @return request
-         */
-        post: function (params, onReady) {
-            return form(this, "POST", params, onReady);
-        },
-    
-        /**
-         * Executes PUT request
-         *
-         * @this http
-         * @param {Object} params request params to be set in request body
-         * @param {model|Function} onReady function to be called when response received
-         * or model to be updated with response values
-         * @return request
-         */
-        put: function (params, onReady) {
-            return form(this, "PUT", params, onReady);
-        },
-    
-        /**
-         * Executes DELETE request
-         *
-         * @this http
-         * @param {Object} params request params to be set in request body
-         * @param {model|Function} onReady function to be called when response received
-         * or model to be updated with response values
-         * @return request
-         */
-        "delete": function (params, onReady) {
-            return form(this, "DELETE", params, onReady);
-        },
-    
-        getUrl: function () {
-            var url = thisOrApp(this, 'url', '');
-            if (!url) {
-                throw new Error("URL is not defined");
-            }
-            return url;
-        },
-    
-        getParams: function () {
-            return thisOrApp(this, 'params', {});
-        },
-    
-        getType: function () {
-            return thisOrApp(this, 'type', defaults.type);
-        },
-    
-        getContentType: function () {
-            return thisOrApp(this, 'contentType', null);
-        },
-    
-        getDataType: function () {
-            return thisOrApp(this, 'dataType', defaults.mime);
-        },
-    
-        getHeaders: function () {
-            return thisOrApp(this, 'header', {});
-        },
-    
-        /**
-         * Memoizes cache value or return existed
-         *
-         * @param {string} url
-         * @param {string} type data type
-         * @param {*} [value] value to cache
-         * @returns {*}
-         */
-        memo: function (url, type, value) {
-            var hash = url + type;
-            if (_.isDefined(value)) {
-                this.memoize[hash] = value;
-            }
-            return this.memoize[hash];
-        }
-    
-    };
-    
-    
-    /**
-     * DOM manipulations functions
-     *
-     * @namespace q
-     */
+        return config;
+    });
+
+
+})(typeof exports === 'object' ? module : window);
+
+
+/**
+ * Tie.js DOM handle
+ *
+ * Copyright 2013, Wolfgang Bas
+ * Released under the MIT License
+ */
+(function (window) {
+    'use strict';
+
+    var _ = window.tie._;
+    var document = window.document;
+
+    var VALUE = 'value';
+    var TEXT = 'text';
+
+    var INDEX = "data-index";
+    var TIE = "data-tie";
+    var TIED = "data-tied";
+    var CLASS = "class";
+    var NAME = "name";
+
     var q = {
-    
-        /**
-         * Appends list of elements to the index element
-         *
-         * @param {Node} index index node after which new elements will go.
-         * @param {Node|Array} newElements one or more elements
-         */
+
+        domReady: false,
+
+        isListenersSet: false,
+
+        readyListeners: [],
+
+        readyFn: function () {
+            _.forEach(this.readyListeners, function (listener) {
+                setTimeout(listener, 100);
+            });
+            this.domReady = true;
+        },
+
         next: function (index, newElements) {
             var parent = index.parentNode;
             _.forEach(newElements, function (node) {
@@ -1047,82 +1075,87 @@
                 index = node;
             });
         },
-    
-        /**
-         * Removes element
-         *
-         * @param {Node} element element to remove.
-         */
+
         remove: function (element) {
             var parent = element.parentNode;
             if (parent) parent.removeChild(element);
         },
-    
-        /**
-         * Adds on load on hash change listener with callback specified.
-         * <br>
-         * Note: callback will be called when document loaded or instantly if document is already loaded
-         * and every time when hash is changed.
-         *
-         * @param {Function} fn function to call.
-         */
-        ready: function (fn) {
-            // check if document already is loaded
-            if (document.readyState === 'complete') {
-                setTimeout(fn, 0);
-            } else {
-                window.addEventListener('load', fn);
+
+        hasClass: function (el, cls) {
+            return el.className.match(new RegExp('(\\s|^)' + cls + '(\\s|$)'));
+        },
+
+        addClass: function (el, cls) {
+            if (!this.hasClass(el, cls)) {
+                el.className += " " + cls;
+                el.className = _.trim(el.className);
             }
-            window.addEventListener('hashchange', fn);
+        },
+
+        removeClass: function (el, cls) {
+            if (this.hasClass(el, cls)) {
+                var reg = new RegExp('(\\s|^)' + cls + '(\\s|$)');
+                el.className = el.className.replace(reg, ' ');
+                el.className = _.trim(el.className);
+            }
+        },
+
+        ready: function (fn) {
+            if (fn) {
+                // check if document already is loaded
+                if (document.readyState === 'complete') {
+                    setTimeout(fn, 0);
+                    this.domReady = true;
+                } else {
+                    if (this.isListenersSet) {
+                        window.addEventListener('load', this.readyFn);
+                    }
+                }
+                if (this.isListenersSet) {
+                    window.addEventListener('hashchange', this.readyFn);
+                    this.isListenersSet = true;
+                }
+                this.readyListeners.push(fn);
+            }
+            return this.domReady;
         }
     };
-    
-    /**
-     * DOM element wrapper
-     *
-     * @constructor
-     * @class $
-     * @this $
-     * @param {Element} el DOM element.
-     * @param {bind} bind element bound tie
-     */
-    var $ = function (el, bind) {
+
+    var $ = function (el, obj) {
         var that = this;
+        var name = obj.$name;
+        var tagName = el.tagName;
         var listener = function (event) {
-            _.debug("Fired '" + event.type + "' listener on '" + bind.name + "' for element " + el.tagName);
+            _.debug("Fired '" + event.type + "' listener on '" + name + "' for element " + tagName);
             var value = that.value();
             value = _.trim(value);
-    
-            if (that.pipes.length > 0) {
-                that.pipeline(function () {
-                }, value);
-            } else {
-                if (bind.obj.value !== value) {
-                    bind.obj.value = value;
-                }
+
+            var prop = that.getProperty();
+            if (obj.$prop(prop) !== value) {
+                obj.$prop(prop, value);
             }
         };
-    
         var idx = el.getAttribute(INDEX);
         this.$ = el;
         this._id = _.uid();
         this.index = idx ? parseInt(idx) : -1;
         this.tie = el.getAttribute(TIE);
-        this.bind = bind;
+        this.obj = obj;
         this.events = {};
-        this.isInput = _.eqi(el.tagName, 'input');
+        this.isSelect = _.eqi(tagName, 'select');
+        this.isInput = _.eqi(tagName, 'input') || _.eqi(tagName, 'textarea') || this.isSelect;
         this.hasCheck = _.eqi(el.type, 'radio') || _.eqi(el.type, 'checkbox');
         this.display = el.style.display;
         this.shown = true;
         this.textEl = null;
-    
+
         if (this.isInput) {
-            if (!this.hasCheck) {
+            if (!this.hasCheck && !this.isSelect) {
                 if ('oninput' in el) {
-                    _.debug("Added input listener on '" + bind.name + "' for element " + el.tagName);
+                    _.debug("Added input listener on '" + name + "' for element " + tagName);
                     el.addEventListener('input', listener);
                 } else {
-                    _.debug("Added keydown listener on '" + bind.name + "' for element " + el.tagName);
+                    _.debug("Added keydown listener on '" + name + "' for element " + tagName);
                     el.addEventListener('keydown', function (event) {
                         var key = event.keyCode;
                         // ignore command         modifiers                   arrows
@@ -1131,86 +1164,47 @@
                     });
                 }
             } else {
-                _.debug("Added change listener on '" + bind.name + "' for element " + el.tagName);
+                _.debug("Added change listener on '" + name + "' for element " + tagName);
                 el.addEventListener('change', listener);
             }
         }
-    
-        var pipes = this.tie.replace(/\.([^.|]+(\.[^.|]+)*)/g, '|property:"$1"').match(/[^|]+/g).splice(1);
-        this.pipes = [];
-        _.forEach(pipes, function (string) {
-            this.pipes.push(new pipe(string));
-        }, this);
-    
-        /**
-         * Processes pipelines of current element. All pipes are processed asynchronously and result of the first pipe is passed to next pipe,
-         * that should call next function to activate next pipe. If pipe do not call next function and return result - next function will be called automatically.
-         *
-         *
-         * @this $
-         * @param {Function} next function to be called next
-         * @param {*} [value] value to use in pipeline
-         */
-        this.pipeline = function (next, value) {
-            var orig = this.bind.obj;
-            var bind = this.bind;
-            var res = orig;
-            if (this.pipes.length > 0) {
-                _.sequence(this.pipes, function (pipe, next) {
-                    var update = function (data) {
-                        res = data;
-                        if (pipe.updateRoutes() && _.isUndefined(value) && _.isFunction(res.$location)) {
-                            res.$shown = res.$location().route.has(res);
-                        }
-                        if ((_.isDefined(value) && pipe.updateModel()) || (pipe.fetchModel() && _.isUndefined(value))) {
-                            _.extend(orig, data);
-                            res._fetched  = orig._fetched = true;
-    
-                        }
-                        next(res);
-                    };
-                    var c;
-                    var clone = _.clone(res);
-                    if (_.isDefined(value)) {
-                        c = pipe.process(clone, update, value);
-                    } else {
-                        c = pipe.process(clone, update);
-                    }
-                    if (c) {
-                        update(c);
-                    }
-    
-                }, function () {
-                    if (next) {
-                        next(res);
-                    }
-                })
-            } else {
-                next(res);
-            }
-        }
     };
-    
+
     $.prototype = {
-    
-        /**
-         * Apply element attribute. Has polymorphic behavior.<br>
-         *  <ul>
-         *      <li>For attribute "value" calls this {@link $#value},
-         *      <li>for attribute "text" calls this {@link $#text},
-         *      <li>for function value adds event handler
-         *      <li>else simple set attributes element.
-         *  </ul>
-         *
-         * @this $
-         * @param {string} name attribute name.
-         * @param {*} [value] attribute value.
-         */
+
+        getProperty: function () {
+            var string = this.tie;
+            string = _.trim(string || '');
+            var tokens = string.split('|');
+            var t = tokens[0];
+            var dot = t.indexOf('.');
+            if (dot != -1) {
+                return t.substring(dot + 1);
+            }
+            var index = t.indexOf(':');
+            var name = _.trim(index + 1 ? t.substr(0, index) : t);
+            if (name === 'property') {
+                if (index >= 0) {
+                    var p = _.trim(t.substr(++index));
+                    p = '[' + p + ']';
+                    var array = _.convert(p, {});
+                    return array[0];
+                }
+            }
+            return VALUE;
+        },
+
+        isTied: function () {
+            return this.$.getAttribute(TIED);
+        },
+
         setAttribute: function (name, value) {
             if (VALUE === name) {
                 this.value(value);
             } else if (TEXT === name) {
                 this.text(value);
+            } else if (CLASS === name) {
+                q.addClass(this.$, value);
             } else if (_.isFunction(value)) {
                 var handler = this.events[name];
                 if (handler) {
@@ -1220,7 +1214,7 @@
                 handler = function (event) {
                     event.index = that.index;
                     event.tie = that.tie;
-                    safeCall(value, that.bind.obj, that.bind.obj.$ready(), event);
+                    _.safeCall(value, that.obj, that.obj.$ready(), event);
                 };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -1232,105 +1226,106 @@
                 }
             }
         },
-    
-        /**
-         * Apply elements value or return current value if parameter is empty. Has polymorphic behavior.<br>
-         *  <ul>
-         *     <li>For input that has check checked attribute will be used,
-         *     <li>for other inputs value attribute will be used,
-         *     <li>else {@link $#text} will be called.
-         *  </ul>
-         * @this $
-         * @param {*} [val] value.
-         */
+
         value: function (val) {
+            var el = this.$;
             if (this.hasCheck) {
                 if (_.isDefined(val)) {
                     if (val) {
-                        this.$.setAttribute('checked', 'checked');
+                        el.setAttribute('checked', 'checked');
                     } else {
-                        this.$.removeAttribute('checked');
+                        el.removeAttribute('checked');
                     }
                 } else {
-                    return this.$.checked;
+                    return el.checked;
+                }
+            } else if (this.isSelect) {
+                if (_.isDefined(val)) {
+                    var options = [].slice.call(el.options);
+                    _.forEach(options, function (item, i) {
+                        if (_.isEqual(item.value, val)) {
+                            el.selectedIndex = i;
+                            return false;
+                        }
+                        return true;
+                    });
+                } else {
+                    return el.options[el.selectedIndex].value;
                 }
             } else if (this.isInput) {
                 if (_.isDefined(val)) {
-                    this.$.value = val;
+                    el.value = val;
                 } else {
-                    return this.$.value;
+                    return el.value;
                 }
             } else {
                 return this.text(val);
             }
             return null;
         },
-    
-        /**
-         * Apply elements text content or return current text content if parameter is empty. Has polymorphic behavior.<br>
-         *  <ul>
-         *     <li>For input next sibling text node will be used,
-         *     <li>else underlying element text content will be used.
-         *  </ul>
-         * @this $
-         * @param {string} [text] value.
-         */
+
         text: function (text) {
+            var el = this.$;
             if (_.isDefined(text)) {
                 if (this.isInput) {
                     if (this.textEl == null) {
-                        this.textEl = window.document.createElement('span');
+                        this.textEl = document.createElement('span');
                         this.next(this.textEl);
                     }
                     this.textEl.textContent = text;
+                } else if (this.isSelect) {
+                    _.forEach(el.options, function (item, i) {
+                        if (_.isEqual(item.text, text)) {
+                            el.selectedIndex = i;
+                            return false;
+                        }
+                        return true;
+                    });
                 } else {
-                    this.$.textContent = text
+                    el.textContent = text
                 }
             } else {
                 if (this.isInput) {
-                    return this.$.nextSibling.textContent || '';
+                    return el.nextSibling.textContent || '';
+                } else if (this.isSelect) {
+                    return el.options[el.selectedIndex].text;
                 } else {
-                    return this.$.textContent || '';
+                    return el.textContent || '';
                 }
             }
             return null;
         },
-    
-        /**
-         * Removes underlying element from document and utilize current object from bind.
-         *
-         * @this $
-         */
+
+        html: function (html) {
+            var el = this.$;
+            if (_.isDefined(html)) {
+                if (!this.isInput && !this.isSelect) {
+                    el.innerHTML = html;
+                }
+            } else {
+                if (!this.isInput && !this.isSelect) {
+                    return el.innerHTML || '';
+                }
+            }
+            return null;
+        },
+
         remove: function () {
             var element = this.$;
-            var array = this.bind.$;
-            array.splice(array.indexOf(this), 1);
             delete this.$;
-            delete this.bind;
+            delete this.obj;
             delete this._id;
             delete this.isInput;
             delete this.hasCheck;
             delete  this.events;
             q.remove(element);
         },
-    
-        /**
-         * Appends list of elements to current element
-         *
-         * @this $
-         * @param {Node|Array} newElements one or more elements
-         */
+
         next: function (newElements) {
             var index = this.$;
             q.next(index, newElements);
         },
-    
-        /**
-         * Show/hide current element. Uses style display property. Stores last display value to use it for restoring.
-         *
-         * @this $
-         * @param {boolean} show
-         */
+
         show: function (show) {
             if (this.shown === show) {
                 return;
@@ -1350,569 +1345,44 @@
             this.shown = show;
         }
     };
-    
-    /**
-     * Utilities. All those methods are available in model prototype. So when creating your tie you can use these utils.
-     * For ex.
-     * <pre>
-     *      tie('data', function(arg) {
-     *          if(this.isDefined(arg)) {
-     *              return arg;
-     *          }
-     *      });
-     * </pre>
-     *
-     * @namespace _
-     */
-    var _ = {
-    
-            /**
-             * Enables debug mode.
-             *
-             * @property debugEnabled default to true
-             */
-            debugEnabled: false,
-    
-            /**
-             * Whether value is undefined
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isUndefined: function (value) {
-                return value == undefined;
-            },
-    
-            /**
-             * Whether value is defined
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isDefined: function (value) {
-                return value != undefined;
-            },
-    
-            /**
-             * Whether value is object
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isObject: function (value) {
-                return value != null && typeof value == 'object';
-            },
-    
-            /**
-             * Whether value is string
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isString: function (value) {
-                return typeof value == 'string';
-            },
-    
-            /**
-             * Whether value is number
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isNumber: function (value) {
-                return typeof value == 'number';
-            },
-    
-            /**
-             * Whether value is date
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isDate: function (value) {
-                return Object.prototype.toString.apply(value) == '[object Date]';
-            },
-    
-            /**
-             * Whether value is array. Exact array match. Array-like objects (arguments, node lists) will not pass that check.
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isArray: function (value) {
-                return Array.isArray(value) || Object.prototype.toString.apply(value) == '[object Array]';
-            },
-    
-            /**
-             * Whether value is array or array-like. Array-like objects (arguments, node lists) will pass that check.
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isCollection: function (value) {
-                return this.isArray(value) || value instanceof Array
-                    || Object.prototype.toString.apply(value) == '[object NodeList]'
-                    || Object.prototype.toString.apply(value) == '[object NamedNodeMap]'
-                    || Object.prototype.toString.apply(value) == '[object Arguments]';
-            },
-    
-            /**
-             * Whether value is function.
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isFunction: function (value) {
-                return typeof value == 'function';
-            },
-    
-            /**
-             * Whether value is boolean.
-             *
-             * @param {*} value
-             * @returns boolean
-             */
-            isBoolean: function (value) {
-                return typeof value == 'boolean';
-            },
-    
-            /**
-             * Remove trailing whitespaces from string.
-             *
-             * @param {string} value
-             * @returns string
-             */
-            trim: function (value) {
-                return this.isString(value) ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
-            },
-    
-            /**
-             * Converts string to lower case.
-             *
-             * @param {string} string
-             * @returns string
-             */
-            lowercase: function (string) {
-                return this.isString(string) ? string.toLowerCase() : string;
-            },
-    
-            /**
-             * Converts string to upper case.
-             *
-             * @param {string} string
-             * @returns string
-             */
-            uppercase: function (string) {
-                return this.isString(string) ? string.toUpperCase() : string;
-            },
-    
-            /**
-             * Converts string to integer.
-             *
-             * @param {string} string
-             * @returns number
-             */
-            toInt: function (string) {
-                return parseInt(string, 10);
-            },
-    
-            /**
-             * Converts string to float.
-             *
-             * @param {string} string
-             * @returns number
-             */
-            toFloat: function (string) {
-                return parseFloat(string);
-            },
-    
-            /**
-             * Compares two strings ignoring case.
-             *
-             * @param {string} string1
-             * @param {string} string2
-             * @returns boolean
-             */
-            eqi: function (string1, string2) {
-                return this.lowercase(string1) === this.lowercase(string2);
-            },
-    
-            /**
-             * Performs a deep comparison between two values to determine if they are
-             * equivalent to each other.
-             *
-             * @param {Mixed} a The value to compare.
-             * @param {Mixed} b The other value to compare.
-             * @param {Array} [aStack=[]] Tracks traversed `a` objects.
-             * @param {Array} [bStack=[]] Tracks traversed `b` objects.
-             * @returns {Boolean} Returns `true`, if the values are equivalent, else `false`.
-             */
-            isEqual: function (a, b, aStack, bStack) {
-                // Identical objects are equal. `0 === -0`, but they aren't identical.
-                // See the [Harmony `egal` proposal](http://wiki.ecmascript.org/doku.php?id=harmony:egal).
-                if (a === b) {
-                    return a !== 0 || 1 / a == 1 / b;
-                }
-                // A strict comparison is necessary because `null == undefined`.
-                if (a == null || b == null) {
-                    return a === b;
-                }
-                // Compare `[[Class]]` names.
-                var className = Object.prototype.toString.call(a);
-                if (className != Object.prototype.toString.call(b)) {
-                    return false;
-                }
-                switch (className) {
-                    // Strings, numbers, dates, and booleans are compared by value.
-                    case '[object String]':
-                        // Primitives and their corresponding object wrappers are equivalent; thus, `"5"` is
-                        // equivalent to `new String("5")`.
-                        return a == String(b);
-                    case '[object Number]':
-                        // `NaN`s are equivalent, but non-reflexive. An `egal` comparison is performed for
-                        // other numeric values.
-                        return a != +a ? b != +b : (a == 0 ? 1 / a == 1 / b : a == +b);
-                    case '[object Date]':
-                    case '[object Boolean]':
-                        // Coerce dates and booleans to numeric primitive values. Dates are compared by their
-                        // millisecond representations. Note that invalid dates with millisecond representations
-                        // of `NaN` are not equivalent.
-                        return +a == +b;
-                    // RegExps are compared by their source patterns and flags.
-                    case '[object RegExp]':
-                        return a.source == b.source &&
-                            a.global == b.global &&
-                            a.multiline == b.multiline &&
-                            a.ignoreCase == b.ignoreCase;
-                }
-                if (typeof a != 'object' || typeof b != 'object') {
-                    return false;
-                }
-    
-                if(this.isUndefined(aStack)) {
-                    aStack = [];
-                }
-                if(this.isUndefined(bStack)) {
-                    bStack = [];
-                }
-                // Assume equality for cyclic structures. The algorithm for detecting cyclic
-                // structures is adapted from ES 5.1 section 15.12.3, abstract operation `JO`.
-                var length = aStack.length;
-                while (length--) {
-                    // Linear search. Performance is inversely proportional to the number of
-                    // unique nested structures.
-                    if (aStack[length] == a) {
-                        return bStack[length] == b;
-                    }
-                }
-                // Add the first object to the stack of traversed objects.
-                aStack.push(a);
-                bStack.push(b);
-                var size = 0, result = true;
-                // Recursively compare objects and arrays.
-                if (className == '[object Array]') {
-                    // Compare array lengths to determine if a deep comparison is necessary.
-                    size = a.length;
-                    result = size == b.length;
-                    if (result) {
-                        // Deep compare the contents, ignoring non-numeric properties.
-                        while (size--) {
-                            if (!(result = this.isEqual(a[size], b[size], aStack, bStack))) {
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    // Objects with different constructors are not equivalent, but `Object`s
-                    // from different frames are.
-                    var aCtor = a.constructor, bCtor = b.constructor;
-                    if (aCtor !== bCtor && !(this.isFunction(aCtor) && (aCtor instanceof aCtor) &&
-                        this.isFunction(bCtor) && (bCtor instanceof bCtor))) {
-                        return false;
-                    }
-                    // Deep compare objects.
-                    this.forIn(a, function (value, prop) {
-                        size++;
-                        if (!(result = b.hasOwnProperty(prop) && _.isEqual(value, b[prop], aStack, bStack))) {
-                            return false;
-                        }
-                        return true;
-                    });
-                    // Ensure that both objects contain the same number of properties.
-                    if (result) {
-                        this.forIn(b, function (value, prop) {
-                            if (!(size--)) {
-                                return false;
-                            }
-                            return true;
-                        });
-                        result = !size;
-                    }
-                }
-                // Remove the first object from the stack of traversed objects.
-                aStack.pop();
-                bStack.pop();
-                return result;
-            },
-    
-            /**
-             * Clones object using deep referencing.
-             *
-             * @param {*} obj
-             * @returns Object|Array clone
-             */
-            clone: function (obj) {
-                if (!obj || !this.isObject(obj)) {
-                    return obj;
-                }
-                var newObj = this.isCollection(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
-                newObj = this.extend(newObj, obj, function (item) {
-                    return _.clone(item);
-                });
-                return newObj;
-            },
-    
-            /**
-             * Converts string to object of guessing type.
-             *
-             * Note: supports integer, float, boolean, string. String will be cleaned from quotes.
-             *
-             * @param {string} string
-             * @param {Object} [context] object to get properties
-             */
-            convert: function (string, context) {
-                var res = string;
-                var reviver = function (k, v) {
-                    if (_.isString(v) && v[0] == '#') {
-                        return context[v.substring(1)];
-                    }
-                    return v;
-                };
-                if ('true' === string) {
-                    res = true
-                } else if ('false' === string) {
-                    res = false
-                } else if (/^\d*$/.test(string)) {
-                    if (string.indexOf('.') != -1) {
-                        res = this.toFloat(string);
-                    } else {
-                        res = this.toInt(string);
-                    }
-                } else if (string[0] == '[' && string[string.length - 1] == "]") {
-                    string = string.replace(/'/g, '"');
-                    res = JSON.parse(string, reviver);
-                } else if (string[0] == '{' && string[string.length - 1] == "}") {
-                    string = string.replace(/'/g, '"');
-                    res = JSON.parse(string, reviver);
-                } else if (string[0] == '"' || string[0] == "'") {
-                    res = string.substring(1, string.length - 1);
-                }
-                return res;
-            },
-    
-            /**
-             * Iterates through collection calling callback on every element. If only one item passed will call on it.
-             *
-             * For ex.
-             *  <pre>
-             *      forEach(array, function(item, i, collection){
-         *          item.idx = i;
-         *      })
-             *  </pre>
-             *
-             * @param {Array|Object} collection
-             * @param {Function} callback function
-             * @param {Object} [thisArg] this object inside your callback
-             * @param {boolean} [safe] if true will iterate over copy of collection, so you can easily remove elements from collection
-             */
-            forEach: function (collection, callback, thisArg, safe) {
-                if (!thisArg) {
-                    thisArg = this;
-                }
-                if (callback) {
-                    if (this.isCollection(collection)) {
-                        var index = -1;
-                        var length = collection.length;
-                        var coll = [];
-                        if (safe) {
-                            while (++index < length) {
-                                coll.push(collection[index]);
-                            }
-                            index = -1;
-                        } else {
-                            coll = collection;
-                        }
-                        while (++index < length) {
-                            if (callback.call(thisArg, coll[index], index, collection) === false) {
-                                break;
-                            }
-                        }
-                    } else {
-                        callback.call(thisArg, collection, 0, [collection]);
-                    }
-                }
-                return collection;
-            },
-    
-            /**
-             * Iterates through object own properties calling callback on every property.
-             *
-             * For ex.
-             *  <blockquote>
-             *      forIn(obj, function(value, prop, obj){
-         *          value.prop = prop;
-         *      })
-             *  </pre>
-             *
-             * @param {Object} object
-             * @param {Function} callback function
-             * @param {Object} [thisArg] this object inside your callback
-             * @param {boolean} [all = false] whether iterate  through all properties
-             */
-            forIn: function (object, callback, thisArg, all) {
-                if (!thisArg) {
-                    thisArg = this;
-                }
-                if (callback) {
-                    for (var prop in object) {
-                        if (object.hasOwnProperty(prop) || all) {
-                            if (callback.call(thisArg, object[prop], prop, object) === false) {
-                                break;
-                            }
-                        }
-                    }
-                }
-                return object;
-            },
-    
-            /**
-             * Process asynchronous calling or array or object elements and performs callback on every item, when no items left, called last function.
-             *
-             * @param {Object|Array} obj to iterate through
-             * @param {Function} callback function will be called on every element
-             * @param {Function} [last] the last function when all elements processed
-             * @param {Object} [thisArg] this object inside your callback
-             */
-            sequence: function (obj, callback, last, thisArg) {
-                var keys = [];
-                if (!thisArg) {
-                    thisArg = this;
-                }
-                if (callback) {
-                    if (this.isCollection(obj)) {
-                        var index = -1;
-                        var length = obj.length;
-                        while (++index < length) {
-                            keys.push(index);
-                        }
-                    } else {
-                        keys = Object.keys(obj);
-                    }
-    
-                    var next = function () {
-                        var key = keys.shift();
-                        if (key === 0 || key) {
-                            var value = obj[key];
-                            callback.call(thisArg, value, next);
-                        } else {
-                            if (last) {
-                                last.call(thisArg, obj);
-                            }
-                        }
-                    }
-                    next();
-                }
-            },
-    
-            /**
-             * Generates unique identifier
-             *
-             * @returns string
-             */
-            uid: function () {
-                return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
-            },
-    
-            /**
-             * Copies all properties/items of source to destination. Supports collections and objects.
-             *
-             * For ex.
-             *  <pre>
-             *      extend([], array, function(item, i){
-         *          if(i == 0) return 'a';
-         *          return item;
-         *      });
-             *      extend({}, obj, function(value, prop){
-         *          if(prop == 'name') return 'a';
-         *          return value;
-         *      });
-             *  </pre>
-             *
-             * @param {Array|Object} destination
-             * @param {Array|Object} source
-             * @param {Function} [fn] Function to be called on every item/property to change the item.
-             * @returns Object|Array
-             */
-            extend: function (destination, source, fn) {
-                if (this.isCollection(destination) && this.isCollection(source)) {
-                    this.forEach(source, function (item, i) {
-                        if (fn) {
-                            item = fn(item, i);
-                        }
-                        destination.push(item);
-                    });
-                } else {
-                    this.forIn(source, function (value, prop) {
-                        if (fn) {
-                            value = fn(value, prop);
-                        }
-                        destination[prop] = value;
-                    }, this);
-                }
-                return destination;
-            },
-    
-            /**
-             * Writes debug string to console if debug enabled.
-             *
-             * @param {string} message
-             * @param {string} [group] starts new collapsed group
-             */
-            debug: function (message, group) {
-                if (this.debugEnabled) {
-                    if (group) {
-                        console.groupEnd();
-                        console.groupCollapsed(group);
-                    }
-                    console.log(message);
-                }
-            }
+
+    var valueFn = function (obj, idx, bindReady) {
+        var name = this.name;
+        var val = this.value;
+        var property = this.property;
+
+        if (_.isUndefined(bindReady)) {
+            bindReady = obj.$ready();
         }
-        ;
-    
-    /**
-     * Model object wrapper. In fact is created to extend originally passed object with utilities.
-     *
-     * @constructor
-     * @class model
-     * @this model
-     * @param {Object} obj
-     */
-    var model = function (obj) {
-        this._fetched = false;
-        _.extend(this, obj);
+
+        if (_.isFunction(val)) {
+            return _.safeCall(val, obj, bindReady)
+        } else {
+            if (property && _.isUndefined(val)) {
+                return findProperty(obj, property, idx);
+            }
+            if (!name) {
+                throw new Error("Where is your property?")
+            }
+            return findProperty(obj, name, idx);
+        }
     };
-    
-    model.prototype = _;
-    
-    /**
-     * Return or override attribute value on current bound
-     *
-     * @this bind
-     * @param {string} name attribute object
-     * @param {*} value attribute object
-     */
-    model.prototype.$attr = function (name, value) {
+
+    var findProperty = function (obj, name, idx) {
+        if (_.isUndefined(idx)) {
+            idx = -1;
+        }
+        var values = obj.$values;
+        if (idx >= 0 && values && _.isDefined(values[idx][name])) {
+            return values[idx][name];
+        }
+        if (idx >= 0 && values && VALUE == name) {
+            return values[idx];
+        }
+        return obj.$prop(name);
+    };
+
+    var attrValue = function (name, value) {
         if (this.$attrs) {
             var attr = this.$attrs[name];
             if (_.isUndefined(value)) {
@@ -1929,294 +1399,204 @@
         }
         return null;
     };
-    
-    /**
-     * Return or override property value on current bound
-     *
-     * @this bind
-     * @param {string} name property object like "name.length"
-     * @param {*} value property object
-     */
-    model.prototype.$prop = function (name, value) {
-        var res = this;
-        var split = name.split('.');
-        var i = 1;
-        var length = split.length;
-        while (i < length) {
-            res = res[split[i - 1]];
-            i++;
-            if (_.isUndefined(res)) {
-                return null;
-            }
-        }
-        var last = split[length - 1];
-        if (_.isUndefined(value)) {
-            return res[last];
+
+    var checkProperty = function (attr) {
+        var name = attr.name;
+        var index = name.indexOf('#');
+        if (index != -1) {
+            attr.name = name.substring(0, index);
+            attr.property = name.substring(index + 1);
+            attr.deps.push(attr.property);
         } else {
-            res[last] = value;
+            attr.deps.push(name);
         }
-        return null;
+        return attr;
     };
-    
-    /**
-     * Returns whether bind is ready. I.e. all dependencies are resolved.
-     *
-     * @this bind
-     * @returns boolean
-     */
-    model.prototype.$ready = function () {
-        var ready = true;
-        _.forEach(this.$deps, function (dep) {
-            var d = this['$' + dep];
-            if (d._empty) {
-                ready = false;
-                return false;
-            }
-            return true;
-        }, this);
-        return ready;
-    };
-    
-    
-    /**
-     * Execute function in try catch and returns call result or undefined.
-     *
-     * @param {Function} fn
-     * @param {Object} fnThis object that form this reference in function context.
-     * @param {boolean} [bindReady] whether bind on which function is called is ready.
-     * @returns Object|undefined
-     */
-    var safeCall = function (fn, fnThis, bindReady) {
-        var res;
-        var spliceArgs = 3;
-        if (_.isUndefined(bindReady) && _.isFunction(fnThis.$ready)) {
-            bindReady = fnThis.$ready();
-            spliceArgs = 2;
+
+    var parse = window.tie.$;
+
+    var renders = {};
+
+    var renderer = function (obj) {
+        this.obj = obj;
+        if (_.isUndefined(obj.$shown)) {
+            obj.$shown = true;
         }
-        try {
-            var args = Array.prototype.slice.call(arguments, spliceArgs);
-            res = fn.apply(fnThis, args);
-        } catch (e) {
-            res = undefined;
-            if (bindReady) {
-                console.groupCollapsed("User code error");
-                console.error('Is ready and had an error:' + e.message);
-                console.dir(e);
-                console.groupEnd();
-            }
-        }
-        return res;
-    };
-    
-    /**
-     * Function that returns either property from object or from values array.
-     *
-     * @param {model} obj object that used to search for property.
-     * @param {string} name property name.
-     * @param {number} [idx = -1] element index or -1.
-     * @returns Object|undefined
-     */
-    var findProperty = function (obj, name, idx) {
-        if (_.isUndefined(idx)) {
-            idx = -1;
-        }
-        var values = obj.$values;
-        if (idx >= 0 && values && _.isDefined(values[idx][name])) {
-            return values[idx][name];
-        }
-        if (idx >= 0 && values && VALUE == name) {
-            return values[idx];
-        }
-        return obj.$prop(name);
-    };
-    
-    /**
-     * Function that calculates attribute value.
-     *
-     * @param {model} obj object that from this reference in function context.
-     * @param {number} [idx = -1] element index or -1.
-     * @param {boolean} [bindReady] whether bind on which function is called is ready.
-     * @returns Object|undefined
-     */
-    var valueFn = function (obj, idx, bindReady) {
-        var name = this.name;
-        var val = this.value;
-        var property = this.property;
-    
-        if (_.isUndefined(bindReady)) {
-            bindReady = obj.$ready();
-        }
-    
-        if (_.isFunction(val)) {
-            return safeCall(val, obj, bindReady)
-        } else {
-            if (property && _.isUndefined(val)) {
-                return findProperty(obj, property, idx);
-            }
-            if (!name) {
-                throw new Error("Where is your property?")
-            }
-            return findProperty(obj, name, idx);
-        }
-    };
-    
-    
-    /**
-     * Bound object wrapper. Represents data manipulation layer and general access to dynamic bindings.
-     *
-     * @constructor
-     * @class bind
-     * @this bind
-     * @param {string} name tie name
-     * @param {Array} dependencies tie dependencies
-     * @param {Object} ties already registered ties dictionary
-     */
-    var bind = function (name, dependencies, ties) {
-        this.name = name;
-        this.touch = [];
+        obj.$attr = attrValue;
         this.values = {};
-        this.depends = dependencies || [];
         this.rendered = false;
         this.rendering = false;
         this.loaded = false;
         this.loading = false;
         this.selected = false;
-        this.applyCount = 0;
-        this.timeout = null;
         this.e = 0;
-    
-        /**
-         * Apply model changes. It renders current bind and updates dependencies.
-         *
-         * @this bind
-         * @param {string} property changed property name
-         */
-        this.apply = function (property) {
-            this.applyCount++;
-            if (this.applyCount > 10) {
-                _.debug("Too many apply :" + this.name + " - " + this.applyCount);
+        this.$ = [];
+    };
+
+    renderer.prototype = {
+        prepareAttrs: function (attrs, obj, watcher) {
+            if (attrs && _.isArray(attrs)) {
+                var res = {};
+                var r = this;
+                _.forEach(attrs, function (attr) {
+                    if (_.isString(attr)) {
+                        attr = {
+                            name: attr,
+                            property: null,
+                            deps: [],
+                            value: null,
+                            val: valueFn
+                        };
+                        attr = checkProperty(attr);
+                    }
+                    var name = attr.name;
+                    if (VALUE === name && _.isFunction(obj.value)) {
+                        attr.value = obj.value;
+                        delete obj.value;
+                    }
+                    if (attr.property || attr.value) {
+                        watcher.add(name, function (obj) {
+                            return obj.$attr(name);
+                        });
+                        watcher.watch(name, function (obj, prop, val) {
+                            obj.$attr(name, val);
+                        });
+                    }
+                    if (attr.deps.length > 0) {
+                        var d = attr.deps.join('|');
+                        watcher.watch(d, function () {
+                            r.render(name);
+                        });
+                    }
+                    res[name] = attr;
+                });
+                attrs = res;
             }
-            if (this.rendered) {
-                this.render(property);
+            return attrs;
+        },
+
+        query: function (q, obj, res, base) {
+            var nodes = base.querySelectorAll(q);
+            _.forEach(nodes, function (el) {
+                res.push(new $(el, obj));
+            });
+            return res;
+        },
+
+        select: function (base) {
+            var obj = this.obj;
+            var name = obj.$name;
+            var res = [];
+            if (!base) {
+                base = document;
             }
-            _.forEach(this.touch, function (item) {
-                var tie = ties[item];
-                if (tie) {
-                    tie.obj['$' + this.name] = this.obj;
+            res = this.query('[' + TIE + '="' + name + '"]', obj, res, base);
+            res = this.query('[' + TIE + '^="' + name + '|"]', obj, res, base);
+            res = this.query('[' + TIE + '^="' + name + ' |"]', obj, res, base);
+            res = this.query('[' + TIE + '^="' + name + '."]', obj, res, base);
+            obj.selected = true;
+            return res;
+        },
+
+        load: function () {
+            if (this.loading) {
+                return;
+            }
+            this.loading = true;
+            if (!this.selected) {
+                this.$ = this.select();
+                this.e = this.$.length;
+                _.debug("Elements selected: " + this.$.length);
+            }
+            this.loaded = true;
+            this.loading = false;
+        },
+
+        renderView: function () {
+            if (this.obj.$view && this.e > 0) {
+                var html = this.viewHtml();
+                if (html) {
+                    _.forEach(this.$, function (el) {
+                        if (el) {
+                            el.html(html);
+                        }
+                    });
+                }
+            }
+        },
+
+        viewHtml: function () {
+            var view = this.obj.$view;
+            var r = renders[view.name];
+            var html = '';
+            if (r) {
+                if (!r.loaded) {
+                    r.load();
+                }
+                _.forEach(r.$, function (el) {
+                    if (el) {
+                        html += el.html();
+                    }
+                });
+            }
+            return html;
+        },
+
+        renderAttr: function (attr, obj, idx, ready, el) {
+            var name = attr.name;
+            var val = attr.val(obj, idx, ready);
+            _.debug("Render attribute '" + name + "' with value " + val);
+            el.setAttribute(name, val);
+        },
+
+        render: function (property, force) {
+            if (!this.rendered && property && !force) {
+                return;
+            }
+            var obj = this.obj;
+            if (this.rendering && !force) {
+                return;
+            }
+            this.rendering = true;
+            var tieName = obj.$name;
+            _.debug("Render " + tieName, tieName + " Render");
+            if (!this.loaded) {
+                this.load();
+            }
+            var ready = obj.$ready();
+            _.forEach(this.$, function (el) {
+                if (el && (!el.isTied() || force)) {
+                    if (obj.$shown) {
+                        obj = parse(el.tie, obj);
+                        var attrs = obj.$attrs;
+                        var idx = el.index;
+                        if (attrs) {
+                            if (property) {
+                                var attr = attrs[property];
+                                if (attr) {
+                                    this.renderAttr(attr, obj, idx, ready, el);
+                                }
+                            } else {
+                                _.forIn(attrs, function (attr) {
+                                    this.renderAttr(attr, obj, idx, ready, el);
+                                }, this);
+                                el.setAttribute(TIED);
+                                el.setAttribute(CLASS, tieName);
+                                if (el.isInput) {
+                                    el.setAttribute(NAME, tieName);
+                                }
+                            }
+                        }
+                    } else {
+                        el.show(obj.$shown)
+                    }
                 }
             }, this);
-            if (!this.timeout) {
-                var that = this;
-                this.timeout = setTimeout(function () {
-                    that.timeout = null;
-                    that.applyCount = 0;
-                }, 3000);
-            }
-        };
-    };
-    
-    bind.prototype = {
-    
-        /**
-         * Internally checks and updates routes information on current bind.
-         *
-         * @this bind
-         */
-        prepareRoutes: function () {
-            var routes = this.obj.$routes;
-            if (routes) {
-                if (_.isArray(routes)) {
-                    this.obj.$routes = routes._({});
-                }
-                _.forIn(this.obj.$routes, function (route, path) {
-                    if (_.isFunction(route)) {
-                        route = {path: path, handler: route}
-                    } else {
-                        route = {path: path}
-                    }
-                    this.obj.$routes[path] = route;
-                }, this);
-            }
+            this.rendering = false;
+            this.rendered = true;
+            _.debug("Rendered " + tieName);
         },
-    
-        /**
-         * Internally checks and updates attributes information on current bind.
-         *
-         * @this bind
-         */
-        prepareAttrs: function () {
-            var attrs = this.obj.$attrs;
-            if (attrs) {
-                if (_.isArray(attrs)) {
-                    this.obj.$attrs = attrs._({});
-                }
-                _.forIn(this.obj.$attrs, function (attr, name) {
-                    if (_.isString(attr) && attr[0] == '#') {
-                        attr = {name: name, property: attr.substring(1)}
-                    } else if (_.isFunction(attr)) {
-                        attr = {name: name, value: attr}
-                    } else if (attr[ITEM_NAME]) {
-                        attr = {name: attr[ITEM_NAME]};
-                    } else {
-                        attr = {name: name, value: attr}
-                    }
-                    attr.val = valueFn;
-                    this.obj.$attrs[name] = attr;
-                }, this);
-            }
-        },
-    
-        /**
-         * Internally checks and updates values array current bind.
-         *
-         * @this bind
-         */
-        prepareValues: function () {
-            var values = this.obj.$values;
-            if (values) {
-                if (this.$.length - this.e == values.length) {
-                    this.rendered = false;
-                    return;
-                }
-                var newElements = {};
-                var nodes = {};
-                _.forEach(this.$, function (el) {
-                    if (el.index >= 0) {
-                        el.remove();
-                    }
-                }, this, true);
-                _.forEach(values, function (value, i) {
-                    _.forEach(this.$, function (el) {
-                        var id = el._id;
-                        var node = nodes[id];
-                        if (!node) {
-                            nodes[id] = node = el.$;
-                        }
-                        var newEls = newElements[id];
-                        if (!newEls) {
-                            newElements[id] = newEls = [];
-                        }
-                        var newElement = node.cloneNode(true);
-                        node.style.display = '';
-                        newElement.setAttribute(INDEX, i);
-                        newEls.push(newElement);
-                    });
-                }, this);
-                _.forEach(this.$, function (el) {
-                    var node = el.$;
-                    node.style.display = 'none';
-                    q.next(node, newElements[el._id]);
-                });
-                this.selected = false;
-            }
-        },
-    
-        /**
-         * Show/hide elements of current bind.
-         *
-         * @this bind
-         * @param {boolean} shown
-         */
+
         show: function (shown) {
             if (this.rendered) {
                 _.forEach(this.$, function (el) {
@@ -2225,456 +1605,450 @@
                     }
                 }, this);
             }
-        },
-    
-        /**
-         * Check elements show rules
-         *
-         * @this bind
-         */
-        validateShow: function () {
-            if (!this.loaded && !this.loading) {
-                this.load();
-            }
-            var that = this;
-            _.forEach(this.$, function (el) {
-                if (el) {
-                    el.pipeline(function (obj) {
-                        var shown = obj.$shown;
-                        if (shown && !that.rendered) {
-                            that.render();
-                        }
-                        el.show(shown);
-                    });
-                }
-            });
-        },
-    
-        /**
-         * Renders all elements of current bind. <br>
-         * Rendering means particularly check whether bind is loaded and load it if needed, <br>
-         * set value for every element attribute and show element if needed.
-         *
-         * @param {string} property changed property name
-         * @param {boolean} [force] force rendering
-         */
-        render: function (property, force) {
-            if (!this.obj.$shown || (this.rendering && !force)) {
-                return;
-            }
-            this.rendering = true;
-            var bindName = this.name;
-            _.debug("Render " + bindName, bindName + " Render");
-            if (!this.loaded && !this.loading) {
-                this.load();
-            }
-            var ready = this.obj.$ready();
-            var els = this.$.length;
-            var that = this;
-            var state = this.obj._fetched;
-            _.forEach(this.$, function (el) {
-                if (el) {
-                    el.pipeline(function (obj) {
-                        var attrs = obj.$attrs;
-                        var idx = el.index;
-                        if (attrs) {
-                            _.forIn(attrs, function (attr) {
-                                var val = attr.val(obj, idx, ready);
-                                var name = attr.name;
-                                _.debug("Render attribute '" + name + "' with value " + val);
-                                el.setAttribute(name, val);
-                            });
-                            el.setAttribute(TIED);
-                            if (el.isInput) {
-                                el.setAttribute('name', bindName);
-                            }
-                        }
-                        if (--els == 0) {
-                            that.rendering = false;
-                            that.rendered = true;
-                            _.debug("Rendered " + bindName);
-                        }
-                        if(obj._fetched && !state) {
-                            state = true;
-                            that.render(null, true);
-                        }
-                    });
-                }
-            });
-            if (els == 0) {
-                this.rendering = false;
-                this.rendered = true;
-                _.debug("Rendered " + bindName);
-            }
-        }
-    
-    };
-    
-    /**
-     * Application reference.
-     */
-    var app = null;
-    
-    /**
-     * Returns function to apply ties with closure ties dictionary.
-     *
-     * @return {Function} tie(name, object, [dependencies Array])
-     */
-    var tie = function () {
-        var ties = {};
-        return function (name, tiedObject, dependencies) {
-            if (RESERVED.indexOf('$' + name) != -1) {
-                throw new Error(name + ' is reserved. Please choose another name for your tie');
-            }
-            if (name != APP && ties[APP] == null) {
-                window.tie(APP, {});
-            }
-            var prev = ties[name];
-            if (prev && !prev.obj._empty && (_.isUndefined(dependencies) || prev.depends === dependencies)) {
-                return tie.prototype.update(prev, tiedObject);
-            } else {
-                var r = tie.prototype.init(name, tiedObject, dependencies, ties);
-                tie.prototype.define(name, r, ties);
-                if (name == APP) {
-                    app = r;
-                    routes.init(app);
-                    q.ready(function () {
-                        routes.locate(ties);
-                    });
-                }
-                return r.obj;
-            }
         }
     };
-    
-    /**
-     * Tie prototype
-     */
-    tie.prototype = {
-    
-        /**
-         * Select DOM elements which are bound to current tie. Using 'data-tie' attribute. <br/>
-         *
-         * @this tie
-         * @param {string} tieName name of current tie
-         * @param {bind} bind current tie bind
-         */
-        select: function (tieName, bind) {
-            var nodes = window.document.querySelectorAll('[' + TIE + '="' + tieName + '"]');
-            var res = [];
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, bind));
-            });
-            nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '|"]');
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, bind));
-            });
-            nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + ' |"]');
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, bind));
-            });
-            nodes = window.document.querySelectorAll('[' + TIE + '^="' + tieName + '."]');
-            _.forEach(nodes, function (el) {
-                res.push(new $(el, bind));
-            });
-            bind.selected = true;
+
+    var handle = window.tie.handle;
+
+    var onReady = function () {
+        _.debug("Render app");
+        _.forIn(renders, function (r) {
+            if (!r.rendered) {
+                r.render();
+                r.renderView();
+            }
+        });
+        _.debug("Rendered app");
+    };
+
+    var add = function (obj, watcher, handlerId) {
+        var r = new renderer(obj);
+        renders[obj.$name] = r;
+        watcher.watch('_deleted', function (obj, prop, val) {
+            if (val) {
+                delete renders[obj.$name];
+                watcher.remove(handlerId)
+            }
+        });
+        if (q.ready()) {
+            setTimeout(function () {
+                r.render();
+                r.renderView()
+            }, 100);
+        }
+        return r;
+    };
+
+    handle("attr", function () {
+        return attrValue;
+    }, ['attrs'], true);
+
+    handle("attrs", function (obj, config, watcher) {
+        if (config) {
+            var r = add(obj, watcher, this._uid);
+            config = r.prepareAttrs(config, obj, watcher);
+        }
+        return config;
+    }, ['view'], true);
+
+    handle("shown", function (obj, config) {
+        var r = renders[obj.$name];
+        if (r) {
+            r.show(config);
+        }
+        return config;
+    }, ['attrs'], true);
+
+    handle("view", function (obj, config, watcher, appConfig) {
+        if (_.isString(config)) {
+            config = {
+                name: config,
+                url: appConfig ? appConfig.url : ''
+            };
+        }
+        if (!config.name) {
+            return undefined;
+        }
+        var r = renders[obj.$name];
+        if (r && q.ready() && r.rendered) {
+            setTimeout(function() {
+                r.renderView();
+            },100);
+        }
+        return config;
+    }, [], true);
+
+
+    q.ready(onReady);
+
+    window.tie.domReady = q.ready;
+
+    window.tie.attr = function (name, value, dependencies) {
+        var attr = {
+            name: name,
+            property: null,
+            deps: dependencies || [],
+            value: value,
+            val: valueFn
+        };
+        if (value && name.indexOf('#') != -1) {
+            throw new Error('Property and calculated value combination is not supported');
+        }
+        if (!value) {
+            attr = checkProperty(attr);
+        }
+        return attr;
+    };
+
+    if (typeof window.exports === 'object') {
+        window.exports = function () {
+            var res = {};
+            res.q = q;
+            res.el = $;
+            res.renders = renders;
+            res.clean = function() {
+                res.renders = renders = {};
+            };
             return res;
-        },
-    
-        /**
-         * Create object based on primitive value
-         *
-         * @this tie
-         * @param {Object} obj primitive
-         * @return {{value: Object, $attrs: Array}}
-         */
-        wrapPrimitive: function (obj) {
-            return {
-                value: obj,
-                $attrs: [VALUE]
-            }
-        },
-    
-        /**
-         * Create object based on function
-         *
-         * @this tie
-         * @param {Function} fn
-         * @return {{$attrs: {value: Function}}}
-         */
-        wrapFunction: function (fn) {
-            return {
-                $attrs: {
-                    value: fn
-                }
-            }
-        },
-    
-        /**
-         * Create object based on array
-         *
-         * @this tie
-         * @param {Array} array
-         * @return {{$values: Array, $attrs: Array}}
-         */
-        wrapArray: function (array) {
-            return {
-                $values: array,
-                $attrs: [VALUE]
-            };
-        },
-    
-        /**
-         * Checks object and wraps it if necessary. Also specify $shown, attrs and routes properties if empty.
-         *
-         * @this tie
-         * @param {Object|Function|Date|Array|*} obj
-         * @returns {model}
-         */
-        check: function (obj) {
-            if (_.isFunction(obj)) {
-                obj = this.wrapFunction(obj);
-            } else if (!_.isObject(obj) || _.isDate(obj)) {
-                obj = this.wrapPrimitive(obj);
-            } else if (_.isArray(obj)) {
-                obj = this.wrapArray(obj);
-            }
-            if (_.isUndefined(obj.$shown)) {
-                obj.$shown = true;
-            }
-            if (_.isUndefined(obj.$attrs)) {
-                obj.$attrs = {};
-            }
-            if (_.isUndefined(obj.$routes)) {
-                if (app != null && app.obj.$routes) {
-                    obj.$routes = app.obj.$routes;
-                }
-            }
-            obj.$http = new http(obj.$http);
-            return new model(obj);
-        },
-    
-        /**
-         * Resolves dependencies.<br/>
-         * If dependency not yet present, stub will be created and later replaced when dependency is tied.
-         * If not all dependencies are resolved yet bind is presumed as not ready and errors will be skipped.
-         *
-         *
-         * @this tie
-         * @param {bind} bind associated bind
-         * @param {Array} dependencies tie dependencies
-         * @param {Object} ties already registered ties dictionary
-         */
-        resolve: function (bind, dependencies, ties) {
-            if (!dependencies) {
-                return;
-            }
-            _.forEach(dependencies, function (dep) {
-                var found = ties[dep];
-                if (!found) {
-                    found = {name: dep, touch: [], obj: {_empty: true}};
-                    this.define(dep, found, ties);
-                }
-                bind.obj['$' + dep] = found.obj;
-                if (found.touch.indexOf(bind.name) == -1) {
-                    found.touch.push(bind.name);
-                }
-            }, this);
-        },
-    
-        /**
-         * Defines current bind in the registry and resolves stubs that were created for dependant ties.<br/>
-         * That will also update dependant ties with new dependency.
-         *
-         * @this tie
-         * @param {string} name tie name
-         * @param {bind} bind associated bind
-         * @param {Object} ties already registered ties dictionary
-         */
-        define: function (name, bind, ties) {
-            var old = ties[name];
-            ties[name] = bind;
-            if (old && old.touch) {
-                bind.touch = old.touch;
-                bind.rendered = old.rendered;
-                _.debug("Calling apply on '" + bind.name + "' after define");
-                bind.apply();
-            }
-        },
-    
-        /**
-         * Updates current tie with another tied object
-         *
-         *
-         * @this tie
-         * @param {bind} bind already associated bind
-         * @param {*} tiedObject
-         * @returns {bind}
-         */
-        update: function (bind, tiedObject) {
-            var name = bind.name;
-            _.debug("Update tie " + name, name);
-            _.extend(bind.obj, this.check(tiedObject));
-            bind.prepareAttrs();
-            bind.prepareRoutes();
-            bind.prepareValues();
-            _.debug("Prepared inner array structure");
-            proxy(bind);
-            if (!bind.selected) {
-                this.$ = tie.select(name, bind);
-                _.debug("Elements reselected: " + this.$.length);
-            }
-            if (!bind.rendered) {
-                bind.render();
-            }
-            return bind;
-        },
-    
-        /**
-         * Initializes binding.<br/>
-         * Also specifies bind loading method, that selects DOM elements and prepare values array binding.
-         *
-         * @this tie
-         * @param {string} name tie name
-         * @param {*} tiedObject
-         * @param {Array} dependencies tie dependencies
-         * @param {Object} ties already registered ties dictionary
-         * @returns {bind}
-         */
-        init: function (name, tiedObject, dependencies, ties) {
-            _.debug("Tie " + name, name);
-            var r = new bind(name, dependencies, ties);
-            r.obj = this.check(tiedObject);
-            r.prepareAttrs();
-            r.prepareRoutes();
-            this.resolve(r, dependencies, ties);
-            r.obj.$deps = r.depends;
-            proxy(r);
-            _.debug("Bind model ready");
-            var tie = this;
-            r.load = function () {
-                this.loading = true;
-                if (!this.selected) {
-                    this.$ = tie.select(name, r);
-                    this.e = this.$.length;
-                    _.debug("Elements selected: " + this.$.length);
-                }
-                r.prepareValues();
-                _.debug("Prepared inner array structure");
-                if (!this.selected) {
-                    this.$ = tie.select(name, r);
-                    _.debug("Elements reselected: " + this.$.length);
-                }
-                this.loaded = true;
-                this.loading = false;
-            };
-            return r;
-        }
+        };
+    }
+
+})(window);
+
+
+
+/**
+ * Tie.js HTTP handle
+ *
+ * Copyright 2013, Wolfgang Bas
+ * Released under the MIT License
+ */
+(function (window) {
+    'use strict';
+
+    var _ = window.tie._;
+
+    var defaults = {
+        type: "GET",
+        mime: "json"
     };
 
-
-    /**
-     * Exports
-     */
-    window.tie = tie();
-    window.tie.pipes = pipes;
-    window.tie.enableDebug = function (enable) {
-        _.debugEnabled = enable;
+    var mimeTypes = {
+        script: "text/javascript, application/javascript",
+        json: "application/json",
+        xml: "application/xml, text/xml",
+        html: "text/html",
+        text: "text/plain"
     };
 
-    /**
-     * Property pipeline definition
-     */
-    pipes("property", function (obj, params, next, value) {
-        if (params && params.length > 0) {
-            var prop = params[0];
-            var target = params.length > 1 ? params[1] : VALUE;
-            if (_.isUndefined(value)) {
-                obj.$prop(target, obj.$prop(prop))
-            } else {
-                obj.$prop(prop, value);
-            }
+    var headers = function (xhr, headers, contentType, dataType) {
+        if (contentType) {
+            headers["Content-Type"] = contentType;
         }
-         return obj;
-    }, {updateModel: true});
+        if (dataType) {
+            headers["Accept"] = mimeTypes[dataType];
+        }
+        _.forIn(headers, function (header, name) {
+            xhr.setRequestHeader(name, header);
+        });
+    };
 
-    /**
-     * Value pipeline definition
-     */
-    pipes("value", function (obj, params) {
-        if (params && params.length > 0) {
-            var prop = params[0];
-            var val = params.length > 1 ? params[1] : null;
-            obj.$prop(prop, val);
-        }
-        return obj;
-    });
-
-    /**
-     * Routes pipeline definition
-     */
-    pipes("routes", function (obj, params) {
-        if (params && params.length > 0) {
-            var add = params[0] === '+';
-            var subtract = params[0] === '-';
-            if (add) {
-                params.splice(0, 1);
-                this.forEach(params, function (item) {
-                    obj.$routes[item] = {path: item};
-                });
-            } else if (subtract) {
-                params.splice(0, 1);
-                this.forEach(params, function (item) {
-                    delete obj.$routes[item];
-                });
-            } else {
-                obj.$routes = {};
-                this.forEach(params, function (item) {
-                    obj.$routes[item] = {path: item};
-                });
-            }
-        }
-        return obj;
-    }, {updateRoutes: true});
-
-    var load = function (obj, params, next) {
-        if(obj._fetched) {
-            return obj;
-        }
-        var opts = {};
-        if (params && params.length > 0) {
-            var trim = this.trim;
-            this.forEach(params, function (item) {
-                var splits = item.split(':');
-                if (splits.length == 2) {
-                    opts[trim(splits[0])] = trim(splits[1]);
+    var stateChange = function (req, url, dataType, type, http) {
+        return function () {
+            var xhr = req.xhr;
+            if (xhr.readyState === 4) {
+                _.debug("Process response");
+                var status = xhr.status;
+                var err, data;
+                if ((status >= 200 && status < 300) || status === 0) {
+                    data = response(req, dataType);
                 } else {
-                    opts[trim(splits[0])] = '';
+                    data = xhr.responseText;
+                    err = status;
                 }
-            });
+                if (!err && _.isObject(data) && type === defaults.type && http.cache) {
+                    http.memo(url, dataType, data);
+                }
+                req.done(data, err);
+            }
+            return null;
         }
-        obj.$http.get(opts, function (data, err) {
-            if (err) {
-                console.error(err);
-            } else if (_.isObject(data)) {
-                _.extend(obj, data);
+    };
+
+    var response = function (request, dataType) {
+        var xhr = request.xhr;
+        var response = xhr.responseText;
+        if (response) {
+            if (dataType === defaults.mime) {
+                try {
+                    response = JSON.parse(response);
+                } catch (error) {
+                    request.done(response, error);
+                }
+            } else if (dataType === "xml") {
+                response = xhr.responseXML;
+            }
+        }
+        return response;
+    };
+
+    var request = function (xhr, fn) {
+        this.xhr = xhr;
+        this.ready = false;
+        this.fn = fn;
+    };
+
+    request.prototype = {
+
+        cancel: function () {
+            if (this.xhr) {
+                this.xhr.abort();
+            }
+            this.ready = false;
+            delete  this.data;
+            delete  this.err;
+        },
+
+        done: function (data, err) {
+            this.ready = true;
+            this.data = data;
+            this.err = err;
+            _.debug('Request ready with response:' + data + ' and error:' + err);
+            if (this.fn) {
+                _.safeCall(this.fn, this, true, data, err);
             } else {
                 console.log('Response received:' + data);
             }
-            next(obj);
-        });
-        return null;
+        }
     };
 
-    /**
-     * Load pipeline definition
-     */
-    pipes("load", load);
+    var prepareURL = function (url, params) {
+        if (!url) {
+            return url;
+        }
+        var index = url.indexOf('?');
+        var clearUrl = url.substring(0, index + 1 ? index : url.length);
+        var splits = clearUrl.split('/');
+        _.forEach(splits, function (split) {
+            if (split[0] === ':') {
+                var name = split.substr(1);
+                var val = params[ name];
+                if (_.isDefined(val)) {
+                    url.replace(split, val);
+                    delete  params[name];
+                }
+            }
+        });
+        return url;
+    };
 
-    /**
-     * Fetch pipeline definition
-     */
-    pipes("fetch", load, {fetchModel: true});
+    var gatherParams = function (params, url) {
+        var sign = "";
+        if (url) {
+            sign = url.indexOf("?") + 1 ? "&" : "?";
+        }
+        var res = sign;
+        _.forIn(params, function (param, name) {
+            if (res !== sign) {
+                res += "&";
+            }
+            res += name + "=" + param;
+        });
+        return res === sign ? '' : res;
+    };
 
+    var prepareOpts = function (opts, params) {
+        var res = {};
+        var app = opts.app;
+        var appURL = app && app.url ? app.url : '';
+        if (/\{url\}/ig.test(appURL)) {
+            res.url = appURL.replace(/\{url\}/ig, (opts.url || ''));
+        } else {
+            res.url = opts.url ? (appURL + opts.url) : appURL;
+        }
+        if (!res.url) {
+            throw new Error("URL is not defined");
+        }
+        var appParams = app && app.params ? app.params : {};
+        res.params = opts.params ? _.extend(appParams, opts.params) : appParams;
+        if (params) {
+            _.extend(res.params, params);
+        }
+        res.url = prepareURL(res.url, res.params);
+        var appHeaders = app && app.headers ? app.headers : {};
+        res.headers = opts.headers ? _.extend(appHeaders, opts.headers) : appHeaders;
+        res.type = opts.type ? opts.type : (app && app.type ? app.type : defaults.type);
+        res.contentType = opts.contentType ? opts.contentType : (app && app.contentType ? app.contentType : null);
+        res.dataType = opts.dataType ? opts.dataType : (app && app.dataType ? app.dataType : defaults.mime);
+        return res;
+    };
+
+    var getReadyFn = function (onReady) {
+        var fn = null;
+        if (_.isFunction(onReady)) {
+            fn = onReady;
+        } else if (_.isObject(onReady)) {
+            fn = function (data, err) {
+                if (err) {
+                    console.error(err);
+                } else if (_.isObject(data)) {
+                    _.extend(onReady, data);
+                } else {
+                    console.log('Response received:' + data);
+                }
+            };
+        }
+        return fn;
+    };
+
+    var ajax = function (opts, http, onReady, refetch) {
+        var type = opts.type;
+        var url = opts.url;
+        var params = opts.params;
+        var dataType = opts.dataType;
+        var contentType = opts.contentType;
+        var heads = opts.headers;
+        var cached = null;
+        _.debug("Ajax call to " + url);
+        if (type === defaults.type) {
+            url += gatherParams(params, url);
+            params = null;
+            if (http.cache && !refetch) {
+                cached = http.memo(url, dataType);
+            }
+        } else {
+            params = gatherParams(params);
+        }
+        if (/=\$JSONP/ig.test(url)) {
+            return http.jsonp(url, params, onReady, refetch);
+        }
+        var xhr = new window.XMLHttpRequest();
+        var req = new request(xhr, getReadyFn(onReady));
+        if (cached) {
+            _.debug("Got cached result");
+            req.done(cached, null);
+        } else {
+            xhr.onreadystatechange = stateChange(req, url, dataType, type, http);
+            xhr.open(type, url);
+            headers(xhr, heads, contentType, dataType);
+            try {
+                _.debug("Send request");
+                xhr.send(params);
+            } catch (error) {
+                req.done(null, error);
+            }
+        }
+        return req;
+    };
+
+    var jsonp = function (opts, http, onReady, refetch) {
+        var url = opts.url;
+        var params = opts.params;
+        var head = window.document.getElementsByTagName("head")[0];
+        var script = window.document.createElement("script");
+        url = prepareURL(url, params);
+        url += gatherParams(params, url);
+        _.debug("JSONP call to " + url);
+        var cached = null;
+        if (http.cache && !refetch) {
+            cached = http.memo(url, defaults.mime);
+        }
+        var req = new request(null, getReadyFn(onReady));
+        if (cached) {
+            _.debug("Got cached result");
+            req.done(cached, null);
+        } else {
+            var callbackName = "jsonp" + _.uid();
+            window[callbackName] = function (response) {
+                head.removeChild(script);
+                delete window[callbackName];
+                _.debug("Process response");
+                http.memo(url, defaults.mime, response);
+                return req.done(response, null);
+            };
+
+            _.debug("Create JSONP request");
+            script.type = "text/javascript";
+            script.src = url.replace(/=\$JSONP/ig, "=" + callbackName);
+            head.appendChild(script);
+        }
+        return req;
+    };
+
+    var form = function (http, type, params, onReady) {
+        var opts = prepareOpts(http, params);
+        opts.type = type;
+        opts.contentType = "application/x-www-form-urlencoded";
+        return ajax(opts, http, onReady);
+    };
+
+    var http = function (options, ownConfig, appConfig) {
+        this.memoize = {};
+        this.cache = true;
+        this.app = appConfig;
+        //skip app config now, it will be used later in prepareOpts
+        if (options && ownConfig) {
+            if (options.url) {
+                this.url = options.url;
+            }
+            if (options.params) {
+                this.params = options.params;
+            }
+            if (options.headers) {
+                this.headers = options.headers;
+            }
+            if (options.dataType) {
+                this.dataType = options.dataType;
+            }
+            if (_.isDefined(options.cache)) {
+                this.cache = options.cache;
+            }
+        }
+    };
+
+    http.prototype = {
+
+        // url with '=$JSONP' to replace by callback name or '$JSONP' as value in params
+        jsonp: function (url, params, onReady, refetch) {
+            var opts = {};
+            opts.url = url;
+            opts.params = params;
+            return jsonp(opts, this, onReady, refetch);
+        },
+
+        get: function (params, onReady, refetch) {
+            var opts = prepareOpts(this, params);
+            opts.type = defaults.type;
+            opts.contentType = null;
+            return ajax(opts, this, onReady, refetch);
+        },
+
+        post: function (params, onReady) {
+            return form(this, "POST", params, onReady);
+        },
+
+        put: function (params, onReady) {
+            return form(this, "PUT", params, onReady);
+        },
+
+        "delete": function (params, onReady) {
+            return form(this, "DELETE", params, onReady);
+        },
+
+        memo: function (url, type, value) {
+            var hash = url + type;
+            if (_.isDefined(value)) {
+                this.memoize[hash] = value;
+            }
+            return this.memoize[hash];
+        }
+
+    };
+
+    var handle = window.tie.handle;
+
+    handle("http", function (obj, config, watcher, appConfig) {
+        return new http(config, _.isDefined(obj.$http), appConfig);
+    }, ['attrs'], true);
 
 })(window);

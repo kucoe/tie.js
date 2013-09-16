@@ -2,7 +2,7 @@ var fs = require('fs');
 var spawn = require('child_process').spawn;
 var jsdoc = "node_modules/jsdoc/nodejs/bin/jsdoc";
 var path = 'docs';
-var args = [jsdoc, 'src/modules', 'README.md', '-d', path];
+var args = [jsdoc, 'src/lib', 'README.md', '-d', path];
 
 if(fs.exists(path)) {
     fs.unlinkSync(path);
