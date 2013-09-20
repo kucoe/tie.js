@@ -155,6 +155,9 @@ describe('util', function () {
             var context = {b: 'b'};
             util.convert("['a', '#b', 'c']", context).should.eql(['a', context.b, 'c'], "object");
         });
+        it('should parse empty string', function () {
+            util.convert('').should.eql('', "empty");
+        });
     });
     describe('forEach', function () {
         it('should work safely', function () {
