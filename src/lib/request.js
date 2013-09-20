@@ -141,6 +141,25 @@ var getReadyFn = function (onReady) {
     return fn;
 };
 
+var handleRequestErrors = function(err, success) {
+    if (err) {
+        switch (err.code) {
+            case 'ECONNREFUSED':
+                console.log('Connection refused.');
+                break;
+
+            case 'ENOTFOUND':
+                console.log('Could not reach server.');
+                break;
+
+            default:
+                throw err;
+        }
+    } else {
+        success();
+    }
+};
+
 var connect = function (opts, http, onReady, refetch) {
     var type = opts.type;
     var url = opts.url;

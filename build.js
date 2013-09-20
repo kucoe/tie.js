@@ -12,6 +12,6 @@ fs.writeFileSync(dest, all, 'utf8');
 
 var code = fs.readFileSync(dest, 'utf8');
 code = ugly.minify(code, {fromString: true});
-fs.writeFileSync(min, code.code);
+fs.writeFileSync(min, code.code, 'utf8');
 
 
