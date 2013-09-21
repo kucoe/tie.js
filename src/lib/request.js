@@ -7,9 +7,10 @@
 
 
 var _;
+var testMode = false;
 
 var defaults = {
-    type: "GET",
+    method: "GET",
     mime: "json"
 };
 
@@ -31,13 +32,13 @@ var headers = function (headers, contentType, dataType) {
     return headers;
 };
 
-var request = function (req, fn) {
+var connection = function (req, fn) {
     this.request = req;
     this.ready = false;
     this.fn = fn;
 };
 
-request.prototype = {
+connection.prototype = {
 
     cancel: function () {
         if (this.request && _.isFunction(this.request.abort)) {
@@ -116,7 +117,7 @@ var prepareOpts = function (opts, params) {
     res.url = prepareURL(res.url, res.params);
     var appHeaders = app && app.headers ? app.headers : {};
     res.headers = opts.headers ? _.extend(appHeaders, opts.headers) : appHeaders;
-    res.type = res.method = opts.type ? opts.type : (app && app.type ? app.type : defaults.type);
+    res.method = opts.method ? opts.method : (app && app.method ? app.method : defaults.method);
     res.contentType = opts.contentType ? opts.contentType : (app && app.contentType ? app.contentType : null);
     res.dataType = opts.dataType ? opts.dataType : (app && app.dataType ? app.dataType : defaults.mime);
     res = _.extend(res, require('url').parse(res.url));
@@ -141,52 +142,48 @@ var getReadyFn = function (onReady) {
     return fn;
 };
 
-var handleRequestErrors = function(err, success) {
-    if (err) {
-        switch (err.code) {
-            case 'ECONNREFUSED':
-                console.log('Connection refused.');
-                break;
-
-            case 'ENOTFOUND':
-                console.log('Could not reach server.');
-                break;
-
-            default:
-                throw err;
-        }
-    } else {
-        success();
+var handleRequestErrors = function (err, conn, url) {
+    switch (err.code) {
+        case 'ECONNREFUSED':
+            console.error('Connection refused from address: ' + url);
+            break;
+        case 'ECONNRESET':
+            console.error('Connection reset for address: ' + url);
+            break;
+        case 'ENOTFOUND':
+            console.error('Could not reach server by address: ' + url);
+            break;
+        default:
+            conn.done(null, err);
     }
 };
 
 var connect = function (opts, http, onReady, refetch) {
-    var type = opts.type;
+    var method = opts.method;
     var url = opts.url;
     var params = opts.params;
     var dataType = opts.dataType;
     var contentType = opts.contentType;
-    var heads = opts.headers;
-    heads = headers(heads, contentType, dataType);
+    opts.headers = headers(opts.headers, contentType, dataType);
     var cached = null;
     _.debug("Connect to " + url);
-    if (type === defaults.type) {
-        url += gatherParams(params, url);
-        params = '';
+    if (method === defaults.method) {
+        opts.url = url += gatherParams(params, url);
+        opts.params = params = '';
         if (http.cache && !refetch) {
             cached = http.memo(url, dataType);
         }
     } else {
-        params = gatherParams(params);
+        opts.params = params = gatherParams(params);
     }
-    var req;
+    var conn;
     if (cached) {
-        req = new request({}, getReadyFn(onReady));
+        conn = new connection({}, getReadyFn(onReady));
         _.debug("Got cached result");
-        req.done(cached, null);
+        conn.done(cached, null);
     } else {
-        console.log(opts);
-        var main = require(url.substr(0, 8) == 'https://' ? 'https' : 'http').request(opts, function (res) {
+        //console.log(opts);
+        var req = require(url.substr(0, 8) == 'https://' ? 'https' : 'http').request(opts, function (res) {
             res.setEncoding('utf8');
             res.on('data', function (chunk) {
                 _.debug("Process response");
@@ -204,36 +201,39 @@ var connect = function (opts, http, onReady, refetch) {
                 } else {
                     err = status;
                 }
-                if (!err && _.isObject(data) && type === defaults.type && http.cache) {
+                if (!err && _.isObject(data) && method === defaults.method && http.cache) {
                     http.memo(url, dataType, data);
                 }
-                req.done(data, err);
+                conn.done(data, err);
             });
         });
 
-        req = new request(main, getReadyFn(onReady));
-        main.on('error', function (error) {
-            req.done(null, error);
+        conn = new connection(req, getReadyFn(onReady));
+        if (testMode) {
+            _.extend(req, opts);
+        }
+        req.on('error', function (error) {
+            handleRequestErrors(error, conn, url);
         });
 
         // write data to request body
         _.debug("Send request");
-        main.write(params);
-        main.end();
+        req.write(params);
+        req.end();
     }
-    return req;
+    return conn;
 };
 
-var form = function (http, type, params, onReady) {
-    var opts = prepareOpts(http, params);
-    opts.type = type;
+var form = function (request, method, params, onReady) {
+    var opts = prepareOpts(request, params);
+    opts.method = method;
     opts.contentType = "application/x-www-form-urlencoded";
-    return connect(opts, http, onReady);
+    return connect(opts, request, onReady);
 };
 
-var http = function (options, ownConfig, appConfig) {
+var request = function (options, ownConfig, appConfig) {
     this.memoize = {};
-    this.cache = true;
+    this.cache = false;
     this.app = appConfig;
     //skip app config now, it will be used later in prepareOpts
     if (options && ownConfig) {
@@ -255,11 +255,11 @@ var http = function (options, ownConfig, appConfig) {
     }
 };
 
-http.prototype = {
+request.prototype = {
 
     get: function (params, onReady, refetch) {
         var opts = prepareOpts(this, params);
-        opts.type = defaults.type;
+        opts.method = defaults.method;
         opts.contentType = null;
         return connect(opts, this, onReady, refetch);
     },
@@ -287,14 +287,15 @@ http.prototype = {
 };
 
 
-module.exports = function (core) {
+module.exports = function (core, test) {
     init(core);
     _ = core._;
-    return http;
+    testMode = test;
+    return request;
 };
 
 var init = function (tie) {
     tie.handle("request", function (obj, config, watcher, appConfig) {
-        return new http(config, _.isDefined(obj.$http), appConfig);
+        return new request(config, _.isDefined(obj.$request), appConfig);
     }, [], true);
 };
