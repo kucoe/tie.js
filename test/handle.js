@@ -8,7 +8,7 @@ describe('handle', function () {
         var prop;
         for (prop in handles) {
             if (prop === 'attrs' || prop === 'shown' || prop === 'attr' || prop === 'http'
-                || prop === 'require' || prop === 'file' || prop === 'view') {
+                || prop === 'require' || prop === 'file' || prop === 'view' || prop === 'request') {
                 continue;
             }
             if (handles.hasOwnProperty(prop)) {
