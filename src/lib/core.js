@@ -496,23 +496,65 @@
         return p;
     };
 
-    var pipeModel = function (obj) {
-        obj = _.clone(obj);
-        return chain(obj);
+    var chain = function (obj) {
+        this.obj = obj;
+        this.sequence = [];
+        this.async = false;
     };
 
-    var chain = function (obj) {
-        return function () {
-            if (arguments.length == 0) {
-                return obj;
+    chain.prototype = {
+        next: function (res) {
+            this.obj = res;
+            this.started = true;
+            if (this.sequence.length > 0) {
+                var fn = this.sequence.shift();
+                if (_.isFunction(fn)) {
+                    fn(res);
+                }
             }
-            obj = pipeline.apply(obj, args2Array(arguments));
-            return chain(obj);
+        },
+
+        pipe: function () {
+            var self = this;
+            if (arguments.length == 0) {
+                self.sequence = [];
+                return self.obj;
+            }
+            var args = args2Array(arguments);
+            args.push(function (res) {
+                self.next(res);
+            });
+            var next = function (res) {
+                res = pipeline.apply(res, args);
+                if (_.isObject(res)) {
+                    self.started = false;
+                    self.next(res);
+                } else {
+                    self.async = true;
+                }
+            };
+            self.sequence.push(next);
+            if (!self.async) {
+                self.next(self.obj);
+            }
+            return self.pipe.bind(self);
         }
+    };
+
+    var pipeModel = function (obj) {
+        obj = _.clone(obj);
+        var c = new chain(obj);
+        return c.pipe.bind(c);
     };
 
     var pipeline = function () {
         var p = arguments[0];
+        var fn = undefined;
+        var last = arguments[arguments.length - 1];
+        if (_.isFunction(last)) {
+            fn = last;
+            Array.prototype.splice.call(arguments, arguments.length - 1);
+        }
         if (_.isString(p)) {
             var name = p;
             p = pipesRegistry[p];
@@ -523,10 +565,10 @@
             p = pipes('%tmp%', p);
         }
         var params = args2Array(arguments, 1);
-        return p(this, params);
+        return p(this, params, fn);
     };
 
-    var parser = function (string, obj) {
+    var parser = function (string, fn, obj) {
         string = _.trim(string || "");
         var tokens = string.split('|');
         var t = tokens[0];
@@ -538,17 +580,22 @@
             tokens = tokens.splice(1);
         }
         if (!obj) {
-            obj = ties[t].obj;
+            obj = tie(t);
+        } else {
+            obj = pipeModel(obj);
         }
-        obj = _.clone(obj);
         _.forEach(tokens, function (item) {
             var p = parser.prototype.parse(item);
             var args = [p.name];
             args = _.extend(args, p.params);
             _.debug("Parsed pipe" + JSON.stringify(args));
-            obj = pipeline.apply(obj, args);
+            obj = obj.apply(obj, args);
         });
-        return obj;
+        if (_.isFunction(fn)) {
+            return obj.apply(obj, [fn]);
+        } else {
+            return obj();
+        }
     };
 
     parser.prototype = {
@@ -1022,7 +1069,7 @@
     handles("require", function (obj, config) {
         if (_.isFunction(module.require)) {
             module.require(config);
-        }  else {
+        } else {
             console.error('Require is undefined');
         }
         return config;

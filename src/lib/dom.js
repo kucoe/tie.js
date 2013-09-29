@@ -533,7 +533,7 @@
             _.forEach(this.$, function (el) {
                 if (el && (!el.isTied() || force)) {
                     if (obj.$shown) {
-                        obj = parse(el.tie, obj);
+                        obj = parse(el.tie, undefined, obj);
                         var attrs = obj.$attrs;
                         var idx = el.index;
                         if (attrs) {
