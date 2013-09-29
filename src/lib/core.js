@@ -474,7 +474,7 @@
     };
 
     var pipe = function (name, fn, dependencies) {
-        var p = function (obj, params) {
+        var p = function (obj, params, next) {
             _.debug("Process pipe " + name);
             _.forEach(dependencies, function (item) {
                 p[DEP_PREFIX + item] = pipesRegistry[item];
@@ -488,7 +488,7 @@
                 });
             }
             if (fn && _.isFunction(fn)) {
-                obj = _.safeCall(fn, p, true, obj, params);
+                obj = _.safeCall(fn, p, true, obj, params, next);
             }
             _.debug("Ready pipe " + name);
             return obj;

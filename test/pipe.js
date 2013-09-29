@@ -176,4 +176,20 @@ describe('pipe', function () {
         a.value.should.eql("aral", "original");
         b.value.should.eql("uu", "pipe");
     });
+    it.only('should allow async pipe', function (done) {
+        tie.pipe("asyncup", function (obj, params, next) {
+            var self = this;
+            setTimeout(function(){
+                obj.value = self.uppercase(obj.value);
+                next(obj);
+            }, 200);
+        });
+        var a = tie("a", {value: "aral", name: 'uu'});
+        tie.$("a|asyncup|.name", function(obj) {
+            a.value.should.eql("aral", "original");
+            obj.value.should.eql("uu", "pipe");
+            done();
+        });
+
+    });
 });
