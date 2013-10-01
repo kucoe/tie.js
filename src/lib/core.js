@@ -57,11 +57,11 @@
         },
 
         isString: function (value) {
-            return typeof value == 'string';
+            return typeof value == 'string' || {}.toString.apply(value) == '[object String]';
         },
 
         isNumber: function (value) {
-            return typeof value == 'number';
+            return typeof value == 'number' || {}.toString.apply(value) == '[object Number]';
         },
 
         isDate: function (value) {
@@ -89,7 +89,7 @@
         },
 
         isBoolean: function (value) {
-            return typeof value == 'boolean';
+            return typeof value == 'boolean' || {}.toString.apply(value) == '[object Boolean]';
         },
 
         trim: function (value) {
@@ -966,13 +966,10 @@
 
     tie.prototype = {
 
-        wrap: function (obj) {
-            return {value: obj}
-        },
-
         check: function (obj) {
-            if (_.isFunction(obj) || _.isArray(obj) || !_.isObject(obj) || _.isDate(obj)) {
-                obj = this.wrap(obj);
+            if (_.isFunction(obj) || _.isArray(obj) || _.isRegExp(obj) || _.isBoolean(obj)
+                || _.isNumber(obj) || _.isString(obj) || _.isDate(obj) || !_.isObject(obj)) {
+                obj = {value: obj};
             }
             return new model(obj);
         },

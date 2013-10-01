@@ -25,6 +25,18 @@ describe('model', function () {
             var date = new Date();
             res = tie("a", date);
             res.value.should.eql(date, "date");
+            res = tie("a", true);
+            res.value.should.eql(true, "boolean");
+            res = tie("a", /.*/g);
+            res.value.should.eql(/.*/g, "regexp");
+            res = tie("a", new String("a"));
+            res.value.should.eql("a", "string obj");
+            res = tie("a", new Number(12));
+            res.value.should.eql(12, "number obj");
+            res = tie("a", new Boolean(true));
+            res.value.should.eql(true, "boolean obj");
+            res = tie("a", new RegExp(".*"));
+            res.value.should.eql(/.*/, "regexp obj");
         });
         it('should wrap function', function () {
             var nop = function () {
