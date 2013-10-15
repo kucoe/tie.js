@@ -51,11 +51,11 @@ describe('request', function () {
             'Accept': 'application/json'}, 'request headers');
     });
     it('should memo result', function (done) {
-        var obj = tie('a', {$request: {url: 'http://api.rottentomatoes.com/api/public/v1.0.json', cache: true}});
+        var obj = tie('a', {$request: {url: 'http://www.geoplugin.net/json.gp', cache: true}});
         obj.$request.get({}, {});
         setTimeout(function () {
-            obj.$request.memo('http://api.rottentomatoes.com/api/public/v1.0.json', 'json').links.lists.
-                should.eql('http://api.rottentomatoes.com/api/public/v1.0/lists.json', 'request memo');
+            obj.$request.memo('http://www.geoplugin.net/json.gp', 'json').geoplugin_currencyConverter.
+                should.eql(0, 'request memo');
             done();
         }, 1000);
     });
