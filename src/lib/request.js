@@ -183,13 +183,20 @@ var connect = function (opts, http, onReady, refetch) {
         conn.done(cached, null);
     } else {
         //console.log(opts);
-        var req = require(url.substr(0, 8) == 'https://' ? 'https' : 'http').request(opts, function (res) {
+        var connect = require(url.substr(0, 8) == 'https://' ? 'https' : 'http');
+        var req = connect.request(opts);
+
+        req.on('response', function (res) {
             res.setEncoding('utf8');
+            res.body = '';
             res.on('data', function (chunk) {
+                res.body += chunk;
+            });
+            res.on('end', function () {
                 _.debug("Process response");
                 var status = res.statusCode;
                 var err, data;
-                data = chunk;
+                data = res.body;
                 if ((status >= 200 && status < 300) || status === 0) {
                     if (dataType === defaults.mime) {
                         try {
