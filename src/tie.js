@@ -33,49 +33,50 @@
         return obj;
     };
 
-    var s4 = function () {
-        return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
-    };
-
     var args2Array = function (args, start) {
         return [].slice.call(args, start);
     };
-
+    
+    var s4 = function () {
+        return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    };
+    
     var _ = {
+    
         debugEnabled: false,
-
+    
         isUndefined: function (value) {
             return value == undefined;
         },
-
+    
         isDefined: function (value) {
             return value != undefined;
         },
-
+    
         isObject: function (value) {
             return value != null && typeof value == 'object';
         },
-
+    
         isString: function (value) {
-            return typeof value == 'string';
+            return typeof value == 'string' || {}.toString.apply(value) == '[object String]';
         },
-
+    
         isNumber: function (value) {
-            return typeof value == 'number';
+            return typeof value == 'number' || {}.toString.apply(value) == '[object Number]';
         },
-
+    
         isDate: function (value) {
             return {}.toString.apply(value) == '[object Date]';
         },
-
+    
         isRegExp: function (value) {
             return {}.toString.apply(value) == '[object RegExp]';
         },
-
+    
         isArray: function (value) {
             return Array.isArray(value) || {}.toString.apply(value) == '[object Array]';
         },
-
+    
         isCollection: function (value) {
             var s = {}.toString.apply(value);
             return this.isArray(value) || value instanceof Array
@@ -83,40 +84,40 @@
                 || s == '[object NamedNodeMap]'
                 || s == '[object Arguments]';
         },
-
+    
         isFunction: function (value) {
             return typeof value == 'function';
         },
-
+    
         isBoolean: function (value) {
-            return typeof value == 'boolean';
+            return typeof value == 'boolean' || {}.toString.apply(value) == '[object Boolean]';
         },
-
+    
         trim: function (value) {
             return this.isString(value) ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
         },
-
+    
         lowercase: function (string) {
             return this.isString(string) ? string.toLowerCase() : string;
         },
-
+    
         uppercase: function (string) {
             return this.isString(string) ? string.toUpperCase() : string;
         },
-
+    
         toInt: function (string) {
             return parseInt(string, 10);
         },
-
+    
         toFloat: function (string) {
             return parseFloat(string);
         },
-
+    
         // string equals ignore case
         eqi: function (string1, string2) {
             return this.lowercase(string1) === this.lowercase(string2);
         },
-
+    
         //deep equals
         isEqual: function (a, b) {
             if (a === b) {
@@ -167,7 +168,7 @@
             }
             return true;
         },
-
+    
         //deep clone
         clone: function (obj) {
             if (!obj || !this.isObject(obj)) {
@@ -179,7 +180,7 @@
             });
             return newObj;
         },
-
+    
         //string to type
         convert: function (string, context) {
             var res = string;
@@ -193,7 +194,7 @@
                 res = true
             } else if ('false' === string) {
                 res = false
-            } else if (/^\d*$/.test(string)) {
+            } else if (/^\d+$/.test(string)) {
                 if (string.indexOf('.') != -1) {
                     res = this.toFloat(string);
                 } else {
@@ -210,7 +211,7 @@
             }
             return res;
         },
-
+    
         forEach: function (collection, callback, thisArg, safe) {
             if (!thisArg) {
                 thisArg = this;
@@ -236,7 +237,7 @@
             }
             return collection;
         },
-
+    
         forIn: function (object, callback, thisArg, all) {
             if (!thisArg) {
                 thisArg = this;
@@ -252,7 +253,7 @@
             }
             return object;
         },
-
+    
         sequence: function (obj, callback, last, thisArg) {
             var keys = [];
             if (!thisArg) {
@@ -268,7 +269,7 @@
                 } else {
                     keys = Object.keys(obj);
                 }
-
+    
                 var next = function () {
                     var key = keys.shift();
                     if (key === 0 || key) {
@@ -283,7 +284,7 @@
                 next();
             }
         },
-
+    
         safeCall: function (fn, fnThis, bindReady) {
             var res;
             var spliceArgs = 3;
@@ -303,7 +304,7 @@
             }
             return res;
         },
-
+    
         // define immutable property
         defineImmutable: function (obj, prop, value) {
             Object.defineProperty(obj, prop, {
@@ -314,11 +315,11 @@
                 _proxyMark: true
             });
         },
-
+    
         uid: function () {
             return (s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4());
         },
-
+    
         extend: function (destination, source, fn) {
             if (this.isCollection(destination) && this.isCollection(source)) {
                 this.forEach(source, function (item, i) {
@@ -331,7 +332,7 @@
             }
             return destination;
         },
-
+    
         debug: function (message, group) {
             if (this.debugEnabled) {
                 if (group) {
@@ -343,7 +344,7 @@
                 console.log(message);
             }
         }
-
+    
     };
 
     var proxy = function (bind) {
@@ -474,7 +475,7 @@
     };
 
     var pipe = function (name, fn, dependencies) {
-        var p = function (obj, params) {
+        var p = function (obj, params, next) {
             _.debug("Process pipe " + name);
             _.forEach(dependencies, function (item) {
                 p[DEP_PREFIX + item] = pipesRegistry[item];
@@ -488,7 +489,7 @@
                 });
             }
             if (fn && _.isFunction(fn)) {
-                obj = _.safeCall(fn, p, true, obj, params);
+                obj = _.safeCall(fn, p, true, obj, params, next);
             }
             _.debug("Ready pipe " + name);
             return obj;
@@ -496,23 +497,65 @@
         return p;
     };
 
-    var pipeModel = function (obj) {
-        obj = _.clone(obj);
-        return chain(obj);
+    var chain = function (obj) {
+        this.obj = obj;
+        this.sequence = [];
+        this.async = false;
     };
 
-    var chain = function (obj) {
-        return function () {
-            if (arguments.length == 0) {
-                return obj;
+    chain.prototype = {
+        next: function (res) {
+            this.obj = res;
+            this.started = true;
+            if (this.sequence.length > 0) {
+                var fn = this.sequence.shift();
+                if (_.isFunction(fn)) {
+                    fn(res);
+                }
             }
-            obj = pipeline.apply(obj, args2Array(arguments));
-            return chain(obj);
+        },
+
+        pipe: function () {
+            var self = this;
+            if (arguments.length == 0) {
+                self.sequence = [];
+                return self.obj;
+            }
+            var args = args2Array(arguments);
+            args.push(function (res) {
+                self.next(res);
+            });
+            var next = function (res) {
+                res = pipeline.apply(res, args);
+                if (_.isObject(res)) {
+                    self.started = false;
+                    self.next(res);
+                } else {
+                    self.async = true;
+                }
+            };
+            self.sequence.push(next);
+            if (!self.async) {
+                self.next(self.obj);
+            }
+            return self.pipe.bind(self);
         }
+    };
+
+    var pipeModel = function (obj) {
+        obj = _.clone(obj);
+        var c = new chain(obj);
+        return c.pipe.bind(c);
     };
 
     var pipeline = function () {
         var p = arguments[0];
+        var fn = undefined;
+        var last = arguments[arguments.length - 1];
+        if (_.isFunction(last)) {
+            fn = last;
+            [].prototype.splice.call(arguments, arguments.length - 1);
+        }
         if (_.isString(p)) {
             var name = p;
             p = pipesRegistry[p];
@@ -523,10 +566,10 @@
             p = pipes('%tmp%', p);
         }
         var params = args2Array(arguments, 1);
-        return p(this, params);
+        return p(this, params, fn);
     };
 
-    var parser = function (string, obj) {
+    var parser = function (string, fn, obj) {
         string = _.trim(string || "");
         var tokens = string.split('|');
         var t = tokens[0];
@@ -538,17 +581,22 @@
             tokens = tokens.splice(1);
         }
         if (!obj) {
-            obj = ties[t].obj;
+            obj = tie(t);
+        } else {
+            obj = pipeModel(obj);
         }
-        obj = _.clone(obj);
         _.forEach(tokens, function (item) {
             var p = parser.prototype.parse(item);
             var args = [p.name];
             args = _.extend(args, p.params);
             _.debug("Parsed pipe" + JSON.stringify(args));
-            obj = pipeline.apply(obj, args);
+            obj = obj.apply(obj, args);
         });
-        return obj;
+        if (_.isFunction(fn)) {
+            return obj.apply(obj, [fn]);
+        } else {
+            return obj();
+        }
     };
 
     parser.prototype = {
@@ -919,13 +967,10 @@
 
     tie.prototype = {
 
-        wrap: function (obj) {
-            return {value: obj}
-        },
-
         check: function (obj) {
-            if (_.isFunction(obj) || _.isArray(obj) || !_.isObject(obj) || _.isDate(obj)) {
-                obj = this.wrap(obj);
+            if (_.isFunction(obj) || _.isArray(obj) || _.isRegExp(obj) || _.isBoolean(obj)
+                || _.isNumber(obj) || _.isString(obj) || _.isDate(obj) || !_.isObject(obj)) {
+                obj = {value: obj};
             }
             return new model(obj);
         },
@@ -1022,7 +1067,7 @@
     handles("require", function (obj, config) {
         if (_.isFunction(module.require)) {
             module.require(config);
-        }  else {
+        } else {
             console.error('Require is undefined');
         }
         return config;
@@ -1567,7 +1612,7 @@
             _.forEach(this.$, function (el) {
                 if (el && (!el.isTied() || force)) {
                     if (obj.$shown) {
-                        obj = parse(el.tie, obj);
+                        obj = parse(el.tie, undefined, obj);
                         var attrs = obj.$attrs;
                         var idx = el.index;
                         if (attrs) {
