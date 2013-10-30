@@ -1,4 +1,4 @@
-var tie = require('../src/lib/core')();
+var tie = require('../lib/tie')();
 var util = tie.util;
 
 var should = require('should');

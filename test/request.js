@@ -1,7 +1,7 @@
 var should = require('should');
 
-var tie = require('../src/lib/core')();
-var request = require('../src/lib/request')(tie, true);
+var tie = require('../lib/tie')();
+var request = require('../lib/request')(tie, true);
 
 describe('request', function () {
     it('should process $request', function () {

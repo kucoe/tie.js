@@ -1,5 +1,5 @@
 var jsdom = require('jsdom');
-var tie = require('../src/lib/core')(true);
+var tie = require('../lib/tie')(true);
 var _ = tie.util;
 
 jsdom.env(
@@ -13,7 +13,7 @@ jsdom.env(
             window.document.querySelectorAll = function (selector) {
                 return window.Sizzle(selector);
             };
-            window.tie = require('../src/lib/core.js')(true);
+            window.tie = require('../lib/tie')(true);
             //window.tie.enableDebug(true);
             global.window = window;
         }
@@ -52,7 +52,7 @@ function fireEvent(element, event, opts) {
 module.exports = function (callback, handles) {
     var h = handles || [];
     _.forEach(h, function (elem) {
-        require('../src/lib/' + elem + '.js');
+        require('../lib/' + elem + '.js');
     });
     call(global.window, callback);
 };

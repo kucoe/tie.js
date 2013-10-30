@@ -1,5 +1,5 @@
-var tie = require('../src/lib/core')();
-var cli = require('../src/lib/cli')(tie, true);
+var tie = require('../lib/tie')();
+var cli = require('../lib/cli')(tie, true);
 
 describe('cli', function () {
     afterEach(function () {

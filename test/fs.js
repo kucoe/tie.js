@@ -1,5 +1,5 @@
-var tie = require('../src/lib/core')();
-require('../src/lib/fs')(tie);
+var tie = require('../lib/tie')();
+require('../lib/fs')(tie);
 var fs = require('fs');
 
 

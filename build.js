@@ -1,9 +1,9 @@
 var fs = require("fs");
 var ugly = require('uglify-js');
-var sourcePath = "src/lib";
+var sourcePath = "lib";
 var tie = sourcePath + "/tie.js";
-var dest = "src/tie.js";
-var min = "src/tie.min.js";
+var dest = "tie.js";
+var min = "tie.min.js";
 
 var core = fs.readFileSync(sourcePath + '/core.js', 'utf8');
 var util = fs.readFileSync(sourcePath + '/util.js', 'utf8');

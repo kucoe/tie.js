@@ -1,4 +1,4 @@
-var tie = require('../src/lib/core')(true);
+var tie = require('../lib/tie')(true);
 var handles = tie.handlesRegistry;
 
 var should = require('should');
@@ -198,7 +198,7 @@ describe('handle', function () {
     it('should work with require', function () {
         var test = tie("a", { value: function () {
             return this.$$b.value;
-        }, $require: '../../example/require_test.js'}, ['b']);
+        }, $require: '../example/require_test.js'}, ['b']);
         test.value().should.eql('b', 'dynamic value');
     });
 });

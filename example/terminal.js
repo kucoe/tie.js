@@ -1,4 +1,4 @@
-var tie = require('../src/index')(['cli']);
+var tie = require('../index')(['cli']);
 var _ = tie._;
 var cli = tie.cli;
 
