@@ -9,13 +9,14 @@ jsdom.env(
         src: "",
         done: function (err, window) {
             if (err) throw  err;
+            global.window = window;
             window.exports = {};
             window.document.querySelectorAll = function (selector) {
                 return window.Sizzle(selector);
             };
             window.tie = require('../lib/tie')(true);
             //window.tie.enableDebug(true);
-            global.window = window;
+            console.log('Window ready');
         }
     }
 );
@@ -53,6 +54,9 @@ module.exports = function (callback, handles) {
     var h = handles || [];
     _.forEach(h, function (elem) {
         require('../lib/' + elem + '.js');
+        if('dom' === elem) {
+            global.window.exports().clean();
+        }
     });
     call(global.window, callback);
 };

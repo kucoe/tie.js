@@ -117,11 +117,11 @@ describe('handle', function () {
         test.$a.should.eql("Me");
     });
     it('should watch property change', function () {
-        tie.handle("a", function (obj, config, watcher) {
+        tie.handle("a", function (obj, config, observer) {
             var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
-            watcher.watch('name', w);
+            observer.watch('name', this._uid, w);
             return config;
         });
         var test = tie("test", {$a: "Hello", name: 'Jack'});
@@ -131,41 +131,48 @@ describe('handle', function () {
         test.total.should.eql("Hello Wolf");
     });
     it('should watch property get', function () {
-        tie.handle("a", function (obj, config, watcher) {
-            var w = function (obj) {
+        tie.handle("a", function (obj, config, observer) {
+            var w = function () {
                 return config + ' ' + obj.name;
             };
-            watcher.add('total', w);
+            observer.add('total', this._uid, function () {
+                return w;
+            });
+            observer.add('total.count', this._uid, function() {
+                return w().length;
+            });
             return config;
         });
         var test = tie("test", {$a: "Hello", name: 'Jack'});
-        test.total.should.eql("Hello Jack");
-        test.name = 'Wolf';
-        test.total.should.eql("Hello Wolf");
+        test.total().should.eql("Hello Jack", 'value');
+        test.total.count.should.eql(10, 'total');
+        test.name = 'Lee';
+        test.total().should.eql("Hello Lee", 'value');
+        test.total.count.should.eql(9, 'total');
     });
     it('should watch property delete', function () {
         var watch = null;
-        tie.handle("a", function (obj, config, watcher) {
+        tie.handle("a", function (obj, config, observer) {
             var w = function (obj) {
                 obj.total = config + ' deleted';
             };
-            watch = watcher;
-            watcher.watch('name', {}, w);
+            watch = observer;
+            observer.watch('name', this._uid, {}, w);
             return config;
         });
         var test = tie("test", {$a: "Hello", name: 'Jack'});
         if (watch) {
             delete test.name;
-            watch.inspect();
+            watch.observe();
         }
         test.total.should.eql("Hello deleted");
     });
     it('should not loose watcher', function () {
-        tie.handle("a", function (obj, config, watcher) {
+        tie.handle("a", function (obj, config, observer) {
             var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
-            watcher.watch('name', w);
+            observer.watch('name', this._uid, w);
             return config;
         });
         tie("test", {$a: "Hello", name: 'Jack'});
@@ -177,12 +184,12 @@ describe('handle', function () {
     });
     it('should not duplicate watches', function () {
         var watch = null;
-        tie.handle("a", function (obj, config, watcher) {
+        tie.handle("a", function (obj, config, observer) {
             var w = function (obj) {
                 obj.total = config + ' ' + obj.name;
             };
-            watch = watcher;
-            watcher.watch('name', w);
+            watch = observer;
+            observer.watch('name', this._uid, w);
             w(obj);
             return config;
         });
@@ -193,12 +200,26 @@ describe('handle', function () {
         test.name.should.eql("Wolf");
         test.total.should.eql("Bye Wolf");
         should.exist(watch);
-        watch.watchers.length.should.eql(1, 'watches')
+        watch.listeners.length.should.eql(1, 'watches')
     });
     it('should work with require', function () {
         var test = tie("a", { value: function () {
             return this.$$b.value;
         }, $require: '../example/require_test.js'}, ['b']);
         test.value().should.eql('b', 'dynamic value');
+    });
+    it('should clone with functionality', function (done) {
+        tie.handle('test', function (obj, config) {
+            if (config !== '') {
+                config.should.eql('debug', 'type');
+                obj.value.should.eql('b', 'logged');
+                done();
+            }
+            return config;
+        });
+        var test = tie("a", { value: 'a', name: 'b', $test: ''});
+        var r = tie("a")('property', 'name')();
+        r.$test = 'debug';
+        test.value.should.eql('a', 'original');
     });
 });

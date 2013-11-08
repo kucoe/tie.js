@@ -1,15 +1,6 @@
 var browser = require('./browser');
 var should = require('should');
 
-function clear(renders) {
-    var prop;
-    for (prop in renders) {
-        if (renders.hasOwnProperty(prop)) {
-            delete renders[prop];
-        }
-    }
-}
-
 function prepareA(document) {
     var a = document.createElement("a");
     document.body.appendChild(a);
@@ -35,7 +26,7 @@ function prepareInput(window, $, tag, type) {
     return {input: input, obj: obj, el: el};
 }
 
-describe('dom', function () {
+describe.only('dom', function () {
     describe('bootstrap', function () {
         it('jsdom should work', function (done) {
             this.timeout(10000);
@@ -87,7 +78,7 @@ describe('dom', function () {
                 var q = window.exports().q;
                 var document = window.document;
                 var a = prepareA(document);
-                q.next(a, a.cloneNode(true));
+                q.insertAfter(a, a.cloneNode(true));
                 document.getElementsByTagName('a').length.should.eql(2, 'nodes number');
                 done();
             }, ['dom']);
