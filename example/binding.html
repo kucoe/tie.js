@@ -15,42 +15,35 @@
 </div>
 <script src="../tie.js"></script>
 <script>
+    tie("app", {$attrs: ['value']});
     tie("label", {
         style: 'color:red',
-        $routes: ['labels'],
-        $attrs: ['style']._({
-            value: function () {
-                return this.$text.value
-            }
-        })
+        $attrs: ['style', tie.attr('value', function () {
+            return this.$$text.value
+        })]
     }, ['text']);
     tie("label2", function () {
-        if (this.isUndefined(this.$label.value)) {
+        if (this.isUndefined(this.$$label.value)) {
             return 0;
         }
-        return this.$label.value.length;
+        return this.$$label.value.length;
     }, ['label']);
     tie("text", 'test');
     tie("trigger", {
         float: function (evt) {
             if (evt.type === 'mouseover') {
                 this.value = 'Over';
-                this.$label.style = 'color:green';
+                this.$$label.style = 'color:green';
             } else {
                 this.value = 'Out';
-                this.$label.style = 'color:red';
+                this.$$label.style = 'color:red';
             }
         },
         trigger: function () {
             tie('text', 'changed');
         },
         value: 'Out',
-        $attrs: ['value']._({
-            mouseover: '#float',
-            mouseout: '#float',
-            click: '#trigger'
-
-        })
+        $attrs: ['value', 'mouseover#float', 'mouseout#float', 'click#trigger']
     }, ['label']);
 </script>
 

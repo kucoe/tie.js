@@ -1164,11 +1164,11 @@
                     this.domReady = true;
                 } else {
                     if (this.readyListeners.length == 0) {
-                        window.addEventListener('load', this.readyFn);
+                        window.addEventListener('load', this.readyFn.bind(this));
                     }
                 }
                 if (this.readyListeners.length == 0) {
-                    window.addEventListener('hashchange', this.readyFn);
+                    window.addEventListener('hashchange', this.readyFn.bind(this));
                 }
                 this.readyListeners.push(fn);
             }
@@ -1873,7 +1873,7 @@
             this.ready = true;
             this.data = data;
             this.err = err;
-            _.debug('Request ready with response:' + data + ' and error:' + err);
+            _.debug('Request ready with response:' + JSON.stringify(data) + ' and error:' + err);
             if (this.fn) {
                 _.safeCall(this.fn, this, true, data, err);
             } else {
