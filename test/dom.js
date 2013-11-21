@@ -26,7 +26,7 @@ function prepareInput(window, $, tag, type) {
     return {input: input, obj: obj, el: el};
 }
 
-describe.only('dom', function () {
+describe('dom', function () {
     describe('bootstrap', function () {
         it('jsdom should work', function (done) {
             this.timeout(10000);
@@ -249,7 +249,7 @@ describe.only('dom', function () {
             }, ['dom']);
         });
     });
-    describe('render', function () {
+    describe.skip('render', function () {
         it('should process $attrs', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
@@ -537,7 +537,7 @@ describe.only('dom', function () {
             }, ['dom']);
         });
     });
-    describe('view', function () {
+    describe.skip('view', function () {
         it('should not allow html as value', function (done) {
             browser(function (window) {
                 var document = window.document;

@@ -30,13 +30,6 @@
         return obj;
     };
 
-    function fillSystemFields(obj, name, sealed, dependencies) {
-        _.defineImmutable(obj, '$name', name);
-        _.defineImmutable(obj, '$sealed', sealed || false);
-        _.defineImmutable(obj, '$deps', Object.freeze(dependencies || []));
-        _.defineImmutable(obj, '_uid', _.uid());
-    }
-
     function toRegex(prop) {
         return new RegExp('^' + prop + '$');
     }
@@ -315,6 +308,13 @@
             return res;
         },
     
+        close: function (obj, name, sealed, dependencies) {
+            this.defineImmutable(obj, '$name', name);
+            this.defineImmutable(obj, '$sealed', sealed || false);
+            this.defineImmutable(obj, '$deps', Object.freeze(dependencies || []));
+            this.defineImmutable(obj, '_uid', this.uid());
+        },
+    
         // define immutable property
         defineImmutable: function (obj, prop, value) {
             Object.defineProperty(obj, prop, {
@@ -343,7 +343,7 @@
             return destination;
         },
     
-        nextTick: function(fn) {
+        nextTick: function (fn) {
             if (typeof module.setImmediate === 'function') {
                 module.setImmediate(fn);
             } else if (typeof process !== 'undefined' && process.nextTick) {
@@ -383,7 +383,7 @@
             throw new Error(name + ' is not valid name for your pipe');
         }
         p = pipe(name, fn, dependencies || []);
-        fillSystemFields(p, name, sealed, dependencies);
+        _.close(p, name, sealed, dependencies);
         p = _.extend(p, _);
         _.defineImmutable(p, '$async', fn.length == 3);
         pipesRegistry[name] = p;
@@ -572,7 +572,7 @@
             throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
         }
         h = handle(name, fn, dependencies || []);
-        fillSystemFields(h, name, sealed, dependencies);
+        _.close(h, name, sealed, dependencies);
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
@@ -693,7 +693,12 @@
             if (onChange || onDelete) {
                 var property = listener(toRegex(prop), handlerId, null, onChange, onDelete);
                 this.listeners.push(property);
-                return property;
+                return function() {
+                    var indexOf = this.listeners.indexOf(property);
+                    if (indexOf != -1) {
+                        this.listeners.splice(indexOf, 1);
+                    }
+                }.bind(this);
             }
             return null;
         },
@@ -709,7 +714,16 @@
                 _.debug('Dynamic property added: ' + prop);
                 var property = listener(prop, handlerId, valueFn);
                 this.listeners.push(property);
-                return property;
+                return function() {
+                    var indexOf = this.listeners.indexOf(property);
+                    if (indexOf != -1) {
+                        this.listeners.splice(indexOf, 1);
+                    }
+                    indexOf = this.newProps.indexOf(prop);
+                    if (indexOf != -1) {
+                        this.newProps.splice(indexOf, 1);
+                    }
+                }.bind(this);
             }
             return null;
         },
@@ -727,15 +741,6 @@
                         }
                     }
                 }, this, true);
-            } else if (prop) { // removes listeners
-                indexOf = this.listeners.indexOf(prop);
-                if (indexOf != -1) {
-                    this.listeners.splice(indexOf, 1);
-                }
-                indexOf = this.newProps.indexOf(prop.property);
-                if (indexOf != -1) {
-                    this.newProps.splice(indexOf, 1);
-                }
             }
         },
     
@@ -752,7 +757,7 @@
         },
     
         apply: function(prop, ready) {
-            // should be implement later
+            this.onChange(prop, ready);
         }
     };
     
@@ -1030,7 +1035,7 @@
             _.debug("Tie " + name, name);
             var obj = this.check(tiedObject);
             var r = new bind(name, obj);
-            fillSystemFields(obj, name, sealed, dependencies);
+            _.close(obj, name, sealed, dependencies);
             obj._deleted = false;
             r.resolveHandles();
             this.resolveDependencies(r, dependencies);
@@ -1412,134 +1417,116 @@
         }
     };
 
-    var valueFn = function (obj, idx, bindReady) {
-        var name = this.name;
-        var val = this.value;
+    var valueFn = function (obj, bindReady) {
         var property = this.property;
-
         if (_.isUndefined(bindReady)) {
             bindReady = obj.$ready();
         }
-
-        if (_.isFunction(val)) {
-            return _.safeCall(val, obj, bindReady)
+        if (_.isFunction(property)) {
+            return _.safeCall(property, obj, bindReady)
         } else {
-            if (property && _.isUndefined(val)) {
-                return findProperty(obj, property, idx);
-            }
-            if (!name) {
-                throw new Error("Where is your property?")
-            }
-            return findProperty(obj, name, idx);
+            return obj.$prop(property);
         }
     };
 
-    var findProperty = function (obj, name, idx) {
-        if (_.isUndefined(idx)) {
-            idx = -1;
-        }
-        var values = obj.$values;
-        if (idx >= 0 && values && _.isDefined(values[idx][name])) {
-            return values[idx][name];
-        }
-        if (idx >= 0 && values && VALUE == name) {
-            return values[idx];
-        }
-        return obj.$prop(name);
+    var View = {
+
     };
 
-    var attrValue = function (name, value) {
-        if (this.$attrs) {
-            var attr = this.$attrs[name];
-            if (_.isUndefined(value)) {
-                if (attr) {
-                    return attr.val(this);
-                }
-            } else {
-                if (attr && attr.property) {
-                    this.$prop(attr.property, value);
-                } else if (attr) {
-                    this.$prop(name, value);
-                }
+    var Collection = function(array) {
+        this.render = function (obj, ready) {
+            _.forEach(array, function(view) {
+                view.render(obj, ready);
+            })
+        };
+    };
+
+    var Element = function (view) {
+        this.render = function (obj, ready) {
+            //TODO find element
+            _.forIn(view, function(val) {
+                val.render(obj, ready, el);
+            })
+        };
+    };
+
+    var Attr = function (name, value, prop, deps) {
+        this.name = name;
+        if (value) {
+            this.val = function () {
+                return value;
             }
-        }
-        return null;
-    };
-
-    var checkProperty = function (attr) {
-        var name = attr.name;
-        var index = name.indexOf('#');
-        if (index != -1) {
-            attr.name = name.substring(0, index);
-            attr.property = name.substring(index + 1);
-            attr.deps.push(attr.property);
         } else {
-            attr.deps.push(name);
+            this.deps = deps || [];
+            if (!_.isFunction(prop)) {
+                this.deps.push(prop);
+            }
+            this.property = prop;
+            this.val = valueFn;
         }
-        return attr;
+        //TODO think on index
+        this.render = function (obj, ready, el) {
+            var name = this.name;
+            var val = this.val(obj, ready);
+            _.debug("Render attribute '" + name + "' with value " + val);
+            el.setAttribute(name, val);
+        };
+    };
+
+    var prepareView = function (view, obj, name) {
+        if (_.isArray(view)) {
+            var res = {};
+            _.forEach(view, function (item) {
+                res.push(prepareView(item, obj));
+            });
+            return res;
+        } else if (_.isObject(view)) {
+            _.forIn(view, function (value, prop) {
+                if (VALUE === prop && _.isFunction(obj.value)) {
+                    view[prop] = new Attr(VALUE, null, obj.value, [VALUE]);
+                } else {
+                    view[prop] = prepareView(view, obj, prop);
+                }
+            });
+            return new Element(view);
+        } else if (_.isFunction(view)) {
+            var n = view.name || view.$name;
+            if (VALUE === n) {
+                return new Attr(VALUE, null, view, view.$deps);
+            }
+        } else if (_.isString(view) && view.charAt(0) === '#') {
+            var property = view.substring(1) || name;
+            return new Attr(name, null, property)
+        }
+        return new Attr(name, view);
     };
 
     var parse = window.tie.$;
 
     var renders = {};
 
-    var renderer = function (obj) {
+    var renderer = function (obj, view) {
         this.obj = obj;
-        if (_.isUndefined(obj.$shown)) {
-            obj.$shown = true;
+        if (_.isUndefined(view.$shown)) {
+            view.$shown = true;
         }
-        obj.$attr = attrValue;
+        if (!view.$tag) {
+            view.$tag = 'div';
+        }
+        view.$tie = obj.$name;
+        view._processedHandles = [];
+        this.view = view;
         this.values = {};
         this.rendered = false;
         this.rendering = false;
         this.loaded = false;
         this.loading = false;
         this.selected = false;
-        this.e = 0;
         this.$ = [];
     };
 
     renderer.prototype = {
-        prepareAttrs: function (attrs, obj, observer, handlerId) {
-            if (attrs && _.isArray(attrs)) {
-                var res = {};
-                var r = this;
-                _.forEach(attrs, function (attr) {
-                    if (_.isString(attr)) {
-                        attr = {
-                            name: attr,
-                            property: null,
-                            deps: [],
-                            value: null,
-                            val: valueFn
-                        };
-                        attr = checkProperty(attr);
-                    }
-                    var name = attr.name;
-                    if (VALUE === name && _.isFunction(obj.value)) {
-                        attr.value = obj.value;
-                        delete obj.value;
-                    }
-                    if (attr.property || attr.value) {
-                        observer.add(name, handlerId, function (obj) {
-                            return obj.$attr(name);
-                        });
-                        observer.watch(name, handlerId, function (obj, prop, val) {
-                            obj.$attr(name, val);
-                        });
-                    }
-                    if (attr.deps.length > 0) {
-                        var d = attr.deps.join('|');
-                        observer.watch(d, handlerId, function () {
-                            r.render(name);
-                        });
-                    }
-                    res[name] = attr;
-                });
-                attrs = res;
-            }
-            return attrs;
-        },
+
 
         select: function (base) {
             var obj = this.obj;
@@ -1564,57 +1551,18 @@
             this.loading = true;
             if (!this.selected) {
                 this.$ = this.select();
-                this.e = this.$.length;
                 _.debug("Elements selected: " + this.$.length);
             }
             this.loaded = true;
             this.loading = false;
         },
 
-        renderView: function () {
-            if (this.obj.$view && this.e > 0) {
-                var html = this.viewHtml();
-                console.log(html);
-                if (html) {
-                    _.forEach(this.$, function (el) {
-                        if (el) {
-                            el.html(html);
-                        }
-                    });
-                }
-            }
-        },
-
-        viewHtml: function () {
-            var view = this.obj.$view;
-            var r = renders[view.name];
-            var html = '';
-            if (r) {
-                if (!r.loaded) {
-                    r.load();
-                }
-                _.forEach(r.$, function (el) {
-                    if (el) {
-                        html += el.html();
-                    }
-                });
-            }
-            return html;
-        },
-
-        renderAttr: function (attr, obj, idx, ready, el) {
-            var name = attr.name;
-            var val = attr.val(obj, idx, ready);
-            _.debug("Render attribute '" + name + "' with value " + val);
-            el.setAttribute(name, val);
-        },
-
-        render: function (property, force) {
-            if (!this.rendered && property && !force) {
+        render: function (property) {
+            if (!this.rendered && property) {
                 return;
             }
             var obj = this.obj;
-            if (this.rendering && !force) {
+            if (this.rendering) {
                 return;
             }
             this.rendering = true;
@@ -1625,7 +1573,7 @@
             }
             var ready = obj.$ready();
             _.forEach(this.$, function (el) {
-                if (el && (!el.isTied() || force)) {
+                if (el && !el.isTied()) {
                     if (obj.$shown) {
                         obj = parse(el.tie, undefined, obj);
                         var attrs = obj.$attrs;
@@ -1670,94 +1618,113 @@
 
     var handle = window.tie.handle;
 
+    var viewHandlers = {};
+
+    var viewHandle = function (name, fn, dependencies, sealed) {
+        var h = viewHandlers[name];
+        if (_.isUndefined(fn)) {
+            return  h;
+        }
+        if (h && h.$sealed) {
+            throw new Error(name + ' view handle already registered and sealed. Please choose another name for your handle');
+        }
+        h = function (obj, config) {
+            _.debug("Process view handle " + name);
+            _.forEach(dependencies || [], function (item) {
+                h['$$' + item] = viewHandlers[item];
+            });
+            if (fn && _.isFunction(fn)) {
+                obj = _.safeCall(fn, h, true, obj, config);
+            }
+            _.debug("Processed view handle " + name);
+            return obj;
+        };
+        _.close(h, name, sealed, dependencies);
+        h = _.extend(h, _);
+        viewHandlers[name] = h;
+        return h;
+    };
+
     var onReady = function () {
         _.debug("Render app");
         _.forIn(renders, function (r) {
             if (!r.rendered) {
-                r.render();
                 r.renderView();
             }
         });
         _.debug("Rendered app");
     };
 
-    var add = function (obj, observer, handlerId) {
-        var r = new renderer(obj);
+    var resolveViewHandle = function(view, name) {
+        var handle = viewHandlers[name];
+        if (handle) {
+            _.forEach(handle.$deps, function (item) {
+                if (view._processedHandles.indexOf(item) == -1) {
+                    resolveViewHandle(view, item);
+                }
+            });
+            var c = view['$' + name];
+            _.debug("View handle " + name + ' with config' + c);
+            if (_.isDefined(c)) {
+                view['$' + name] = handle(view, c);
+            }
+            if (view._processedHandles.indexOf(name) == -1) {
+                view._processedHandles.push(name);
+            }
+        }
+    };
+
+    handle('view', function (obj, config, observer) {
+        var handlerId = this._uid;
+        var view = prepareView(config, obj);
+        if(view instanceof Collection) {
+            view = new Element({$values: view});
+        } else if(view instanceof  Attr) {
+            view.name = VALUE;
+            view = new Element({value: view});
+        }
+        var r = new renderer(obj, view);
         renders[obj.$name] = r;
-        observer.watch('_deleted', handlerId, function (obj, prop, val) {
-            if (val) {
+        observer.watch('.*', handlerId, function (obj, prop, val) {
+            if('_deleted' === prop && !!val) {
                 delete renders[obj.$name];
-                observer.remove(handlerId)
+                observer.remove(handlerId);
+            } else if(prop.indexOf('$view.') == 0){
+                var vh = prop.replace('$view.', '');
+                if (vh && vh[0] == '$') {
+                    var name = vh.substring(1);
+                    resolveViewHandle(view, name);
+                }
+                r.render(prop);
+            } else {
+                r.notify(prop);
             }
         });
+        _.forIn(viewHandlers, function (handle, prop) {
+            if (view._processedHandles.indexOf(prop) == -1) {
+                resolveViewHandle(view, prop);
+            }
+        }, this);
         if (dom.ready()) {
             setTimeout(function () {
-                r.render();
                 r.renderView()
             }, 100);
         }
-        return r;
-    };
-
-    handle("view", function (obj, config, observer, appConfig) {
-        if (_.isString(config)) {
-            config = {
-                name: config,
-                url: appConfig ? appConfig.url : ''
-            };
-        }
-        if (!config.name) {
-            return undefined;
-        }
-        var r = renders[obj.$name];
-        if (r && dom.ready() && r.rendered) {
-            setTimeout(function () {
-                r.renderView();
-            }, 100);
-        }
-        return config;
+        return view;
     }, [], true);
 
-    handle("attrs", function (obj, config, observer) {
-        if (config) {
-            var r = add(obj, observer, this._uid);
-            config = r.prepareAttrs(config, obj, observer, this._uid);
-        }
-        return config;
-    }, ['view'], true);
-
-    handle("attr", function () {
-        return attrValue;
-    }, ['attrs'], true);
-
-    handle("shown", function (obj, config) {
+    viewHandle("shown", function (obj, config) {
         var r = renders[obj.$name];
         if (r) {
             r.show(config);
         }
         return config;
-    }, ['attrs'], true);
+    }, [], true);
 
     dom.ready(onReady);
 
     window.tie.domReady = dom.ready;
-
-    window.tie.attr = function (name, value, dependencies) {
-        var attr = {
-            name: name,
-            property: null,
-            deps: dependencies || [],
-            value: value,
-            val: valueFn
-        };
-        if (value && name.indexOf('#') != -1) {
-            throw new Error('Property and calculated value combination is not supported');
-        }
-        if (!value) {
-            attr = checkProperty(attr);
-        }
-        return attr;
-    };
+    window.tie.viewHandle = viewHandle;
 
     if (typeof window.exports === 'object') {
         window.exports = function () {
