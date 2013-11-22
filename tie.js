@@ -1442,11 +1442,28 @@
     };
 
     var Element = function (view) {
+        this.$  = [];
+        this.select = function (obj, base) {
+            var name = view.$tie;
+            var res = [];
+            if (dom.fetched.length == 0 || base) {
+                dom.fetch('[' + TIE + ']', base);
+            }
+            _.forEach(dom.fetched, function (el) {
+                if (el.getAttribute(TIE).indexOf(name) == 0) {
+                    res.push(new wrap(el, obj));
+                }
+            });
+            return res;
+        };
         this.render = function (obj, ready) {
-            //TODO find element
+            if(this.$.length == 0) {
+                this.$ = this.select(obj);
+                _.debug("Elements selected: " + this.$.length);
+            }
             _.forIn(view, function(val) {
-                val.render(obj, ready, el);
-            })
+                val.render(obj, ready, this.$);
+            }, this)
         };
     };
 
@@ -1519,43 +1536,9 @@
         this.values = {};
         this.rendered = false;
         this.rendering = false;
-        this.loaded = false;
-        this.loading = false;
-        this.selected = false;
-        this.$ = [];
     };
 
     renderer.prototype = {
-
-
-        select: function (base) {
-            var obj = this.obj;
-            var name = obj.$name;
-            var res = [];
-            if (dom.fetched.length == 0 || base) {
-                dom.fetch('[' + TIE + ']', base);
-            }
-            _.forEach(dom.fetched, function (el) {
-                if (el.getAttribute(TIE).indexOf(name) == 0) {
-                    res.push(new wrap(el, obj));
-                }
-            });
-            this.selected = true;
-            return res;
-        },
-
-        load: function () {
-            if (this.loading) {
-                return;
-            }
-            this.loading = true;
-            if (!this.selected) {
-                this.$ = this.select();
-                _.debug("Elements selected: " + this.$.length);
-            }
-            this.loaded = true;
-            this.loading = false;
-        },
 
         render: function (property) {
             if (!this.rendered && property) {
@@ -1568,9 +1551,6 @@
             this.rendering = true;
             var tieName = obj.$name;
             _.debug("Render " + tieName, tieName + " Render");
-            if (!this.loaded) {
-                this.load();
-            }
             var ready = obj.$ready();
             _.forEach(this.$, function (el) {
                 if (el && !el.isTied()) {
