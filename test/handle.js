@@ -7,7 +7,7 @@ describe('handle', function () {
     afterEach(function () {
         var prop;
         for (prop in handles) {
-            if (prop === 'attrs' || prop === 'shown' || prop === 'attr' || prop === 'http'
+            if (prop === 'http'
                 || prop === 'require' || prop === 'file' || prop === 'view' || prop === 'request') {
                 continue;
             }

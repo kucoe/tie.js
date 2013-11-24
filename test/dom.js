@@ -21,7 +21,7 @@ function prepareInput(window, $, tag, type) {
     }
     input.setAttribute('data-tie', 'a');
     document.body.appendChild(input);
-    var obj = window.tie('a', {value: 'lala', style: 'color:blue', $attrs: ['style']});
+    var obj = window.tie('a', {value: 'lala', style: 'color:blue', $view: {style: '#'}});
     var el = new $(input, obj);
     return {input: input, obj: obj, el: el};
 }
@@ -249,13 +249,13 @@ describe('dom', function () {
             }, ['dom']);
         });
     });
-    describe.skip('render', function () {
-        it('should process $attrs', function (done) {
+    describe('render', function () {
+        it('should process $view', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
-                should.exist(obj.$attrs.style, 'attrs');
+                should.exist(obj.$view.style, 'view');
                 done();
             }, ['dom']);
         });
@@ -265,8 +265,8 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', $attrs: ['style#value']});
-                obj.style.should.eql('lala', 'property attr');
+                var obj = window.tie('a', {value: 'lala', $view: {style: '#value'}});
+                obj.$view.style.val(obj, true).should.eql('lala', 'property attr');
                 done();
             }, ['dom']);
         });
@@ -276,20 +276,10 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', $attrs: [window.tie.attr('style', function () {
+                var obj = window.tie('a', {value: 'lala', $view: { style: function value() {
                     return 'color:' + this.value;
-                })]});
-                obj.style.should.eql('color:lala', 'value attr');
-                done();
-            }, ['dom']);
-        });
-        it('should not allow $attr', function (done) {
-            browser(function (window) {
-                var $ = window.exports().el;
-                var __ret = prepareInput(window, $);
-                var obj = __ret.obj;
-                obj.$attr = 'a';
-                (typeof  obj.$attr).should.eql('function', 'attr');
+                }}});
+                obj.$view.style.val(obj, true).should.eql('color:lala', 'value attr');
                 done();
             }, ['dom']);
         });
@@ -302,7 +292,7 @@ describe('dom', function () {
                 var r = renders[obj.$name];
                 should.exist(r, 'renderer');
                 setTimeout(function () {
-                    var element = r.$[0];
+                    var element = obj.$view.$[0];
                     should.exist(element, 'element');
                     done();
                 }, 200);
@@ -311,32 +301,31 @@ describe('dom', function () {
         it('should render attributes', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
-                var renders = window.exports().renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
-                should.exist(obj.$attrs.style, 'attrs');
+                should.exist(obj.$view.style, 'view');
                 setTimeout(function () {
-                    var r = renders[obj.$name];
-                    r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
+                    obj.$view.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
                     done();
                 }, 200);
             }, ['dom']);
         });
-        it('should re-render attribute on change', function (done) {
+        it.only('should re-render attribute on change', function (done) {
+            this.timeout(10000);
+            setTimeout(function () {
             browser(function (window) {
                 var $ = window.exports().el;
-                var renders = window.exports().renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
-                should.exist(obj.$attrs.style, 'attrs');
+                should.exist(obj.$view.style, 'view');
                 setTimeout(function () {
-                    var r = renders[obj.$name];
-                    r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
+                    obj.$view.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
                     obj.style = 'color:red';
-                    r.$[0].$.getAttribute('style').should.eql('color:red', 're-render');
+                    obj.$view.$[0].$.getAttribute('style').should.eql('color:red', 're-render');
                     done();
                 }, 200);
             }, ['dom']);
+            }, 5000);
         });
         it('should render property attribute', function (done) {
             browser(function (window) {

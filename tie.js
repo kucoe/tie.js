@@ -1433,18 +1433,19 @@
 
     };
 
-    var Collection = function(array) {
-        this.render = function (obj, ready) {
-            _.forEach(array, function(view) {
-                view.render(obj, ready);
+    var Collection = function (array) {
+        this.$render = function (obj, ready) {
+            _.forEach(array, function (view) {
+                view.$render(obj, ready);
             })
         };
     };
 
     var Element = function (view) {
-        this.$  = [];
-        this.select = function (obj, base) {
-            var name = view.$tie;
+        _.extend(this, view);
+        this.$ = [];
+        this.$select = function (obj, base) {
+            var name = this.$tie;
             var res = [];
             if (dom.fetched.length == 0 || base) {
                 dom.fetch('[' + TIE + ']', base);
@@ -1456,14 +1457,30 @@
             });
             return res;
         };
-        this.render = function (obj, ready) {
-            if(this.$.length == 0) {
-                this.$ = this.select(obj);
+        this.$render = function (obj, ready, prop) {
+            if (this.$.length == 0) {
+                this.$ = this.$select(obj);
                 _.debug("Elements selected: " + this.$.length);
             }
-            _.forIn(view, function(val) {
-                val.render(obj, ready, this.$);
-            }, this)
+            _.forEach(this.$, function (el) {
+                if (el && !el.isTied()) {
+                    if (prop) {
+                        var p = this[prop];
+                        if(p && _.isFunction(p.$render)){
+                            p.$render(obj, ready, el);
+                        }
+                    } else {
+                        _.forIn(view, function (val) {
+                            val.$render(obj, ready, el);
+                        }, this);
+                    }
+                }
+                el.setAttribute(TIED);
+                el.setAttribute(CLASS, obj.$name);
+                if (el.isInput) {
+                    el.setAttribute(NAME, obj.$name);
+                }
+            }, this);
         };
     };
 
@@ -1482,7 +1499,7 @@
             this.val = valueFn;
         }
         //TODO think on index
-        this.render = function (obj, ready, el) {
+        this.$render = function (obj, ready, el) {
             var name = this.name;
             var val = this.val(obj, ready);
             _.debug("Render attribute '" + name + "' with value " + val);
@@ -1497,15 +1514,6 @@
                 res.push(prepareView(item, obj));
             });
             return res;
-        } else if (_.isObject(view)) {
-            _.forIn(view, function (value, prop) {
-                if (VALUE === prop && _.isFunction(obj.value)) {
-                    view[prop] = new Attr(VALUE, null, obj.value, [VALUE]);
-                } else {
-                    view[prop] = prepareView(view, obj, prop);
-                }
-            });
-            return new Element(view);
         } else if (_.isFunction(view)) {
             var n = view.name || view.$name;
             if (VALUE === n) {
@@ -1514,6 +1522,15 @@
         } else if (_.isString(view) && view.charAt(0) === '#') {
             var property = view.substring(1) || name;
             return new Attr(name, null, property)
+        } else if (_.isObject(view)) {
+            _.forIn(view, function (value, prop) {
+                if (VALUE === prop && _.isFunction(obj.value)) {
+                    view[prop] = new Attr(VALUE, null, obj.value, [VALUE]);
+                } else {
+                    view[prop] = prepareView(value, obj, prop);
+                }
+            });
+            return new Element(view);
         }
         return new Attr(name, view);
     };
@@ -1540,49 +1557,28 @@
 
     renderer.prototype = {
 
-        render: function (property) {
-            if (!this.rendered && property) {
+        render: function (prop) {
+            console.log('Rendering' + prop);
+            if (!this.rendered && prop) {
                 return;
             }
-            var obj = this.obj;
             if (this.rendering) {
                 return;
             }
             this.rendering = true;
+            var obj = this.obj;
+            var view = this.view;
             var tieName = obj.$name;
             _.debug("Render " + tieName, tieName + " Render");
             var ready = obj.$ready();
-            _.forEach(this.$, function (el) {
-                if (el && !el.isTied()) {
-                    if (obj.$shown) {
-                        obj = parse(el.tie, undefined, obj);
-                        var attrs = obj.$attrs;
-                        var idx = el.index;
-                        if (attrs) {
-                            if (property) {
-                                var attr = attrs[property];
-                                if (attr) {
-                                    this.renderAttr(attr, obj, idx, ready, el);
-                                }
-                            } else {
-                                _.forIn(attrs, function (attr) {
-                                    this.renderAttr(attr, obj, idx, ready, el);
-                                }, this);
-                                el.setAttribute(TIED);
-                                el.setAttribute(CLASS, tieName);
-                                if (el.isInput) {
-                                    el.setAttribute(NAME, tieName);
-                                }
-                            }
-                        }
-                    } else {
-                        el.show(obj.$shown)
-                    }
-                }
-            }, this);
+            view.$render(obj, ready, prop);
             this.rendering = false;
             this.rendered = true;
             _.debug("Rendered " + tieName);
+        },
+
+        notify: function (property) {
+            console.log('Notify' + property);
         },
 
         show: function (shown) {
@@ -1629,13 +1625,13 @@
         _.debug("Render app");
         _.forIn(renders, function (r) {
             if (!r.rendered) {
-                r.renderView();
+                r.render();
             }
         });
         _.debug("Rendered app");
     };
 
-    var resolveViewHandle = function(view, name) {
+    var resolveViewHandle = function (view, name) {
         var handle = viewHandlers[name];
         if (handle) {
             _.forEach(handle.$deps, function (item) {
@@ -1657,19 +1653,19 @@
     handle('view', function (obj, config, observer) {
         var handlerId = this._uid;
         var view = prepareView(config, obj);
-        if(view instanceof Collection) {
+        if (view instanceof Collection) {
             view = new Element({$values: view});
-        } else if(view instanceof  Attr) {
+        } else if (view instanceof  Attr) {
             view.name = VALUE;
             view = new Element({value: view});
         }
         var r = new renderer(obj, view);
         renders[obj.$name] = r;
         observer.watch('.*', handlerId, function (obj, prop, val) {
-            if('_deleted' === prop && !!val) {
+            if ('_deleted' === prop && !!val) {
                 delete renders[obj.$name];
                 observer.remove(handlerId);
-            } else if(prop.indexOf('$view.') == 0){
+            } else if (prop.indexOf('$view.') == 0) {
                 var vh = prop.replace('$view.', '');
                 if (vh && vh[0] == '$') {
                     var name = vh.substring(1);
@@ -1687,7 +1683,7 @@
         }, this);
         if (dom.ready()) {
             setTimeout(function () {
-                r.renderView()
+                r.render()
             }, 100);
         }
         return view;
