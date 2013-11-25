@@ -1474,6 +1474,7 @@
                     var deps = val.deps || [];
                     if (deps.indexOf(prop) != -1) {
                         _.forEach(this.$, function (el) {
+                            val.value = val.$get(obj, ready);
                             val.$render(obj, ready, el);
                         })
                     }
@@ -1579,10 +1580,6 @@
         return new Attr(name, view);
     };
 
-    var notifyView = function(view, obj, ready) {
-
-    };
-
     var parse = window.tie.$;
 
     var renders = {};
@@ -1607,7 +1604,6 @@
     renderer.prototype = {
 
         render: function (prop) {
-            console.log('Rendering' + prop);
             if (!this.rendered && prop) {
                 return;
             }
@@ -1726,10 +1722,10 @@
                     var name = vh.substring(1);
                     resolveViewHandle(view, name);
                 }
-                r.silent = true;
-                view.$prop(vh, prepareView(val));
-                r.silent = false;
-                r.render(prop);
+                //r.silent = true;
+                //view.$prop(vh, prepareView(val, obj, vh));
+                //r.silent = false;
+                //r.render(prop);
             } else {
                 r.notify(prop);
             }
