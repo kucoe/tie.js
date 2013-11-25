@@ -1417,26 +1417,16 @@
         }
     };
 
-    var valueFn = function (obj, bindReady) {
-        var property = this.property;
-        if (_.isUndefined(bindReady)) {
-            bindReady = obj.$ready();
-        }
-        if (_.isFunction(property)) {
-            return _.safeCall(property, obj, bindReady)
-        } else {
-            return obj.$prop(property);
-        }
-    };
-
-    var View = {
-
-    };
-
     var Collection = function (array) {
+        this.$notify = function(prop, obj, ready) {
+            _.forEach(array, function (item) {
+                item.$notify(prop, obj, ready);
+            })
+        };
+
         this.$render = function (obj, ready) {
-            _.forEach(array, function (view) {
-                view.$render(obj, ready);
+            _.forEach(array, function (item) {
+                item.$render(obj, ready);
             })
         };
     };
@@ -1457,28 +1447,68 @@
             });
             return res;
         };
+        this.$prop = function (name, value) {
+            var res = this;
+            var split = name.split('.');
+            var i = 1;
+            var length = split.length;
+            while (i < length) {
+                res = res[split[i - 1]];
+                i++;
+                if (_.isUndefined(res)) {
+                    return undefined;
+                }
+            }
+            var last = split[length - 1];
+            if (_.isUndefined(value)) {
+                return res[last];
+            } else {
+                res[last] = value;
+            }
+            return undefined;
+        };
+
+        this.$notify = function(prop, obj, ready) {
+            _.forIn(this, function (val) {
+                if (val instanceof  Attr) {
+                    var deps = val.deps || [];
+                    if (deps.indexOf(prop) != -1) {
+                        _.forEach(this.$, function (el) {
+                            val.$render(obj, ready, el);
+                        })
+                    }
+                } else if(_.isFunction(val.$notify)) {
+                    val.$notify(prop, obj, ready);
+                }
+            }, this);
+        };
+
         this.$render = function (obj, ready, prop) {
             if (this.$.length == 0) {
                 this.$ = this.$select(obj);
                 _.debug("Elements selected: " + this.$.length);
             }
             _.forEach(this.$, function (el) {
-                if (el && !el.isTied()) {
+                if (el) {
                     if (prop) {
-                        var p = this[prop];
-                        if(p && _.isFunction(p.$render)){
+                        var p = this.$prop(prop);
+                        if (p && _.isFunction(p.$render)) {
                             p.$render(obj, ready, el);
                         }
                     } else {
                         _.forIn(view, function (val) {
-                            val.$render(obj, ready, el);
+                            if (_.isFunction(val.$render)) {
+                                val.$render(obj, ready, el);
+                            }
                         }, this);
                     }
                 }
-                el.setAttribute(TIED);
-                el.setAttribute(CLASS, obj.$name);
-                if (el.isInput) {
-                    el.setAttribute(NAME, obj.$name);
+                if (!prop) {
+                    el.setAttribute(TIED);
+                    el.setAttribute(CLASS, obj.$name);
+                    if (el.isInput) {
+                        el.setAttribute(NAME, obj.$name);
+                    }
                 }
             }, this);
         };
@@ -1487,27 +1517,41 @@
     var Attr = function (name, value, prop, deps) {
         this.name = name;
         if (value) {
-            this.val = function () {
+            this.$get = function () {
                 return value;
             }
         } else {
             this.deps = deps || [];
-            if (!_.isFunction(prop)) {
+            if (_.isString(prop)) {
                 this.deps.push(prop);
             }
-            this.property = prop;
-            this.val = valueFn;
+            this.$get = function (obj, bindReady) {
+                if (_.isUndefined(bindReady)) {
+                    bindReady = obj.$ready();
+                }
+                if (_.isFunction(prop)) {
+                    return _.safeCall(prop, obj, bindReady)
+                } else {
+                    return obj.$prop(prop);
+                }
+            };
         }
         //TODO think on index
         this.$render = function (obj, ready, el) {
             var name = this.name;
-            var val = this.val(obj, ready);
-            _.debug("Render attribute '" + name + "' with value " + val);
-            el.setAttribute(name, val);
+            var value = this.value;
+            if (_.isUndefined(value)) {
+                value = this.value = this.$get(obj, ready);
+            }
+            _.debug("Render attribute '" + name + "' with value " + value);
+            el.setAttribute(name, value);
         };
     };
 
     var prepareView = function (view, obj, name) {
+        if (view && _.isFunction(view.$render)) {
+            return view;
+        }
         if (_.isArray(view)) {
             var res = {};
             _.forEach(view, function (item) {
@@ -1535,6 +1579,10 @@
         return new Attr(name, view);
     };
 
+    var notifyView = function(view, obj, ready) {
+
+    };
+
     var parse = window.tie.$;
 
     var renders = {};
@@ -1551,6 +1599,7 @@
         view._processedHandles = [];
         this.view = view;
         this.values = {};
+        this.silent = false;
         this.rendered = false;
         this.rendering = false;
     };
@@ -1577,8 +1626,11 @@
             _.debug("Rendered " + tieName);
         },
 
-        notify: function (property) {
-            console.log('Notify' + property);
+        notify: function (prop) {
+            var view = this.view;
+            var obj = this.obj;
+            var ready = obj.$ready();
+            view.$notify(prop, obj, ready);
         },
 
         show: function (shown) {
@@ -1662,6 +1714,9 @@
         var r = new renderer(obj, view);
         renders[obj.$name] = r;
         observer.watch('.*', handlerId, function (obj, prop, val) {
+            if (r.silent) {
+                return;
+            }
             if ('_deleted' === prop && !!val) {
                 delete renders[obj.$name];
                 observer.remove(handlerId);
@@ -1671,6 +1726,9 @@
                     var name = vh.substring(1);
                     resolveViewHandle(view, name);
                 }
+                r.silent = true;
+                view.$prop(vh, prepareView(val));
+                r.silent = false;
                 r.render(prop);
             } else {
                 r.notify(prop);
