@@ -111,7 +111,6 @@ describe('dom', function () {
                 var obj = {value: 'lala'};
                 var el = new $(a, obj);
                 el.$.should.eql(a, 'element');
-                el.obj.should.eql(obj, 'obj');
                 done();
             }, ['dom']);
         });
@@ -241,7 +240,7 @@ describe('dom', function () {
                 var fn = function () {
                     i = 'bbb';
                 };
-                el.setAttribute('click', fn);
+                el.setAttribute('click', fn,__ret.obj);
                 browser.fireEvent(el.$, 'click');
                 should.exist(el.events.click);
                 i.should.eql('bbb', 'text');
@@ -259,6 +258,58 @@ describe('dom', function () {
                 done();
             }, ['dom']);
         });
+        it('should process asterisk $view', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a');
+                document.body.appendChild(input);
+                var obj = window.tie('a', {value: 'lala', $view: '*'});
+                obj.$view.value.value.should.eql('lala', 'asterisk view');
+                should.not.exist(obj.$view._uid, 'no private');
+                should.not.exist(obj.$view.$name, 'no handles');
+                done();
+            }, ['dom']);
+        });
+        it('should process attributes mapper $view', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a');
+                input.setAttribute('href', '');
+                input.setAttribute('title', '');
+                document.body.appendChild(input);
+                var obj = window.tie('a', {title: 'lala', href:'google.com', $view: '@'});
+                obj.$view.href.value.should.eql('google.com', 'mapper view');
+                obj.$view.title.value.should.eql('lala', 'mapper view');
+                should.not.exist(obj.$view.value, 'no attr');
+                done();
+            }, ['dom']);
+        });
+        it('should process empty property path in $view', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a');
+                document.body.appendChild(input);
+                var obj = window.tie('a', {value: 'lala', style: 'blue', $view: '#'});
+                obj.$view.value.value.should.eql('lala', 'path in view');
+                should.not.exist(obj.$view.style, 'no other');
+                done();
+            }, ['dom']);
+        });
+        it('should process property path in $view', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a');
+                document.body.appendChild(input);
+                var obj = window.tie('a', {value: 'lala', style: 'blue', $view: '#style'});
+                obj.$view.value.value.should.eql('blue', 'path in view');
+                should.not.exist(obj.$view.style, 'no other');
+                done();
+            }, ['dom']);
+        });
         it('should process property attribute', function (done) {
             browser(function (window) {
                 var document = window.document;
@@ -266,7 +317,7 @@ describe('dom', function () {
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
                 var obj = window.tie('a', {value: 'lala', $view: {style: '#value'}});
-                obj.$view.style.val(obj, true).should.eql('lala', 'property attr');
+                obj.$view.style.value.should.eql('lala', 'property attr');
                 done();
             }, ['dom']);
         });
@@ -279,7 +330,7 @@ describe('dom', function () {
                 var obj = window.tie('a', {value: 'lala', $view: { style: function value() {
                     return 'color:' + this.value;
                 }}});
-                obj.$view.style.val(obj, true).should.eql('color:lala', 'value attr');
+                obj.$view.style.value.should.eql('color:lala', 'value attr');
                 done();
             }, ['dom']);
         });
@@ -292,7 +343,7 @@ describe('dom', function () {
                 var r = renders[obj.$name];
                 should.exist(r, 'renderer');
                 setTimeout(function () {
-                    var element = obj.$view.$[0];
+                    var element = r.$[0];
                     should.exist(element, 'element');
                     done();
                 }, 200);
@@ -301,31 +352,32 @@ describe('dom', function () {
         it('should render attributes', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
+                var renders = window.exports().renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
+                var r = renders[obj.$name];
                 should.exist(obj.$view.style, 'view');
                 setTimeout(function () {
-                    obj.$view.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
+                    r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
                     done();
                 }, 200);
             }, ['dom']);
         });
-        it.only('should re-render attribute on change', function (done) {
-            this.timeout(10000);
-            setTimeout(function () {
+        it('should re-render attribute on change', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
+                var renders = window.exports().renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
+                var r = renders[obj.$name];
                 should.exist(obj.$view.style, 'view');
                 setTimeout(function () {
-                    obj.$view.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
+                    r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
                     obj.style = 'color:red';
-                    obj.$view.$[0].$.getAttribute('style').should.eql('color:red', 're-render');
+                    r.$[0].$.getAttribute('style').should.eql('color:red', 're-render');
                     done();
                 }, 200);
             }, ['dom']);
-            }, 5000);
         });
         it('should render property attribute', function (done) {
             browser(function (window) {
@@ -333,7 +385,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                window.tie('a', {value: 'lala', $attrs: ['style#value']});
+                window.tie('a', {value: 'lala', $view: 'style#'});
                 setTimeout(function () {
                     input.getAttribute('style').should.eql('lala', 'property attribute');
                     done();
@@ -346,7 +398,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', $attrs: ['style#value']});
+                var obj = window.tie('a', {value: 'lala', $view: 'style#'});
                 setTimeout(function () {
                     input.getAttribute('style').should.eql('lala', 'property attribute');
                     obj.value = 'balaba';
@@ -361,9 +413,9 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                window.tie('a', {value: 'lala', $attrs: [window.tie.attr('style', function () {
+                window.tie('a', {value: 'lala', $view: {style: function value() {
                     return 'color:' + this.value;
-                })]});
+                }}});
                 setTimeout(function () {
                     input.getAttribute('style').should.eql('color:lala', 'value attribute');
                     done();
@@ -376,9 +428,9 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', $attrs: [window.tie.attr('style', function () {
+                var obj = window.tie('a', {value: 'lala', $view: {style: function () {
                     return 'color:' + this.value;
-                }, ['value'])]});
+                }.val()}});
                 setTimeout(function () {
                     input.getAttribute('style').should.eql('color:lala', 'value attribute');
                     obj.value = 'green';
@@ -393,28 +445,15 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', style: 'aaa', $attrs: [window.tie.attr('style', function () {
+                var obj = window.tie('a', {value: 'lala', style: 'aaa', $view: {style: function () {
                     return 'color:' + this.value;
-                }, ['value'])]});
+                }.val()}});
                 setTimeout(function () {
                     input.getAttribute('style').should.eql('color:lala', 'value attribute');
                     obj.style = 'green';
                     input.getAttribute('style').should.eql('color:lala', 'not  re-render value');
                     done();
                 }, 200);
-            }, ['dom']);
-        });
-        it('should not combine property and value', function () {
-            browser(function (window) {
-                var document = window.document;
-                var input = document.createElement("input");
-                input.setAttribute('data-tie', 'a');
-                document.body.appendChild(input);
-                var a = function () {
-                    window.tie('a', {value: 'lala', $attrs: [window.tie.attr('style#value', function () {
-                        return 'color:' + this.value;
-                    })]});
-                }.should.throw('Property and calculated value combination is not supported');
             }, ['dom']);
         });
         it('should process pipe', function (done) {
@@ -427,7 +466,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a | upper');
                 document.body.appendChild(input);
-                window.tie('a', {value: 'lala', $attrs: ['value']});
+                window.tie('a', {value: 'lala', $view: '#'});
                 setTimeout(function () {
                     input.getAttribute('value').should.eql('LALA', 'pipe');
                     done();
@@ -440,7 +479,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
-                window.tie('a', {value: 'lala', name: 'baba', $attrs: ['value']});
+                window.tie('a', {value: 'lala', name: 'baba', $view: '#'});
                 setTimeout(function () {
                     input.getAttribute('value').should.eql('baba', 'property pipe');
                     done();
@@ -453,7 +492,7 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', name: 'baba', $attrs: ['value']});
+                var obj = window.tie('a', {value: 'lala', name: 'baba', $view: '#'});
                 setTimeout(function () {
                     input.getAttribute('value').should.eql('baba', 'pipes');
                     browser.sendKey(input, 'l');
@@ -470,10 +509,10 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
-                window.tie('app', {$attrs: ['value']});
+                window.tie('app', {$view: '#'});
                 var obj = window.tie('a', 'lala');
                 setTimeout(function () {
-                    should.exist(obj.$attrs);
+                    should.exist(obj.$view);
                     input.getAttribute('value').should.eql('lala', 'pipes');
                     done();
                 }, 200);
@@ -485,12 +524,12 @@ describe('dom', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                window.tie('app', {$attrs: ['value']});
+                window.tie('app', {$view: '#'});
                 var obj = window.tie('a', function () {
                     return 'color:blue';
                 });
                 setTimeout(function () {
-                    should.exist(obj.$attrs);
+                    should.exist(obj.$view);
                     input.getAttribute('value').should.eql('color:blue', 'fn value');
                     done();
                 }, 200);
@@ -518,7 +557,7 @@ describe('dom', function () {
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                window.tie('a', {value: 'lala', $attrs: ['value'], $shown: false});
+                window.tie('a', {value: 'lala', $view: '#', $shown: false});
                 setTimeout(function () {
                     div.style.display.should.eql('none', 'hidden');
                     done();
@@ -526,7 +565,7 @@ describe('dom', function () {
             }, ['dom']);
         });
     });
-    describe.skip('view', function () {
+    describe('view', function () {
         it('should not allow html as value', function (done) {
             browser(function (window) {
                 var document = window.document;

@@ -202,6 +202,21 @@ describe('handle', function () {
         should.exist(watch);
         watch.listeners.length.should.eql(1, 'watches')
     });
+    it('should prevent from cycling in watcher', function () {
+        var watch = null;
+        tie.handle("a", function (obj, config, observer) {
+            var w = function (obj, prop, val) {
+                obj[prop] = this.lowercase(val);
+            };
+            watch = observer;
+            observer.watch(config + '_.+', this._uid, w);
+            console.log('called ' + config);
+            return config + ' resolver';
+        });
+        var test = tie("test", {$a: "app", name:'uu', app_name: 'Jack'});
+        test.app_name.should.eql('jack', 'app name');
+        test.$a = 'name';
+    });
     it('should work with require', function () {
         var test = tie("a", { value: function () {
             return this.$$b.value;

@@ -16,20 +16,6 @@
 
     var app = null;
 
-    /**
-     * Allow convert array to configuration object extending object passed with array values as properties
-     *
-     * @returns {Object}
-     */
-    Array.prototype._ = function (obj) {
-        _.forEach(this, function (item) {
-            if (!obj.hasOwnProperty(item)) {
-                obj[item] = {'_item_name': item};
-            }
-        });
-        return obj;
-    };
-
     function toRegex(prop) {
         return new RegExp('^' + prop + '$');
     }
@@ -308,7 +294,7 @@
             return res;
         },
     
-        close: function (obj, name, sealed, dependencies) {
+        define: function (obj, name, sealed, dependencies) {
             this.defineImmutable(obj, '$name', name);
             this.defineImmutable(obj, '$sealed', sealed || false);
             this.defineImmutable(obj, '$deps', Object.freeze(dependencies || []));
@@ -383,7 +369,7 @@
             throw new Error(name + ' is not valid name for your pipe');
         }
         p = pipe(name, fn, dependencies || []);
-        _.close(p, name, sealed, dependencies);
+        _.define(p, name, sealed, dependencies);
         p = _.extend(p, _);
         _.defineImmutable(p, '$async', fn.length == 3);
         pipesRegistry[name] = p;
@@ -572,7 +558,7 @@
             throw new Error(name + ' handle already registered and sealed. Please choose another name for your handle');
         }
         h = handle(name, fn, dependencies || []);
-        _.close(h, name, sealed, dependencies);
+        _.define(h, name, sealed, dependencies);
         h = _.extend(h, _);
         handlesRegistry[name] = h;
         return h;
@@ -663,7 +649,7 @@
                     var o = obj;
                     var current = '';
                     while (next) {
-                        current +=  next;
+                        current += next;
                         var desc = Object.getOwnPropertyDescriptor(o, next);
                         if (o && observeProperty(o, next, desc, ready, this, current)) {
                             added.push(prop);
@@ -693,7 +679,7 @@
             if (onChange || onDelete) {
                 var property = listener(toRegex(prop), handlerId, null, onChange, onDelete);
                 this.listeners.push(property);
-                return function() {
+                return function () {
                     var indexOf = this.listeners.indexOf(property);
                     if (indexOf != -1) {
                         this.listeners.splice(indexOf, 1);
@@ -706,7 +692,7 @@
         add: function (prop, handlerId, valueFn) {
             if (this.props.indexOf(prop) == -1) {
                 this.newProps.push(prop);
-                if(this.props.length > 0) { //check whether it was observed already
+                if (this.props.length > 0) { //check whether it was observed already
                     this.observe()
                 }
             }
@@ -714,7 +700,7 @@
                 _.debug('Dynamic property added: ' + prop);
                 var property = listener(prop, handlerId, valueFn);
                 this.listeners.push(property);
-                return function() {
+                return function () {
                     var indexOf = this.listeners.indexOf(property);
                     if (indexOf != -1) {
                         this.listeners.splice(indexOf, 1);
@@ -756,7 +742,7 @@
             return react(prop, this.obj, ready, this.listeners, 'del');
         },
     
-        apply: function(prop, ready) {
+        apply: function (prop, ready) {
             this.onChange(prop, ready);
         }
     };
@@ -847,7 +833,11 @@
                     desc.value = val;
                 }
             }
-            observer.apply(fullProp, ready);
+            if (!newSet._apply) {
+                newSet._apply = true;
+                observer.apply(fullProp, ready);
+                newSet._apply = false;
+            }
         };
         var enumerable = desc ? desc.enumerable : true;
         Object.defineProperty(obj, prop, {
@@ -878,10 +868,6 @@
     bind.prototype = {
     
         apply: function (property, ready) {
-            if (property === this.currentProperty) {
-                return;
-            }
-            this.currentProperty = property;
             _.debug("Calling apply on '" + this.name + "' after changed property '" + property + "'");
             if (property && property[0] == HANDLE_PREFIX) {
                 var n = property.substring(1);
@@ -899,7 +885,6 @@
                     bind.obj[DEP_PREFIX + this.name] = this.obj;
                 }
             }, this);
-            delete this.currentProperty;
         },
     
         resolveHandles: function () {
@@ -933,10 +918,8 @@
             }
             _.debug("Got handle config " + config);
             if (_.isDefined(config)) {
-                this.currentProperty = n; //prevent apply update
                 this.observer.remove(handle._uid);
                 obj[n] = handle(obj, config, this.observer, appConfig);
-                delete this.currentProperty;
             }
             if (this.processedHandles.indexOf(prop) == -1) {
                 this.processedHandles.push(prop);
@@ -1035,7 +1018,7 @@
             _.debug("Tie " + name, name);
             var obj = this.check(tiedObject);
             var r = new bind(name, obj);
-            _.close(obj, name, sealed, dependencies);
+            _.define(obj, name, sealed, dependencies);
             obj._deleted = false;
             r.resolveHandles();
             this.resolveDependencies(r, dependencies);
@@ -1142,22 +1125,23 @@
             if (parent) parent.removeChild(element);
         },
 
-        hasClass: function (el, cls) {
-            return el.className.match(new RegExp('(\\s|^)' + cls + '(\\s|$)'));
+        hasClass: function (elem, className) {
+            return new RegExp(' ' + className + ' ').test(' ' + elem.className + ' ');
         },
 
-        addClass: function (el, cls) {
-            if (!this.hasClass(el, cls)) {
-                el.className += " " + cls;
-                el.className = _.trim(el.className);
+        addClass: function (elem, className) {
+            if (!this.hasClass(elem, className)) {
+                elem.className += ' ' + className;
             }
         },
 
-        removeClass: function (el, cls) {
-            if (this.hasClass(el, cls)) {
-                var reg = new RegExp('(\\s|^)' + cls + '(\\s|$)');
-                el.className = el.className.replace(reg, ' ');
-                el.className = _.trim(el.className);
+        removeClass: function (elem, className) {
+            var newClass = ' ' + elem.className.replace(/[\t\r\n]/g, ' ') + ' ';
+            if (this.hasClass(elem, className)) {
+                while (newClass.indexOf(' ' + className + ' ') >= 0) {
+                    newClass = newClass.replace(' ' + className + ' ', ' ');
+                }
+                elem.className = newClass.replace(/^\s+|\s+$/g, '');
             }
         },
 
@@ -1211,7 +1195,6 @@
         this._id = _.uid();
         this.index = idx ? parseInt(idx) : -1;
         this.tie = el.getAttribute(TIE);
-        this.obj = obj;
         this.events = {};
         this.isSelect = _.eqi(tagName, 'select');
         this.isInput = _.eqi(tagName, 'input') || _.eqi(tagName, 'textarea') || this.isSelect;
@@ -1269,7 +1252,7 @@
             return this.$.getAttribute(TIED);
         },
 
-        setAttribute: function (name, value) {
+        setAttribute: function (name, value, obj) {
             if (VALUE === name) {
                 this.value(value);
             } else if (TEXT === name) {
@@ -1285,7 +1268,7 @@
                 handler = function (event) {
                     event.index = that.index;
                     event.tie = that.tie;
-                    _.safeCall(value, that.obj, that.obj.$ready(), event);
+                    _.safeCall(value, obj, obj && obj.$ready(), event);
                 };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -1384,7 +1367,6 @@
         remove: function () {
             var element = this.$;
             delete this.$;
-            delete this.obj;
             delete this._id;
             delete this.isInput;
             delete this.hasCheck;
@@ -1417,119 +1399,16 @@
         }
     };
 
-    var Collection = function (array) {
-        this.$notify = function(prop, obj, ready) {
-            _.forEach(array, function (item) {
-                item.$notify(prop, obj, ready);
-            })
-        };
-
-        this.$render = function (obj, ready) {
-            _.forEach(array, function (item) {
-                item.$render(obj, ready);
-            })
-        };
-    };
-
-    var Element = function (view) {
-        _.extend(this, view);
-        this.$ = [];
-        this.$select = function (obj, base) {
-            var name = this.$tie;
-            var res = [];
-            if (dom.fetched.length == 0 || base) {
-                dom.fetch('[' + TIE + ']', base);
-            }
-            _.forEach(dom.fetched, function (el) {
-                if (el.getAttribute(TIE).indexOf(name) == 0) {
-                    res.push(new wrap(el, obj));
-                }
-            });
-            return res;
-        };
-        this.$prop = function (name, value) {
-            var res = this;
-            var split = name.split('.');
-            var i = 1;
-            var length = split.length;
-            while (i < length) {
-                res = res[split[i - 1]];
-                i++;
-                if (_.isUndefined(res)) {
-                    return undefined;
-                }
-            }
-            var last = split[length - 1];
-            if (_.isUndefined(value)) {
-                return res[last];
-            } else {
-                res[last] = value;
-            }
-            return undefined;
-        };
-
-        this.$notify = function(prop, obj, ready) {
-            _.forIn(this, function (val) {
-                if (val instanceof  Attr) {
-                    var deps = val.deps || [];
-                    if (deps.indexOf(prop) != -1) {
-                        _.forEach(this.$, function (el) {
-                            val.value = val.$get(obj, ready);
-                            val.$render(obj, ready, el);
-                        })
-                    }
-                } else if(_.isFunction(val.$notify)) {
-                    val.$notify(prop, obj, ready);
-                }
-            }, this);
-        };
-
-        this.$render = function (obj, ready, prop) {
-            if (this.$.length == 0) {
-                this.$ = this.$select(obj);
-                _.debug("Elements selected: " + this.$.length);
-            }
-            _.forEach(this.$, function (el) {
-                if (el) {
-                    if (prop) {
-                        var p = this.$prop(prop);
-                        if (p && _.isFunction(p.$render)) {
-                            p.$render(obj, ready, el);
-                        }
-                    } else {
-                        _.forIn(view, function (val) {
-                            if (_.isFunction(val.$render)) {
-                                val.$render(obj, ready, el);
-                            }
-                        }, this);
-                    }
-                }
-                if (!prop) {
-                    el.setAttribute(TIED);
-                    el.setAttribute(CLASS, obj.$name);
-                    if (el.isInput) {
-                        el.setAttribute(NAME, obj.$name);
-                    }
-                }
-            }, this);
-        };
-    };
-
     var Attr = function (name, value, prop, deps) {
         this.name = name;
         if (value) {
+            this.value = value;
             this.$get = function () {
                 return value;
             }
         } else {
             this.deps = deps || [];
-            if (_.isString(prop)) {
-                this.deps.push(prop);
-            }
             this.$get = function (obj, bindReady) {
-                if (_.isUndefined(bindReady)) {
-                    bindReady = obj.$ready();
-                }
                 if (_.isFunction(prop)) {
                     return _.safeCall(prop, obj, bindReady)
                 } else {
@@ -1545,65 +1424,124 @@
                 value = this.value = this.$get(obj, ready);
             }
             _.debug("Render attribute '" + name + "' with value " + value);
-            el.setAttribute(name, value);
+            el.setAttribute(name, value, obj);
         };
     };
 
-    var prepareView = function (view, obj, name) {
-        if (view && _.isFunction(view.$render)) {
-            return view;
-        }
-        if (_.isArray(view)) {
-            var res = {};
-            _.forEach(view, function (item) {
-                res.push(prepareView(item, obj));
-            });
-            return res;
-        } else if (_.isFunction(view)) {
-            var n = view.name || view.$name;
-            if (VALUE === n) {
-                return new Attr(VALUE, null, view, view.$deps);
-            }
-        } else if (_.isString(view) && view.charAt(0) === '#') {
-            var property = view.substring(1) || name;
-            return new Attr(name, null, property)
-        } else if (_.isObject(view)) {
-            _.forIn(view, function (value, prop) {
-                if (VALUE === prop && _.isFunction(obj.value)) {
-                    view[prop] = new Attr(VALUE, null, obj.value, [VALUE]);
-                } else {
-                    view[prop] = prepareView(value, obj, prop);
-                }
-            });
-            return new Element(view);
-        }
-        return new Attr(name, view);
+    var createAttr = function (name, prop, deps, obj) {
+        var attr = new Attr(name, null, prop, deps);
+        attr.value = attr.$get(obj);
+        return attr;
     };
 
-    var parse = window.tie.$;
+    var prepareView = function (view, obj) {
+        if (_.isString(view) && (view.indexOf('#') != -1 || view === '*' || view === '@')) {
+            //TODO implement @
+            var res = {};
+            if (view === '*') {
+                _.forIn(obj, function (val, prop) {
+                    if (prop.charAt(0) != '$' && prop.charAt(0) != '_') {
+                        res[prop] = createAttr(prop, prop, [prop], obj);
+                    }
+                });
+                return res;
+            }
+            var s = view.split('#');
+            var name = s[0] || VALUE;
+            var prop = s[1] || VALUE;
+            if (prop == VALUE && _.isFunction(obj.value)) {
+                res[name] = createAttr(name, obj.value, obj.value.$deps, obj);
+            } else {
+                res[name] = createAttr(name, prop, [prop], obj);
+            }
+            return res;
+        }
+        if (_.isFunction(view)) {
+            return {
+                value: createAttr(VALUE, view, view.$deps, obj)
+            };
+        }
+        if (_.isFunction(view) || _.isArray(view) || _.isRegExp(view) || _.isBoolean(view)
+            || _.isNumber(view) || _.isString(view) || _.isDate(view) || !_.isObject(view)) {
+            return {
+                value: new Attr(VALUE, view)
+            };
+        }
+        _.forIn(view, function (value, prop) {
+            if (VALUE === prop && _.isFunction(obj.value)) {
+                view[prop] = createAttr(VALUE, obj.value, [VALUE], obj);
+            } else if (_.isString(value) && value.charAt(0) === '#') {
+                var property = value.substring(1) || prop;
+                view[prop] = createAttr(prop, property, [property], obj);
+            } else if (_.isFunction(value) && (value.name == VALUE || value.$name == VALUE)) {
+                view[prop] = createAttr(prop, value, value.$deps, obj);
+            } else {
+                view[prop] = new Attr(prop, value)
+            }
+        });
+        return view;
+    };
 
     var renders = {};
 
     var renderer = function (obj, view) {
-        this.obj = obj;
         if (_.isUndefined(view.$shown)) {
             view.$shown = true;
         }
-        if (!view.$tag) {
-            view.$tag = 'div';
-        }
         view.$tie = obj.$name;
         view._processedHandles = [];
-        this.view = view;
-        this.values = {};
-        this.silent = false;
+        this.$ = [];
         this.rendered = false;
         this.rendering = false;
     };
 
     renderer.prototype = {
 
-        render: function (prop) {
+        select: function (obj, base) {
+            var name = obj.$name;
+            var res = [];
+            if (dom.fetched.length == 0 || base) {
+                dom.fetch('[' + TIE + ']', base);
+            }
+            _.forEach(dom.fetched, function (el) {
+                if (el.getAttribute(TIE).indexOf(name) == 0) {
+                    res.push(new wrap(el, obj));
+                }
+            });
+            return res;
+        },
+
+        $render: function (obj, ready, prop) {
+            if (this.$.length == 0) {
+                this.$ = this.select(obj);
+                _.debug("Elements selected: " + this.$.length);
+            }
+            _.forEach(this.$, function (el) {
+                if (el) {
+                    if (prop) {
+                        var p = obj.$prop('$view.' + prop);
+                        if (p && _.isFunction(p.$render)) {
+                            p.$render(obj, ready, el);
+                        }
+                    } else {
+                        _.forIn(obj.$view, function (val) {
+                            if (_.isFunction(val.$render)) {
+                                val.$render(obj, ready, el);
+                            }
+                        }, this);
+                    }
+                }
+                if (!prop) {
+                    el.setAttribute(TIED);
+                    el.setAttribute(CLASS, obj.$name);
+                    if (el.isInput) {
+                        el.setAttribute(NAME, obj.$name);
+                    }
+                }
+            }, this);
+        },
+
+        render: function (obj, prop) {
             if (!this.rendered && prop) {
                 return;
             }
@@ -1611,22 +1549,28 @@
                 return;
             }
             this.rendering = true;
-            var obj = this.obj;
-            var view = this.view;
             var tieName = obj.$name;
             _.debug("Render " + tieName, tieName + " Render");
             var ready = obj.$ready();
-            view.$render(obj, ready, prop);
+            this.$render(obj, ready, prop);
             this.rendering = false;
             this.rendered = true;
             _.debug("Rendered " + tieName);
         },
 
-        notify: function (prop) {
-            var view = this.view;
-            var obj = this.obj;
+        notify: function (obj, prop) {
             var ready = obj.$ready();
-            view.$notify(prop, obj, ready);
+            _.forIn(obj.$view, function (val) {
+                if (val instanceof  Attr) {
+                    var deps = val.deps || [];
+                    if (deps.indexOf(prop) != -1) {
+                        _.forEach(this.$, function (el) {
+                            val.value = val.$get(obj, ready);
+                            val.$render(obj, ready, el);
+                        })
+                    }
+                }
+            }, this);
         },
 
         show: function (shown) {
@@ -1663,7 +1607,7 @@
             _.debug("Processed view handle " + name);
             return obj;
         };
-        _.close(h, name, sealed, dependencies);
+        _.define(h, name, sealed, dependencies);
         h = _.extend(h, _);
         viewHandlers[name] = h;
         return h;
@@ -1701,12 +1645,6 @@
     handle('view', function (obj, config, observer) {
         var handlerId = this._uid;
         var view = prepareView(config, obj);
-        if (view instanceof Collection) {
-            view = new Element({$values: view});
-        } else if (view instanceof  Attr) {
-            view.name = VALUE;
-            view = new Element({value: view});
-        }
         var r = new renderer(obj, view);
         renders[obj.$name] = r;
         observer.watch('.*', handlerId, function (obj, prop, val) {
@@ -1727,7 +1665,7 @@
                 //r.silent = false;
                 //r.render(prop);
             } else {
-                r.notify(prop);
+                r.notify(obj, prop);
             }
         });
         _.forIn(viewHandlers, function (handle, prop) {
@@ -1737,7 +1675,7 @@
         }, this);
         if (dom.ready()) {
             setTimeout(function () {
-                r.render()
+                r.render(obj)
             }, 100);
         }
         return view;
@@ -1752,6 +1690,11 @@
     }, [], true);
 
     dom.ready(onReady);
+
+    Function.prototype.val = function (dependencies) {
+        _.define(this, VALUE, false, dependencies || [VALUE]);
+        return this;
+    };
 
     window.tie.domReady = dom.ready;
     window.tie.viewHandle = viewHandle;
