@@ -240,7 +240,7 @@ describe('dom', function () {
                 var fn = function () {
                     i = 'bbb';
                 };
-                el.setAttribute('click', fn,__ret.obj);
+                el.setAttribute('click', fn, __ret.obj);
                 browser.fireEvent(el.$, 'click');
                 should.exist(el.events.click);
                 i.should.eql('bbb', 'text');
@@ -279,7 +279,7 @@ describe('dom', function () {
                 input.setAttribute('href', '');
                 input.setAttribute('title', '');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {title: 'lala', href:'google.com', $view: '@'});
+                var obj = window.tie('a', {title: 'lala', href: 'google.com', $view: '@'});
                 obj.$view.href.value.should.eql('google.com', 'mapper view');
                 obj.$view.title.value.should.eql('lala', 'mapper view');
                 should.not.exist(obj.$view.value, 'no attr');
@@ -486,6 +486,21 @@ describe('dom', function () {
                 }, 200);
             }, ['dom']);
         });
+        it('should process property change for pipe', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a.name');
+                document.body.appendChild(input);
+                var obj = window.tie('a', {value: 'lala', name: 'baba', $view: '#'});
+                setTimeout(function () {
+                    input.getAttribute('value').should.eql('baba', 'property pipe');
+                    obj.name = 'lala';
+                    input.getAttribute('value').should.eql('lala', 'property pipe');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
         it('should update property', function (done) {
             browser(function (window) {
                 var document = window.document;
@@ -542,7 +557,7 @@ describe('dom', function () {
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 setTimeout(function () {
-                    obj.$shown = false;
+                    obj.$view.$shown = false;
                     var r = renders[obj.$name];
                     var el = r.$[0];
                     el.shown.should.eql(false, 'hidden');
@@ -557,7 +572,7 @@ describe('dom', function () {
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                window.tie('a', {value: 'lala', $view: '#', $shown: false});
+                window.tie('a', {value: 'lala', $view: {value: '#', $shown: false}});
                 setTimeout(function () {
                     div.style.display.should.eql('none', 'hidden');
                     done();

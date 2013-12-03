@@ -571,10 +571,10 @@
                 h[DEP_PREFIX + item] = handlesRegistry[item];
             });
             if (fn && _.isFunction(fn)) {
-                obj = _.safeCall(fn, h, true, obj, config, watcher, appConfig);
+                config = _.safeCall(fn, h, true, obj, config, watcher, appConfig);
             }
             _.debug("Processed handle " + name);
-            return obj;
+            return config;
         };
         return h;
     };
@@ -1085,8 +1085,9 @@
 (function (window) {
     'use strict';
 
-    var _ = window.tie._;
     var document = window.document;
+    var _ = window.tie._;
+    var parse = window.tie.$;
 
     var VALUE = 'value';
     var TEXT = 'text';
@@ -1185,7 +1186,7 @@
             var value = that.value();
             value = _.trim(value);
 
-            var prop = that.getProperty();
+            var prop = that.property;
             if (obj.$prop(prop) !== value) {
                 obj.$prop(prop, value);
             }
@@ -1195,6 +1196,7 @@
         this._id = _.uid();
         this.index = idx ? parseInt(idx) : -1;
         this.tie = el.getAttribute(TIE);
+        this.property = this.getProperty(this.tie);
         this.events = {};
         this.isSelect = _.eqi(tagName, 'select');
         this.isInput = _.eqi(tagName, 'input') || _.eqi(tagName, 'textarea') || this.isSelect;
@@ -1226,24 +1228,13 @@
 
     wrap.prototype = {
 
-        getProperty: function () {
-            var string = this.tie;
+        getProperty: function (string) {
             string = _.trim(string || '');
             var tokens = string.split('|');
             var t = tokens[0];
             var dot = t.indexOf('.');
             if (dot != -1) {
                 return t.substring(dot + 1);
-            }
-            var index = t.indexOf(':');
-            var name = _.trim(index + 1 ? t.substr(0, index) : t);
-            if (name === 'property') {
-                if (index >= 0) {
-                    var p = _.trim(t.substr(++index));
-                    p = '[' + p + ']';
-                    var array = _.convert(p, {});
-                    return array[0];
-                }
             }
             return VALUE;
         },
@@ -1468,7 +1459,9 @@
             };
         }
         _.forIn(view, function (value, prop) {
-            if (VALUE === prop && _.isFunction(obj.value)) {
+            if (prop.charAt(0) == '$') {
+                resolveViewHandle(view, prop.substring(1));
+            } else if (VALUE === prop && _.isFunction(obj.value)) {
                 view[prop] = createAttr(VALUE, obj.value, [VALUE], obj);
             } else if (_.isString(value) && value.charAt(0) === '#') {
                 var property = value.substring(1) || prop;
@@ -1489,7 +1482,7 @@
             view.$shown = true;
         }
         view.$tie = obj.$name;
-        view._processedHandles = [];
+        view._resolved = [];
         this.$ = [];
         this.rendered = false;
         this.rendering = false;
@@ -1511,50 +1504,46 @@
             return res;
         },
 
+        $renderAttr: function (attr, pipe, obj, ready, el) {
+            if (attr instanceof Attr) {
+                if (pipe) {
+                    delete attr.value;
+                }
+                attr.$render(obj, ready, el);
+            }
+        },
+
         $render: function (obj, ready, prop) {
+            var tieName = obj.$name;
+            _.debug("Render " + tieName, tieName + " Render");
             if (this.$.length == 0) {
                 this.$ = this.select(obj);
                 _.debug("Elements selected: " + this.$.length);
             }
+            var $shown = obj.$view.$shown;
             _.forEach(this.$, function (el) {
                 if (el) {
+                    var pipe = el.tie !== tieName;
+                    if (pipe) {
+                        obj = parse(el.tie, undefined, obj);
+                        $shown = obj.$view.$shown;
+                    }
                     if (prop) {
                         var p = obj.$prop('$view.' + prop);
-                        if (p && _.isFunction(p.$render)) {
-                            p.$render(obj, ready, el);
-                        }
+                        this.$renderAttr(p, pipe, obj, ready, el);
                     } else {
                         _.forIn(obj.$view, function (val) {
-                            if (_.isFunction(val.$render)) {
-                                val.$render(obj, ready, el);
-                            }
+                            this.$renderAttr(val, pipe, obj, ready, el);
                         }, this);
-                    }
-                }
-                if (!prop) {
-                    el.setAttribute(TIED);
-                    el.setAttribute(CLASS, obj.$name);
-                    if (el.isInput) {
-                        el.setAttribute(NAME, obj.$name);
+                        el.setAttribute(TIED);
+                        el.setAttribute(CLASS, tieName);
+                        if (el.isInput) {
+                            el.setAttribute(NAME, tieName);
+                        }
+                        el.show($shown);
                     }
                 }
             }, this);
-        },
-
-        render: function (obj, prop) {
-            if (!this.rendered && prop) {
-                return;
-            }
-            if (this.rendering) {
-                return;
-            }
-            this.rendering = true;
-            var tieName = obj.$name;
-            _.debug("Render " + tieName, tieName + " Render");
-            var ready = obj.$ready();
-            this.$render(obj, ready, prop);
-            this.rendering = false;
-            this.rendered = true;
             _.debug("Rendered " + tieName);
         },
 
@@ -1564,13 +1553,20 @@
                 if (val instanceof  Attr) {
                     var deps = val.deps || [];
                     if (deps.indexOf(prop) != -1) {
+                        val.value = val.$get(obj, ready);
                         _.forEach(this.$, function (el) {
-                            val.value = val.$get(obj, ready);
                             val.$render(obj, ready, el);
-                        })
+                        });
                     }
                 }
             }, this);
+            var val = obj.$view.value;
+            _.forEach(this.$, function (el) {
+                if (prop === el.property && val instanceof Attr) {
+                    val.value = obj.$prop(prop);
+                    val.$render(obj, ready, el);
+                }
+            });
         },
 
         show: function (shown) {
@@ -1596,16 +1592,16 @@
         if (h && h.$sealed) {
             throw new Error(name + ' view handle already registered and sealed. Please choose another name for your handle');
         }
-        h = function (obj, config) {
+        h = function (view, config) {
             _.debug("Process view handle " + name);
             _.forEach(dependencies || [], function (item) {
                 h['$$' + item] = viewHandlers[item];
             });
             if (fn && _.isFunction(fn)) {
-                obj = _.safeCall(fn, h, true, obj, config);
+                config = _.safeCall(fn, h, true, view, config);
             }
             _.debug("Processed view handle " + name);
-            return obj;
+            return config;
         };
         _.define(h, name, sealed, dependencies);
         h = _.extend(h, _);
@@ -1624,20 +1620,21 @@
     };
 
     var resolveViewHandle = function (view, name) {
-        var handle = viewHandlers[name];
-        if (handle) {
-            _.forEach(handle.$deps, function (item) {
-                if (view._processedHandles.indexOf(item) == -1) {
+        var vh = viewHandlers[name];
+        if (vh && view._resolved) {
+            _.forEach(vh.$deps, function (item) {
+                if (view._resolved.indexOf(item) == -1) {
                     resolveViewHandle(view, item);
                 }
             });
-            var c = view['$' + name];
-            _.debug("View handle " + name + ' with config' + c);
+            var h = ('$' + name);
+            var c = view[h];
+            _.debug("View handle " + name + ' with config ' + c);
             if (_.isDefined(c)) {
-                view['$' + name] = handle(view, c);
+                view[h] = vh(view, c);
             }
-            if (view._processedHandles.indexOf(name) == -1) {
-                view._processedHandles.push(name);
+            if (view._resolved.indexOf(name) == -1) {
+                view._resolved.push(name);
             }
         }
     };
@@ -1646,43 +1643,49 @@
         var handlerId = this._uid;
         var view = prepareView(config, obj);
         var r = new renderer(obj, view);
-        renders[obj.$name] = r;
+        var tieName = obj.$name;
+        r.render = function (prop) {
+            if (this.rendering || (!this.rendered && prop)) {
+                return;
+            }
+            this.rendering = true;
+            this.$render(obj, obj.$ready(), prop);
+            this.rendering = false;
+            this.rendered = true;
+        };
+        renders[tieName] = r;
         observer.watch('.*', handlerId, function (obj, prop, val) {
             if (r.silent) {
                 return;
             }
             if ('_deleted' === prop && !!val) {
-                delete renders[obj.$name];
+                delete renders[tieName];
                 observer.remove(handlerId);
             } else if (prop.indexOf('$view.') == 0) {
                 var vh = prop.replace('$view.', '');
-                if (vh && vh[0] == '$') {
-                    var name = vh.substring(1);
-                    resolveViewHandle(view, name);
+                if (vh.charAt(0) == '$') {
+                    resolveViewHandle(view, vh.substring(1));
                 }
-                //r.silent = true;
-                //view.$prop(vh, prepareView(val, obj, vh));
-                //r.silent = false;
-                //r.render(prop);
+                r.render(prop);
             } else {
                 r.notify(obj, prop);
             }
         });
         _.forIn(viewHandlers, function (handle, prop) {
-            if (view._processedHandles.indexOf(prop) == -1) {
+            if (view._resolved.indexOf(prop) == -1) {
                 resolveViewHandle(view, prop);
             }
         }, this);
         if (dom.ready()) {
             setTimeout(function () {
-                r.render(obj)
+                r.render()
             }, 100);
         }
         return view;
     }, [], true);
 
-    viewHandle("shown", function (obj, config) {
-        var r = renders[obj.$name];
+    viewHandle("shown", function (view, config) {
+        var r = renders[view.$tie];
         if (r) {
             r.show(config);
         }
@@ -1714,8 +1717,6 @@
     }
 
 })(window);
-
-
 
 /**
  * Tie.js HTTP handle
