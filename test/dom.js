@@ -587,7 +587,7 @@ describe('dom', function () {
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                window.tie('app', {$attrs: ['value']});
+                window.tie('app', {$view: '#'});
                 window.tie('a', '<span>lala</span>');
                 setTimeout(function () {
                     div.textContent.should.eql('<span>lala</span>', 'inner text');
