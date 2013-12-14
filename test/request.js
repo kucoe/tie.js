@@ -5,57 +5,63 @@ var request = require('../lib/request')(tie, true);
 
 describe('request', function () {
     it('should process $request', function () {
-        var obj = tie('a', {$request: {url: 'http://api.randomuser.me/?results=1'}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1'}});
         (typeof obj.$request.get).should.eql('function', 'request get');
     });
     it('should default not cache', function () {
-        var obj = tie('a', {$request: {url: 'http://api.randomuser.me/?results=1'}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1'}});
         obj.$request.cache.should.eql(false, 'request not cache');
     });
     it('should combine url', function () {
-        tie('app', {$request: {url: 'data/'}});
-        var obj = tie('a', {$request: {url: 'data.json'}});
+        tie('app', {$request: {url: 'http://jsonplaceholder.typicode.com/'}});
+        var obj = tie('a', {$request: {url: 'posts/1'}});
         var req = obj.$request.get({}, {});
-        req.request.url.should.eql('data/data.json', 'request url');
+        req.request.url.should.eql('http://jsonplaceholder.typicode.com/posts/1', 'request url');
     });
     it('should combine url with url template', function () {
-        tie('app', {$request: {url: 'data/{url}?lang=de'}});
-        var obj = tie('a', {$request: {url: 'data.json'}});
+        tie('app', {$request: {url: 'http://jsonplaceholder.typicode.com/{url}/1'}});
+        var obj = tie('a', {$request: {url: 'posts'}});
         var req = obj.$request.get({}, {});
-        req.request.url.should.eql('data/data.json?lang=de', 'request url');
+        req.request.url.should.eql('http://jsonplaceholder.typicode.com/posts/1', 'request url');
     });
     it('should combine url with url template and empty url', function () {
-        tie('app', {$request: {url: 'data/{url}?lang=de'}});
+        tie('app', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/{url}'}});
         var obj = tie('a', {});
         var req = obj.$request.get({}, {});
-        req.request.url.should.eql('data/?lang=de', 'request url');
+        req.request.url.should.eql('http://jsonplaceholder.typicode.com/posts/', 'request url');
     });
     it('should combine params in url', function () {
         tie('app', {$request: {params: {a: 1}}});
-        var obj = tie('a', {$request: {url: 'data.json', params: {b: 2}}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/', params: {b: 2}}});
         var req = obj.$request.get({c: 3}, {});
-        req.request.url.should.eql('data.json?a=1&b=2&c=3', 'request params');
+        req.request.url.should.eql('http://jsonplaceholder.typicode.com/posts/?a=1&b=2&c=3', 'request params');
+    });
+    it('should combine params with url', function () {
+        tie('app', {$request: {params: {a: 1}}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/?yyy=100', params: {b: 2}}});
+        var req = obj.$request.get({c: 3}, {});
+        req.request.url.should.eql('http://jsonplaceholder.typicode.com/posts/?yyy=100&a=1&b=2&c=3', 'request params');
     });
     it('should combine params', function () {
-        tie('app', {$request: {params: {a: 1}}});
-        var obj = tie('a', {$request: {url: 'data.json', params: {b: 2}}});
-        var req = obj.$request.post({c: 3}, {});
-        req.request.params.should.eql('a=1&b=2&c=3', 'request params');
+        tie('app', {$request: {params: {userId: 1}}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/', params: {title: 'a'}}});
+        var req = obj.$request.post({body: 'b'}, {});
+        req.request.params.should.eql('userId=1&title=a&body=b', 'request params');
     });
     it('should combine headers', function () {
         tie('app', {$request: {headers: {'X-Requested-With': 'XMLHttpRequest'}}});
-        var obj = tie('a', {$request: {url: 'data.json', headers: {'Content-Length': 348}}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1', headers: {'Content-Length': 0}}});
         var req = obj.$request.get({}, {});
         req.request.headers.should.eql({'X-Requested-With': 'XMLHttpRequest',
-            'Content-Length': 348,
+            'Content-Length': 0,
             'Accept': 'application/json'}, 'request headers');
     });
     it('should memo result', function (done) {
-        var obj = tie('a', {$request: {url: 'http://www.geoplugin.net/json.gp', cache: true}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1', cache: true}});
         obj.$request.get({}, {});
         setTimeout(function () {
-            obj.$request.memo('http://www.geoplugin.net/json.gp', 'json').geoplugin_currencyConverter.
-                should.eql(0, 'request memo');
+            obj.$request.memo('http://jsonplaceholder.typicode.com/posts/1', 'json').userId.
+                should.eql(1, 'request memo');
             done();
         }, 1000);
     });
@@ -86,7 +92,7 @@ describe('request', function () {
         }, 1000);
     });
     it('should map correct method', function () {
-        var obj = tie('a', {$request: {url: 'data.json'}});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1'}});
         var req = obj.$request.get({}, {});
         req.request.method.should.eql('GET', 'request get');
         req = obj.$request.post({}, {});
