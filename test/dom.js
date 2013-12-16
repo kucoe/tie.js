@@ -26,7 +26,7 @@ function prepareInput(window, $, tag, type) {
     return {input: input, obj: obj, el: el};
 }
 
-describe('dom', function () {
+describe.only('dom', function () {
     describe('bootstrap', function () {
         it('jsdom should work', function (done) {
             this.timeout(10000);
@@ -248,7 +248,7 @@ describe('dom', function () {
             }, ['dom']);
         });
     });
-    describe('render', function () {
+    describe('view', function () {
         it('should process $view', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
@@ -528,7 +528,42 @@ describe('dom', function () {
                 var obj = window.tie('a', 'lala');
                 setTimeout(function () {
                     should.exist(obj.$view);
-                    input.getAttribute('value').should.eql('lala', 'pipes');
+                    input.getAttribute('value').should.eql('lala', 'app default');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should merge with app defaults', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a.name');
+                document.body.appendChild(input);
+                window.tie('app', {$view: '#'});
+                var obj = window.tie('a', {value:'lala', $view : {style:'color:blue'}});
+                setTimeout(function () {
+                    should.exist(obj.$view);
+                    should.exist(obj.$view.value);
+                    should.exist(obj.$view.style);
+                    input.getAttribute('value').should.eql('lala', 'app default');
+                    input.getAttribute('style').should.eql('color:blue', 'app default');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should not merge string with app defaults', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a.name');
+                document.body.appendChild(input);
+                window.tie('app', {$view: '#'});
+                var obj = window.tie('a', {value:'color:blue', $view : 'style#'});
+                setTimeout(function () {
+                    should.exist(obj.$view);
+                    should.not.exist(obj.$view.value);
+                    should.exist(obj.$view.style);
+                    input.getAttribute('style').should.eql('color:blue', 'app default');
                     done();
                 }, 200);
             }, ['dom']);
@@ -550,6 +585,22 @@ describe('dom', function () {
                 }, 200);
             }, ['dom']);
         });
+        it('should not allow html as value', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                window.tie('app', {$view: '#'});
+                window.tie('a', '<span>lala</span>');
+                setTimeout(function () {
+                    div.textContent.should.eql('<span>lala</span>', 'inner text');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+    });
+    describe('viewHandles', function () {
         it('should react on $shown', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
@@ -579,125 +630,228 @@ describe('dom', function () {
                 }, 200);
             }, ['dom']);
         });
-    });
-    describe('view', function () {
-        it('should not allow html as value', function (done) {
+        it('should react on $parent by id', function (done) {
             browser(function (window) {
                 var document = window.document;
-                var div = document.createElement("div");
-                div.setAttribute('data-tie', 'a');
-                document.body.appendChild(div);
+                var parent = document.createElement("div");
+                parent.setAttribute('id', 'parent');
+                document.body.appendChild(parent);
+                var input = document.createElement('input');
+                input.setAttribute('data-tie', 'a');
+                input.type = 'text';
+                document.body.appendChild(input);
                 window.tie('app', {$view: '#'});
-                window.tie('a', '<span>lala</span>');
+                window.tie('a', {value: 'a', $view:{ $parent: 'parent'} });
                 setTimeout(function () {
-                    div.textContent.should.eql('<span>lala</span>', 'inner text');
+                    parent.firstChild.tagName.toLowerCase().should.eql('input', '$parent');
+                    parent.firstChild.value.should.eql('a', 'combine $view');
                     done();
                 }, 200);
             }, ['dom']);
         });
-        it('should use view html', function (done) {
+        it('should react on $parent change', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var parent = document.createElement("div");
+                parent.setAttribute('id', 'parent');
+                document.body.appendChild(parent);
+                var parent2 = document.createElement("div");
+                parent2.setAttribute('id', 'parent2');
+                document.body.appendChild(parent2);
+                var input = document.createElement('input');
+                input.setAttribute('data-tie', 'a');
+                input.type = 'text';
+                document.body.appendChild(input);
+                window.tie('app', {$view: '#'});
+                var a = window.tie('a', {value: 'a', $view:{ $parent: 'parent'} });
+                setTimeout(function () {
+                    parent.firstChild.tagName.toLowerCase().should.eql('input', '$parent');
+                    a.$view.$parent = 'parent2';
+                    should.not.exists(parent.firstChild);
+                    parent2.firstChild.tagName.toLowerCase().should.eql('input', 'new $parent');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should react on $parent by tie', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var parent = document.createElement("div");
+                parent.setAttribute('data-tie', 'b');
+                document.body.appendChild(parent);
+                var input = document.createElement('input');
+                input.setAttribute('data-tie', 'a');
+                input.type = 'text';
+                document.body.appendChild(input);
+                window.tie('app', {$view: '#'});
+                window.tie('a', {value: 'a', $view:{ $parent: '#b'} }, ['b']);
+                window.tie('b', {value: 'color:blue', $view:'style#' });
+                setTimeout(function () {
+                    parent.getAttribute('style').should.eql('color:blue', 'process parent');
+                    parent.firstChild.tagName.toLowerCase().should.eql('input', '$parent');
+                    parent.firstChild.value.should.eql('a', 'combine $view');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should react on $children', function (done) {
             browser(function (window) {
                 var document = window.document;
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                var div2 = document.createElement("div");
-                div2.setAttribute('data-tie', 'b');
-                var input = document.createElement('input');
-                input.type = 'text';
-                div2.appendChild(input);
-                document.body.appendChild(div2);
-                window.tie('app', {$attrs: ['value']});
-                window.tie('a', {value: 'a', $view: 'b'});
-                window.tie('b', {});
+                var child1 = {
+                    $tag: 'input',
+                    type: 'text'
+                };
+                var child2 = {
+                    $tag: 'a',
+                    href: 'https://kucoe.net'
+                };
+                window.tie('a', {value: 'a', $view: {value:'#', $children:[child1, child2]}});
                 setTimeout(function () {
-                    div.innerHTML.should.eql('<input type="text" />', 'view');
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    div.children[0].type.should.eql('text', 'child type');
+                    div.children[1].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[1].href.should.eql('https://kucoe.net/', 'child href');
                     done();
                 }, 200);
             }, ['dom']);
         });
-        it('should combine view html', function (done) {
+        it('should react on $children generator', function (done) {
             browser(function (window) {
                 var document = window.document;
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                var div2 = document.createElement("div");
-                div2.setAttribute('data-tie', 'b');
-                var input = document.createElement('input');
-                input.type = 'text';
-                div2.appendChild(input);
-                document.body.appendChild(div2);
-                var div3 = document.createElement("div");
-                div3.setAttribute('data-tie', 'b');
-                var a = document.createElement('a');
-                a.href = 'd.html';
-                div3.appendChild(a);
-                document.body.appendChild(div3);
-                window.tie('app', {$attrs: ['value']});
-                window.tie('a', {value: 'a', $view: 'b'});
-                window.tie('b', {});
+                var child1 = {
+                    $tag: 'input',
+                    type: 'text'
+                };
+                var child2 = {
+                    $tag: 'a',
+                    href: 'https://kucoe.net'
+                };
+                var arr = [child1, child2];
+                var generator = function() {
+                    return arr.shift();
+                };
+                window.tie('a', {value: 'a', $view: {value:'#', $children:generator}});
                 setTimeout(function () {
-                    div.innerHTML.should.eql('<input type="text" /><a href="d.html"></a>', 'view');
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    div.children[0].type.should.eql('text', 'child type');
+                    div.children[1].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[1].href.should.eql('https://kucoe.net/', 'child href');
                     done();
                 }, 200);
             }, ['dom']);
         });
-        it('should react on view change', function (done) {
+        it('should react on $children change', function (done) {
             browser(function (window) {
-                window.exports().clean();
                 var document = window.document;
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                var div2 = document.createElement("div");
-                div2.setAttribute('data-tie', 'b');
-                var input = document.createElement('input');
-                input.type = 'text';
-                div2.appendChild(input);
-                document.body.appendChild(div2);
-                var div3 = document.createElement("div");
-                div3.setAttribute('data-tie', 'c');
-                var a = document.createElement('a');
-                a.href = 'd.html';
-                div3.appendChild(a);
-                document.body.appendChild(div3);
-                window.tie('app', {$attrs: ['value']});
-                var obj = window.tie('a', {value: 'a', $view: 'b'});
-                window.tie('b', {});
-                window.tie('c', {});
+                var child1 = {
+                    $tag: 'input',
+                    type: 'text'
+                };
+                var child2 = {
+                    $tag: 'a',
+                    href: 'https://kucoe.net'
+                };
+                var a = window.tie('a', {value: 'a', $view: {value:'#', $children:[child1, child2]}});
                 setTimeout(function () {
-                    div.innerHTML.should.eql('<input type="text" />', 'view');
-                    obj.$view = 'c';
-                    setTimeout(function () {
-                        div.innerHTML.should.eql('<a href="d.html"></a>', 'view change');
-                        done();
-                    }, 200);
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    div.children[0].type.should.eql('text', 'child type');
+                    div.children[1].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[1].href.should.eql('https://kucoe.net/', 'child href');
+                    a.$view.$children = [child2, child1];
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('a', 'child change tag');
+                    div.children[0].href.should.eql('https://kucoe.net/', 'child change href');
+                    div.children[1].tagName.toLowerCase().should.eql('input', 'child change tag');
+                    div.children[1].type.should.eql('text', 'child change type');
+                    done();
                 }, 200);
             }, ['dom']);
         });
-        it('should process tie in html', function (done) {
+        it('should use object for $children attr values', function (done) {
             browser(function (window) {
-                window.exports().clean();
                 var document = window.document;
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                var div2 = document.createElement("div");
-                div2.setAttribute('data-tie', 'b');
-                var input = document.createElement('input');
-                input.type = 'text';
-                input.setAttribute('data-tie', 'c');
-                div2.appendChild(input);
-                document.body.appendChild(div2);
-                window.tie('app', {$attrs: ['value']});
-                window.tie('a', {value: 'a', $view: 'b'});
-                window.tie('b', {});
-                window.tie('c', 'c');
+                var child = {
+                    $tag: 'a',
+                    href: '#value'
+                };
+                window.tie('a', {value: 'https://kucoe.net', $view: {$children:child}});
                 setTimeout(function () {
-                    div.innerHTML.should.eql('<input type="text" data-tie="c" style="" value="c" data-tied="" class="c" name="c" />', 'view');
+                    div.children.length.should.eql(1, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[0].href.should.eql('https://kucoe.net/', 'child href');
                     done();
-                }, 400);
+                }, 200);
+            }, ['dom']);
+        });
+        it('should react on object change in $children', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var child = {
+                    $tag: 'a',
+                    href: '#value'
+                };
+                var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children:child}});
+                setTimeout(function () {
+                    div.children.length.should.eql(1, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[0].href.should.eql('https://kucoe.net/', 'child href');
+                    a.value = 'http://becevka.com';
+                    div.children.length.should.eql(1, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[0].href.should.eql('http://becevka.com/', 'value change');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should react on array changes in $children', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var child1 = {
+                    $tag: 'input',
+                    type: 'text'
+                };
+                var child2 = {
+                    $tag: 'a',
+                    href: 'https://kucoe.net'
+                };
+                var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children:child1}});
+                setTimeout(function () {
+                    div.children.length.should.eql(1, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    a.$view.$children.push(child2);
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    div.children[1].tagName.toLowerCase().should.eql('a', 'child tag');
+                    a.$view.$children.reverse();
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[1].tagName.toLowerCase().should.eql('input', 'child tag');
+                    a.$view.$children.shift();
+                    div.children.length.should.eql(1, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    done();
+                }, 200);
             }, ['dom']);
         });
     });

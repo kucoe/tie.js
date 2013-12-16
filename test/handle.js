@@ -167,6 +167,68 @@ describe('handle', function () {
         }
         test.total.should.eql("Hello deleted");
     });
+    it('should watch array change on demand', function () {
+        tie.handle("array", function (obj, config, observer) {
+            var onChange = function (item) {
+                return 'Hello ' + item;
+            };
+            tie._.forEach(config, function(item, i) {
+                config[i] = onChange(item);
+            });
+            config = observer.observeArray(config, onChange);
+            return config;
+        });
+        var test = tie("test", {$array: ["Jack"]});
+        test.$array[0].should.eql("Hello Jack");
+        test.$array.set(0, 'Wolf');
+        test.$array[0].should.eql("Hello Wolf");
+    });
+    it('should watch array addition on demand', function () {
+        tie.handle("array", function (obj, config, observer) {
+            var onChange = function (item) {
+                return 'Hello ' + item;
+            };
+            tie._.forEach(config, function(item, i) {
+                config[i] = onChange(item);
+            });
+            config = observer.observeArray(config, onChange, onChange);
+            return config;
+        });
+        var test = tie("test", {$array: ["Jack"]});
+        test.$array[0].should.eql("Hello Jack");
+        test.$array.push('Wolf');
+        test.$array[1].should.eql("Hello Wolf");
+    });
+    it('should watch array remove on demand', function () {
+        tie.handle("array", function (obj, config, observer) {
+            var onChange = function (item) {
+                return 'Hello ' + item;
+            };
+            config = observer.observeArray(config, onChange, onChange, onChange);
+            return config;
+        });
+        var test = tie("test", {$array: ["Jack"]});
+        test.$array[0].should.eql("Jack");
+        test.$array.pop().should.eql("Hello Jack", 'removed');
+    });
+    it('should watch array complex changes on demand', function () {
+        tie.handle("array", function (obj, config, observer) {
+            var onChange = function (item) {
+                return 'Changed ' + item;
+            };
+            config = observer.observeArray(config, onChange);
+            return config;
+        });
+        var test = tie("test", {$array: ["Jack", "Pepe", "Olly"]});
+        test.$array.sort();
+        test.$array[0].should.eql("Jack");
+        test.$array[1].should.eql("Changed Olly");
+        test.$array[2].should.eql("Changed Pepe");
+        test.$array[0] = "Jacky";
+        test.$array[0].should.eql("Jacky");
+        test.$array.check();
+        test.$array[0].should.eql("Changed Jacky");
+    });
     it('should not loose watcher', function () {
         tie.handle("a", function (obj, config, observer) {
             var w = function (obj) {
