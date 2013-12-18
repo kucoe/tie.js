@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Big list</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+</head>
+<body>
+<div>
+    <div id="a" data-tie="a"></div>
+</div>
+<script src="../tie.js"></script>
+<script>
+    var child = function (i) {
+        if (i == 10000) {
+            return null;
+        }
+        return {
+            $tag: 'input',
+            type: 'text',
+            value: 'me is ' + i
+        }
+    };
+    var start = new Date().getTime();
+    window.tie('a', {$view: {$children: child}});
+    window.tie.domReady(function () {
+        var end = new Date().getTime();
+        console.log(document.getElementById("a").children.length);
+        console.log('Time: ' + (end - start));
+    });
+</script>
+
+</body>
+</html>

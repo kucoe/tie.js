@@ -26,7 +26,7 @@ function prepareInput(window, $, tag, type) {
     return {input: input, obj: obj, el: el};
 }
 
-describe.only('dom', function () {
+describe('dom', function () {
     describe('bootstrap', function () {
         it('jsdom should work', function (done) {
             this.timeout(10000);
@@ -540,7 +540,7 @@ describe.only('dom', function () {
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
                 window.tie('app', {$view: '#'});
-                var obj = window.tie('a', {value:'lala', $view : {style:'color:blue'}});
+                var obj = window.tie('a', {value: 'lala', $view: {style: 'color:blue'}});
                 setTimeout(function () {
                     should.exist(obj.$view);
                     should.exist(obj.$view.value);
@@ -558,7 +558,7 @@ describe.only('dom', function () {
                 input.setAttribute('data-tie', 'a.name');
                 document.body.appendChild(input);
                 window.tie('app', {$view: '#'});
-                var obj = window.tie('a', {value:'color:blue', $view : 'style#'});
+                var obj = window.tie('a', {value: 'color:blue', $view: 'style#'});
                 setTimeout(function () {
                     should.exist(obj.$view);
                     should.not.exist(obj.$view.value);
@@ -641,7 +641,7 @@ describe.only('dom', function () {
                 input.type = 'text';
                 document.body.appendChild(input);
                 window.tie('app', {$view: '#'});
-                window.tie('a', {value: 'a', $view:{ $parent: 'parent'} });
+                window.tie('a', {value: 'a', $view: { $parent: 'parent'} });
                 setTimeout(function () {
                     parent.firstChild.tagName.toLowerCase().should.eql('input', '$parent');
                     parent.firstChild.value.should.eql('a', 'combine $view');
@@ -663,7 +663,7 @@ describe.only('dom', function () {
                 input.type = 'text';
                 document.body.appendChild(input);
                 window.tie('app', {$view: '#'});
-                var a = window.tie('a', {value: 'a', $view:{ $parent: 'parent'} });
+                var a = window.tie('a', {value: 'a', $view: { $parent: 'parent'} });
                 setTimeout(function () {
                     parent.firstChild.tagName.toLowerCase().should.eql('input', '$parent');
                     a.$view.$parent = 'parent2';
@@ -684,8 +684,8 @@ describe.only('dom', function () {
                 input.type = 'text';
                 document.body.appendChild(input);
                 window.tie('app', {$view: '#'});
-                window.tie('a', {value: 'a', $view:{ $parent: '#b'} }, ['b']);
-                window.tie('b', {value: 'color:blue', $view:'style#' });
+                window.tie('a', {value: 'a', $view: { $parent: '#b'} }, ['b']);
+                window.tie('b', {value: 'color:blue', $view: 'style#' });
                 setTimeout(function () {
                     parent.getAttribute('style').should.eql('color:blue', 'process parent');
                     parent.firstChild.tagName.toLowerCase().should.eql('input', '$parent');
@@ -708,7 +708,7 @@ describe.only('dom', function () {
                     $tag: 'a',
                     href: 'https://kucoe.net'
                 };
-                window.tie('a', {value: 'a', $view: {value:'#', $children:[child1, child2]}});
+                window.tie('a', {value: 'a', $view: {value: '#', $children: [child1, child2]}});
                 setTimeout(function () {
                     div.children.length.should.eql(2, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -734,10 +734,10 @@ describe.only('dom', function () {
                     href: 'https://kucoe.net'
                 };
                 var arr = [child1, child2];
-                var generator = function() {
+                var generator = function () {
                     return arr.shift();
                 };
-                window.tie('a', {value: 'a', $view: {value:'#', $children:generator}});
+                window.tie('a', {value: 'a', $view: {value: '#', $children: generator}});
                 setTimeout(function () {
                     div.children.length.should.eql(2, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -762,7 +762,7 @@ describe.only('dom', function () {
                     $tag: 'a',
                     href: 'https://kucoe.net'
                 };
-                var a = window.tie('a', {value: 'a', $view: {value:'#', $children:[child1, child2]}});
+                var a = window.tie('a', {value: 'a', $view: {value: '#', $children: [child1, child2]}});
                 setTimeout(function () {
                     div.children.length.should.eql(2, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -789,7 +789,7 @@ describe.only('dom', function () {
                     $tag: 'a',
                     href: '#value'
                 };
-                window.tie('a', {value: 'https://kucoe.net', $view: {$children:child}});
+                window.tie('a', {value: 'https://kucoe.net', $view: {$children: child}});
                 setTimeout(function () {
                     div.children.length.should.eql(1, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('a', 'child tag');
@@ -808,7 +808,7 @@ describe.only('dom', function () {
                     $tag: 'a',
                     href: '#value'
                 };
-                var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children:child}});
+                var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children: child}});
                 setTimeout(function () {
                     div.children.length.should.eql(1, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('a', 'child tag');
@@ -835,7 +835,7 @@ describe.only('dom', function () {
                     $tag: 'a',
                     href: 'https://kucoe.net'
                 };
-                var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children:child1}});
+                var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children: child1}});
                 setTimeout(function () {
                     div.children.length.should.eql(1, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -850,6 +850,35 @@ describe.only('dom', function () {
                     a.$view.$children.shift();
                     div.children.length.should.eql(1, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
+        it('should be fast in rendering children', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var child = function (i) {
+                    if (i == 1000) {
+                        return null;
+                    }
+                    return {
+                        $tag: 'input',
+                        type: 'text',
+                        value: 'me is ' + i
+                    }
+                };
+                var start = new Date().getTime();
+                var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children: child}});
+                setTimeout(function () {
+                    var end = new Date().getTime();
+                    div.children.length.should.eql(1000, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    div.children[0].type.should.eql('text', 'child type');
+                    div.children[0].value.should.eql('me is 0', 'child value');
+                    (end - start).should.be.below(2000, 'fast');
                     done();
                 }, 200);
             }, ['dom']);

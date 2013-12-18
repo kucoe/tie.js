@@ -745,6 +745,7 @@
                 this._copy = _.extend({}, this);
             };
             array.memo();
+            _.debug('Array observer bound');
             return array;
         },
     
@@ -892,7 +893,7 @@
                     desc.value = val;
                 }
             }
-            if (!newSet._apply) {
+            if (!newSet._apply && !this._silent) {
                 newSet._apply = true;
                 observer.apply(fullProp, ready);
                 newSet._apply = false;
@@ -978,7 +979,9 @@
             _.debug("Got handle config " + config);
             if (_.isDefined(config)) {
                 this.observer.remove(handle._uid);
+                obj._silent = true;
                 obj[n] = handle(obj, config, this.observer, appConfig);
+                delete obj._silent;
             }
             if (this.processedHandles.indexOf(prop) == -1) {
                 this.processedHandles.push(prop);
@@ -1215,16 +1218,17 @@
         ready: function (fn) {
             if (fn) {
                 // check if document already is loaded
+                var f = this.readyFn.bind(this);
                 if (document.readyState === 'complete') {
                     setTimeout(fn, 0);
                     this.domReady = true;
                 } else {
                     if (this.readyListeners.length == 0) {
-                        window.addEventListener('load', this.readyFn.bind(this));
+                        window.addEventListener('load', f);
                     }
                 }
                 if (this.readyListeners.length == 0) {
-                    window.addEventListener('hashchange', this.readyFn.bind(this));
+                    window.addEventListener('hashchange', f);
                 }
                 this.readyListeners.push(fn);
             }
@@ -1639,13 +1643,14 @@
                 if (clean) {
                     dom.removeChildren($);
                 }
+                var fragment = document.createDocumentFragment();
                 _.forEach(children, function (child) {
                     var id = child._parents[el._id];
-                    var c = document.getElementById(id);
+                    var c = id ? document.getElementById(id) : null;
                     var newEl = false;
                     if (!c) {
                         c = document.createElement(child.$tag || 'div');
-                        $.appendChild(c);
+                        fragment.appendChild(c);
                         newEl = true;
                     }
                     var w = new wrap(c, obj);
@@ -1658,6 +1663,9 @@
                         child._parents[el._id] = w._id;
                     }
                 }, this);
+                _.debug('Processed children');
+                $.appendChild(fragment);
+                _.debug('Append children to main');
             }, this);
         },
 
@@ -1759,7 +1767,9 @@
             _.debug("View handle " + name + ' with config ' + c);
             var renderer = renders[view.$tie];
             if (_.isDefined(c) && renderer && renderer.rendered) {
+                view._silent = true;
                 view[h] = vh(view, c, renderer, obj);
+                view._silent = false;
                 if (!~view._resolved.indexOf(name)) {
                     view._resolved.push(name);
                 }
@@ -1855,7 +1865,7 @@
         if (_.isFunction(config)) {
             var idx = 0;
             var next = _.safeCall(config, obj, ready, idx);
-            while (_.isDefined(next)) {
+            while (next != null) {
                 views.push(prepareView(next, obj));
                 next = _.safeCall(config, obj, ready, ++idx);
             }
@@ -1866,10 +1876,10 @@
         }
         renderer.$renderChildren(views, obj, true);
         var onChange = function (item, prev) {
-            if(prev) {
+            if (prev) {
                 onRemove(prev);
             }
-            if(!item._ids){
+            if (!item._ids) {
                 item = prepareView(item, obj);
             }
             renderer.$renderChildren(item, obj, false);
@@ -1908,7 +1918,9 @@
         return this;
     };
 
-    window.tie.domReady = dom.ready;
+    window.tie.domReady = function() {
+        return dom.ready.apply(dom, arguments)
+    };
     window.tie.viewHandle = viewHandle;
 
     if (typeof window.exports === 'object') {
