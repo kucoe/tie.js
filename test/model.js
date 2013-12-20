@@ -147,5 +147,12 @@ describe('model', function () {
             a.value = 'aa';
             c.$$b.$$a.value.should.eql('aa', "value");
         });
+        it('should support calculated props', function () {
+            var a = tie('a', {value: 'jack', hello: function() {
+                return 'hello ' + this.value;
+            }.val()});
+            a.value = 'aa';
+            c.$$b.$$a.value.should.eql('aa', "value");
+        });
     });
 });
