@@ -349,6 +349,24 @@ describe('dom', function () {
                 }, 200);
             }, ['dom']);
         });
+        it('should not select wrong element', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a');
+                document.body.appendChild(input);
+                input = document.createElement("input");
+                input.setAttribute('data-tie', 'a2');
+                document.body.appendChild(input);
+                var renders = window.exports().renders;
+                window.tie('a', {value:'lala', $view: '#'});
+                var r = renders['a'];
+                setTimeout(function () {
+                    r.$.length.should.eql(1, 'element');
+                    done();
+                }, 200);
+            }, ['dom']);
+        });
         it('should render attributes', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;

@@ -1462,6 +1462,7 @@
 
     var Attr = function (name, value, prop, deps) {
         this.name = name;
+        this.prop = prop;
         if (value) {
             this.value = value;
             this.$get = function () {
@@ -1506,15 +1507,15 @@
                         res[prop] = createAttr(prop, prop, [prop], obj);
                     }
                 });
-                return res;
-            }
-            var s = view.split('#');
-            var name = s[0] || VALUE;
-            var prop = s[1] || VALUE;
-            if (prop == VALUE && _.isFunction(obj.value)) {
-                res[name] = createAttr(name, obj.value, obj.value.$deps, obj);
             } else {
-                res[name] = createAttr(name, prop, [prop], obj);
+                var s = view.split('#');
+                var name = s[0] || VALUE;
+                var prop = s[1] || VALUE;
+                if (prop == VALUE && _.isFunction(obj.value)) {
+                    res[name] = createAttr(name, obj.value, obj.value.$deps, obj);
+                } else {
+                    res[name] = createAttr(name, prop, [prop], obj);
+                }
             }
         } else if (_.isFunction(view)) {
             res = {
@@ -1580,7 +1581,9 @@
                 dom.fetch('[' + TIE + ']', base);
             }
             _.forEach(dom.fetched, function (el) {
-                if (el.getAttribute(TIE).indexOf(name) == 0) {
+                var attribute = el.getAttribute(TIE);
+                var s = attribute.charAt(name.length);
+                if (attribute.indexOf(name) == 0 && (s == '' || s == ' ' || s == '|' || s == '.')) {
                     res.push(new wrap(el, obj));
                 }
             });
@@ -1782,7 +1785,7 @@
         var view = prepareView(config, obj);
         if (appConfig && !_.isString(config)) {
             var appView = prepareView(appConfig, obj);
-            _.extend(view, appView);
+            view = _.extend(appView, view);
         }
         var r = new renderer(obj, view);
         var tieName = obj.$name;
@@ -1816,6 +1819,16 @@
                     resolveViewHandle(obj, view, vh.substring(1));
                 }
                 r.render(prop);
+            } else if (prop.indexOf('$$') == 0) {
+                _.forIn(view, function (val) {
+                    if (val instanceof  Attr) {
+                        if(obj.$name == 'label' && val.name == 'value') {
+                            console.log(val.$get(obj, true))
+                        }
+                        delete val.value;
+                    }
+                }, this);
+                r.render(); // re-render whole element
             } else {
                 r.notify(obj, prop);
             }
@@ -1918,7 +1931,7 @@
         return this;
     };
 
-    window.tie.domReady = function() {
+    window.tie.domReady = function () {
         return dom.ready.apply(dom, arguments)
     };
     window.tie.viewHandle = viewHandle;
