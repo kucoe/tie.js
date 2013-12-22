@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Child list</title>
+    <title>Child deep list</title>
     <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
 </head>
 <body>
@@ -11,20 +11,25 @@
 <script src="../tie.js"></script>
 <script>
     var child = function (i) {
-        if (i == 10000) {
-            return null;
-        }
         return {
-            $tag: 'input',
-            type: 'text',
+            $tag: 'span',
             value: 'me is ' + i
         }
     };
     var start = new Date().getTime();
-    window.tie('a', {$view: {$children: child}});
+    var div = function (i) {
+        return {$children: [child(i)]};
+    };
+    var item = div(0);
+    var t = item;
+    for(var i = 1; i < 499; i++){
+        var uuu = div(i);
+        item.$children.push(uuu);
+        item = uuu;
+    }
+    window.tie('a', {$view: {$children: [t]}});
     window.tie.domReady(function () {
         var end = new Date().getTime();
-        console.log(document.getElementById("a").children.length);
         console.log('Time: ' + (end - start));
     });
 </script>

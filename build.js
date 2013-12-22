@@ -19,9 +19,24 @@ console.log('Build tie core');
 
 fs.writeFileSync(tie, core, 'utf-8');
 
-var dom = fs.readFileSync(sourcePath + '/dom.js', 'utf8');
+var viewPath = "lib/view";
+
+var view = fs.readFileSync(viewPath + '/view.js', 'utf8');
+
+modules = ['dom', 'el', 'renderer', 'viewHandle', 'shown', 'parent', 'children'];
+
+modules.forEach(function(item){
+    var content = fs.readFileSync(viewPath + '/' + item + '.js', 'utf8');
+    var s = '/**  ' + item.toUpperCase() + ' **/';
+    view = view.replace(s, s + '\n\n    ' + content.replace(/\n/g, '\n    '));
+});
+console.log('Build tie view extension');
+
+fs.writeFileSync(sourcePath + '/view.js', view, 'utf-8');
+
+view = fs.readFileSync(sourcePath + '/view.js', 'utf8');
 var http = fs.readFileSync(sourcePath + '/http.js', 'utf8');
-var all = [core, dom, http].join("\n\n");
+var all = [core, view, http].join("\n\n");
 fs.writeFileSync(dest, all, 'utf8');
 
 console.log('Build browser version');

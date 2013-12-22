@@ -265,7 +265,7 @@
                 res = fn.apply(fnThis, args);
             } catch (e) {
                 res = undefined;
-                if (this.isFunction(fnThis.$ready) && fnThis.$ready()) {
+                if (!this.isFunction(fnThis.$ready) || fnThis.$ready()) {
                     console.error('Is ready and had an error:' + e.message);
                     console.log(e.stack);
                     _.debug(e, 'User code error');
@@ -1175,7 +1175,7 @@
 })(typeof exports === 'object' ? module : window);
 
 /**
- * Tie.js DOM handle
+ * Tie.js View handle
  *
  * Copyright 2013, Wolfgang Bas
  * Released under the MIT License
@@ -1187,6 +1187,8 @@
     var _ = window.tie._;
     var parse = window.tie.$;
 
+    var HANDLE_PREFIX = '$';
+
     var VALUE = 'value';
     var TEXT = 'text';
 
@@ -1197,21 +1199,23 @@
     var CLASS = "class";
     var NAME = "name";
 
+    /**  DOM **/
+
     var dom = {
-
+    
         domReady: false,
-
+    
         readyListeners: [],
-
+    
         fetched: [],
-
+    
         readyFn: function () {
             _.forEach(this.readyListeners, function (listener) {
                 setTimeout(listener, 100);
             });
             this.domReady = true;
         },
-
+    
         insertAfter: function (index, newElements) {
             var parent = index.parentNode;
             _.forEach(newElements, function (node) {
@@ -1219,28 +1223,28 @@
                 index = node;
             });
         },
-
+    
         remove: function (element) {
             var parent = element.parentNode;
             if (parent) parent.removeChild(element);
         },
-
+    
         removeChildren: function (element) {
             while (element && element.firstChild) {
                 element.removeChild(element.firstChild);
             }
         },
-
+    
         hasClass: function (elem, className) {
             return new RegExp(' ' + className + ' ').test(' ' + elem.className + ' ');
         },
-
+    
         addClass: function (elem, className) {
             if (!this.hasClass(elem, className)) {
                 elem.className += ' ' + className;
             }
         },
-
+    
         removeClass: function (elem, className) {
             var newClass = ' ' + elem.className.replace(/[\t\r\n]/g, ' ') + ' ';
             if (this.hasClass(elem, className)) {
@@ -1250,7 +1254,7 @@
                 elem.className = newClass.replace(/^\s+|\s+$/g, '');
             }
         },
-
+    
         ready: function (fn) {
             if (fn) {
                 // check if document already is loaded
@@ -1270,7 +1274,7 @@
             }
             return this.domReady;
         },
-
+    
         fetch: function (selector, base) {
             if (!base) {
                 this.fetched = [];
@@ -1283,6 +1287,8 @@
         }
     };
 
+    /**  EL **/
+
     var wrap = function (el, obj) {
         var that = this;
         var name = obj.$name;
@@ -1291,7 +1297,7 @@
             _.debug("Fired '" + event.type + "' listener on '" + name + "' for element " + tagName);
             var value = that.value();
             value = _.trim(value);
-
+    
             var prop = that.property;
             if (obj.$prop(prop) !== value) {
                 obj.$prop(prop, value);
@@ -1310,7 +1316,7 @@
         this.display = el.style.display;
         this.shown = true;
         this.textEl = null;
-
+    
         if (this.isInput) {
             if (!this.hasCheck && !this.isSelect) {
                 if ('oninput' in el) {
@@ -1331,9 +1337,9 @@
             }
         }
     };
-
+    
     wrap.prototype = {
-
+    
         getProperty: function (string) {
             string = _.trim(string || '');
             var tokens = string.split('|');
@@ -1344,11 +1350,11 @@
             }
             return VALUE;
         },
-
+    
         isTied: function () {
             return this.$.getAttribute(TIED);
         },
-
+    
         setAttribute: function (name, value, obj) {
             if (VALUE === name) {
                 this.value(value);
@@ -1377,7 +1383,7 @@
                 }
             }
         },
-
+    
         value: function (val) {
             var el = this.$;
             if (this.hasCheck) {
@@ -1414,7 +1420,7 @@
             }
             return null;
         },
-
+    
         text: function (text) {
             var el = this.$;
             if (_.isDefined(text)) {
@@ -1446,7 +1452,7 @@
             }
             return null;
         },
-
+    
         html: function (html) {
             var el = this.$;
             if (_.isDefined(html)) {
@@ -1460,7 +1466,7 @@
             }
             return null;
         },
-
+    
         remove: function () {
             var element = this.$;
             delete this.$;
@@ -1470,12 +1476,12 @@
             delete  this.events;
             dom.remove(element);
         },
-
+    
         insertAfter: function (newElements) {
             var index = this.$;
             dom.insertAfter(index, newElements);
         },
-
+    
         show: function (show) {
             if (this.shown === show) {
                 return;
@@ -1496,39 +1502,62 @@
         }
     };
 
-    var prepareView = function (view, obj) {
-        var res = view;
-        if (_.isString(view) && (view.contains('#') || view === '*' || view === '@')) {
-            res = {};
-            if (view === '@') {
-                res._amap = true;
-            } else if (view === '*') {
-                _.forIn(obj, function (val, prop) {
-                    if (_.isEnumerable(prop)) {
-                        res[prop] = prop.prop();
-                    }
-                });
-            } else {
-                var s = view.split('#');
-                var name = s[0] || VALUE;
-                var prop = s[1] || VALUE;
-                res[name] = prop.prop();
-            }
-        } else if (_.isFunction(view) || _.isArray(view) || _.isRegExp(view) || _.isBoolean(view)
-            || _.isNumber(view) || _.isString(view) || _.isDate(view) || !_.isObject(view)) {
-            res = {
-                value: view
-            };
-        } else {
-            res = view;
+    /**  VIEWHANDLE **/
+
+    var viewHandlers = {};
+    
+    var viewHandle = function (name, fn, dependencies, sealed) {
+        var h = viewHandlers[name];
+        if (_.isUndefined(fn)) {
+            return  h;
         }
-        res._ids = [];
-        res._parents = {};
-        return res;
+        if (h && h.$sealed) {
+            throw new Error(name + ' view handle already registered and sealed. Please choose another name for your handle');
+        }
+        h = function (view, config, renderer, obj, els) {
+            _.debug("Process view handle " + name);
+            _.forEach(dependencies || [], function (item) {
+                h['$' + item] = viewHandlers[item];
+            });
+            if (fn && _.isFunction(fn)) {
+                config = _.safeCall(fn, h, view, config, renderer, obj, els);
+            }
+            _.debug("Processed view handle " + name);
+            return config;
+        };
+        _.define(h, name, sealed, dependencies);
+        h = _.extend(h, _);
+        viewHandlers[name] = h;
+        return h;
+    };
+    
+    var resolveViewHandle = function (obj, view, name, els) {
+        var vh = viewHandlers[name];
+        if (vh && view._resolved) {
+            _.forEach(vh.$deps, function (item) {
+                if (!view._resolved.contains(item)) {
+                    resolveViewHandle(obj, view, item, els);
+                }
+            });
+            var h = (HANDLE_PREFIX + name);
+            var c = view[h];
+            _.debug("View handle " + name + ' with config ' + c);
+            var renderer = renders[view.$tie];
+            if (_.isDefined(c) && renderer && renderer.rendered) {
+                view._silent = true;
+                view[h] = vh(view, c, renderer, obj, els);
+                delete view._silent;
+                if (!view._resolved.contains(name)) {
+                    view._resolved.push(name);
+                }
+            }
+        }
     };
 
-    var renders = {};
+    /**  RENDERER **/
 
+    var renders = {};
+    
     var renderer = function (obj, view) {
         if (_.isUndefined(view.$shown)) {
             view.$shown = true;
@@ -1539,10 +1568,10 @@
         this.rendered = false;
         this.rendering = false;
     };
-
+    
     renderer.prototype = {
-
-        register: function (viewHandle, onChange, interest) {
+    
+        register: function (viewHandle, onChange, onRender, interest) {
             var vh = viewHandlers[viewHandle];
             if (vh && onChange) {
                 vh.onChange = function (obj, prop, val, vanes) {
@@ -1551,8 +1580,13 @@
                     }
                 }
             }
+            if (vh && onRender) {
+                vh.onRender = function (obj, val) {
+                    return onRender.call(this, obj, val);
+                }
+            }
         },
-
+    
         select: function (obj, base) {
             var name = obj.$name;
             var res = [];
@@ -1568,14 +1602,14 @@
             });
             return res;
         },
-
+    
         $renderAttr: function (obj, prop, val, el) {
             if (_.isEnumerable(prop)) {
                 _.debug("Render attribute '" + prop + "' with value " + val);
                 el.setAttribute(prop, val, obj);
             }
         },
-
+    
         $render: function (obj, prop) {
             var tieName = obj.$name;
             _.debug("Render " + tieName, tieName + " Render");
@@ -1628,9 +1662,10 @@
             }, this);
             _.debug("Rendered " + tieName);
         },
-
-        $renderChildren: function (children, obj, clean) {
-            _.forEach(this.$, function (el) {
+    
+        $renderChildren: function (children, obj, clean, els) {
+            els = els || this.$;
+            _.forEach(els, function (el) {
                 var $ = el.$;
                 if (clean) {
                     dom.removeChildren($);
@@ -1647,7 +1682,13 @@
                     }
                     var w = new wrap(c, obj);
                     _.forIn(child, function (val, prop) {
-                        this.$renderAttr(obj, prop, val, w);
+                        if (_.isHandle(prop)) {
+                            child.$tie = obj.$name;
+                            child._resolved = [];
+                            resolveViewHandle(obj, child, prop.substring(1), [w]);
+                        } else {
+                            this.$renderAttr(obj, prop, val, w);
+                        }
                     }, this);
                     if (newEl) {
                         w.setAttribute(ID, w._id);
@@ -1660,8 +1701,8 @@
                 _.debug('Append children to main');
             }, this);
         },
-
-
+    
+    
         inspectAttrs: function (obj, prop, val, vanes, els) {
             els = els || this.$;
             _.forEach(vanes, function (item) {
@@ -1680,7 +1721,7 @@
                 }
             }, this);
         },
-
+    
         show: function (shown) {
             if (this.rendered) {
                 _.forEach(this.$, function (el) {
@@ -1692,67 +1733,124 @@
         }
     };
 
-    var handle = window.tie.handle;
+    /**  SHOWN **/
 
-    var viewHandlers = {};
+    viewHandle("shown", function (view, config, renderer) {
+        renderer.show(config);
+        return config;
+    }, [], true);
 
-    var viewHandle = function (name, fn, dependencies, sealed) {
-        var h = viewHandlers[name];
-        if (_.isUndefined(fn)) {
-            return  h;
+    /**  PARENT **/
+
+    viewHandle("parent", function (view, config, renderer) {
+        var parents = [];
+        if (_.isString(config)) {
+            if (config.charAt(0) == '#') {
+                var r = renders[config.substring(1)];
+                if (r) {
+                    parents = r.$.map(function (el) {
+                        return el.$;
+                    });
+                }
+            } else {
+                parents = [document.getElementById(config)];
+            }
         }
-        if (h && h.$sealed) {
-            throw new Error(name + ' view handle already registered and sealed. Please choose another name for your handle');
-        }
-        h = function (view, config, renderer, obj) {
-            _.debug("Process view handle " + name);
-            _.forEach(dependencies || [], function (item) {
-                h['$$' + item] = viewHandlers[item];
+        _.forEach(parents, function (parent) {
+            dom.removeChildren(parent);
+            _.forEach(renderer.$, function (el) {
+                var $ = el.$;
+                dom.remove($);
+                parent.appendChild($);
             });
-            if (fn && _.isFunction(fn)) {
-                config = _.safeCall(fn, h, view, config, renderer, obj);
-            }
-            _.debug("Processed view handle " + name);
-            return config;
-        };
-        _.define(h, name, sealed, dependencies);
-        h = _.extend(h, _);
-        viewHandlers[name] = h;
-        return h;
-    };
-
-    var onReady = function () {
-        _.debug("Render app");
-        _.forIn(renders, function (r) {
-            if (!r.rendered) {
-                r.render();
-            }
         });
-        _.debug("Rendered app");
-    };
+        return config;
+    }, [], true);
 
-    var resolveViewHandle = function (obj, view, name) {
-        var vh = viewHandlers[name];
-        if (vh && view._resolved) {
-            _.forEach(vh.$deps, function (item) {
-                if (!view._resolved.contains(item)) {
-                    resolveViewHandle(obj, view, item);
+    /**  CHILDREN **/
+
+    viewHandle("children", function (view, config, renderer, obj, els) {
+        var views = [];
+        if (_.isFunction(config)) {
+            var idx = 0;
+            var next = _.safeCall(config, obj, idx);
+            while (next != null) {
+                views.push(prepareView(next, obj));
+                next = _.safeCall(config, obj, ++idx);
+            }
+        } else {
+            _.forEach(config, function (child) {
+                views.push(prepareView(child, obj));
+            });
+        }
+        renderer.$renderChildren(views, obj, true, els);
+        var onChange = function (item, prev) {
+            if (prev) {
+                onRemove(prev);
+            }
+            if (!item._ids) {
+                item = prepareView(item, obj);
+            }
+            renderer.$renderChildren(item, obj, false, els);
+            return item;
+        };
+        var onRemove = function (item) {
+            _.forEach(item._ids, function (id) {
+                var c = document.getElementById(id);
+                if (c) {
+                    dom.remove(c);
                 }
             });
-            var h = ('$' + name);
-            var c = view[h];
-            _.debug("View handle " + name + ' with config ' + c);
-            var renderer = renders[view.$tie];
-            if (_.isDefined(c) && renderer && renderer.rendered) {
-                view._silent = true;
-                view[h] = vh(view, c, renderer, obj);
-                view._silent = false;
-                if (!view._resolved.contains(name)) {
-                    view._resolved.push(name);
-                }
+        };
+        views = renderer.observeArray(views, onChange, onChange, onRemove);
+        renderer.register(this.$name, function (obj, prop, val, vanes) {
+            _.forEach(views, function (v) {
+                _.forEach(v._ids, function (id) {
+                    var c = document.getElementById(id);
+                    if (c) {
+                        var w = new wrap(c, obj);
+                        _.forIn(v, function (val, name) {
+                            renderer.inspectAttrs(obj, name, val, w);
+                        });
+                    }
+                });
+            });
+        });
+        return views;
+    }, [], true);
+
+    var prepareView = function (view, obj) {
+        var res = view;
+        if (_.isString(view) && (view.contains('#') || view === '*' || view === '@')) {
+            res = {};
+            if (view === '@') {
+                res._amap = true;
+            } else if (view === '*') {
+                _.forIn(obj, function (val, prop) {
+                    if (_.isEnumerable(prop)) {
+                        res[prop] = prop.prop();
+                    }
+                });
+            } else {
+                var s = view.split('#');
+                var name = s[0] || VALUE;
+                var prop = s[1] || VALUE;
+                res[name] = prop.prop();
             }
+        } else if (_.isFunction(view) || _.isArray(view) || _.isRegExp(view) || _.isBoolean(view)
+            || _.isNumber(view) || _.isString(view) || _.isDate(view) || !_.isObject(view)) {
+            res = {
+                value: view
+            };
+        } else {
+            res = view;
         }
+        res._ids = [];
+        res._parents = {};
+        return res;
     };
+
+    var handle = window.tie.handle;
 
     handle('view', function (obj, config, observer, appConfig) {
         var handlerId = this._uid;
@@ -1805,92 +1903,23 @@
         });
         if (dom.ready()) {
             setTimeout(function () {
-                r.render()
+                if (!r.rendered) {
+                    r.render()
+                }
             }, 100);
         }
         return view;
     }, [], true);
 
-    viewHandle("shown", function (view, config, renderer) {
-        renderer.show(config);
-        return config;
-    }, [], true);
-
-
-    viewHandle("parent", function (view, config, renderer) {
-        var parents = [];
-        if (_.isString(config)) {
-            if (config.charAt(0) == '#') {
-                var r = renders[config.substring(1)];
-                if (r) {
-                    parents = r.$.map(function (el) {
-                        return el.$;
-                    });
-                }
-            } else {
-                parents = [document.getElementById(config)];
+    var onReady = function () {
+        _.debug("Render app");
+        _.forIn(renders, function (r) {
+            if (!r.rendered) {
+                r.render();
             }
-        }
-        _.forEach(parents, function (parent) {
-            dom.removeChildren(parent);
-            _.forEach(renderer.$, function (el) {
-                var $ = el.$;
-                dom.remove($);
-                parent.appendChild($);
-            });
         });
-        return config;
-    }, [], true);
-
-    viewHandle("children", function (view, config, renderer, obj) {
-        var views = [];
-        if (_.isFunction(config)) {
-            var idx = 0;
-            var next = _.safeCall(config, obj, idx);
-            while (next != null) {
-                views.push(prepareView(next, obj));
-                next = _.safeCall(config, obj, ++idx);
-            }
-        } else {
-            _.forEach(config, function (child) {
-                views.push(prepareView(child, obj));
-            });
-        }
-        renderer.$renderChildren(views, obj, true);
-        var onChange = function (item, prev) {
-            if (prev) {
-                onRemove(prev);
-            }
-            if (!item._ids) {
-                item = prepareView(item, obj);
-            }
-            renderer.$renderChildren(item, obj, false);
-            return item;
-        };
-        var onRemove = function (item) {
-            _.forEach(item._ids, function (id) {
-                var c = document.getElementById(id);
-                if (c) {
-                    dom.remove(c);
-                }
-            });
-        };
-        views = renderer.observeArray(views, onChange, onChange, onRemove);
-        renderer.register(this.$name, function (obj, prop, val, vanes) {
-            _.forEach(views, function (v) {
-                _.forEach(v._ids, function (id) {
-                    var c = document.getElementById(id);
-                    if (c) {
-                        var w = new wrap(c, obj);
-                        _.forIn(v, function (val, name) {
-                            renderer.inspectAttrs(obj, name, val, w);
-                        });
-                    }
-                });
-            });
-        });
-        return views;
-    }, [], true);
+        _.debug("Rendered app");
+    };
 
     dom.ready(onReady);
 
@@ -2035,12 +2064,14 @@
         var clearUrl = url.substring(0, index != -1 ? index : url.length);
         var splits = clearUrl.split('/');
         _.forEach(splits, function (split) {
-            if (split[0] === ':') {
+            if (split.charAt(0) === ':') {
                 var name = split.substr(1);
                 var val = params[ name];
                 if (_.isDefined(val)) {
-                    url.replace(split, val);
+                    url = url.replace(split, val);
                     delete  params[name];
+                } else {
+                    url = url.replace(split, '');
                 }
             }
         });
@@ -2193,6 +2224,9 @@
         this.app = appConfig;
         //skip app config now, it will be used later in prepareOpts
         if (options && ownConfig) {
+            if (_.isString(options)) {
+                options = {url: options};
+            }
             if (options.url) {
                 this.url = options.url;
             }
@@ -2254,6 +2288,6 @@
 
     handle("http", function (obj, config, observer, appConfig) {
         return new http(config, _.isDefined(obj.$http), appConfig);
-    }, ['attrs'], true);
+    }, ['view'], true);
 
 })(window);

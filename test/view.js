@@ -26,16 +26,13 @@ function prepareInput(window, $, tag, type) {
     return {input: input, obj: obj, el: el};
 }
 
-describe('dom', function () {
+describe('view', function () {
     describe('bootstrap', function () {
         it('jsdom should work', function (done) {
-            this.timeout(10000);
-            setTimeout(function () {
-                browser(function (window) {
-                    window.document.body.innerHTML.should.eql("Hello World!", "html");
-                    done();
-                });
-            }, 5000);
+            browser(function (window) {
+                window.document.body.innerHTML.should.eql("Hello World!", "html");
+                done();
+            });
         });
         it('ajax should work', function (done) {
             browser(function (window) {
@@ -72,7 +69,7 @@ describe('dom', function () {
             });
         });
     });
-    describe('q', function () {
+    describe('dom', function () {
         it('should add next', function (done) {
             browser(function (window) {
                 var q = window.exports().q;
@@ -81,7 +78,7 @@ describe('dom', function () {
                 q.insertAfter(a, a.cloneNode(true));
                 document.getElementsByTagName('a').length.should.eql(2, 'nodes number');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should remove element', function (done) {
             browser(function (window) {
@@ -93,7 +90,7 @@ describe('dom', function () {
                 q.remove(a);
                 document.getElementsByTagName('a').length.should.eql(1, 'nodes number after');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should run on ready', function (done) {
             browser(function (window) {
@@ -101,7 +98,7 @@ describe('dom', function () {
                 q.ready(function () {
                     done();
                 });
-            }, ['dom']);
+            }, ['view']);
         });
         it('should wrap element', function (done) {
             browser(function (window) {
@@ -112,7 +109,7 @@ describe('dom', function () {
                 var el = new $(a, obj);
                 el.$.should.eql(a, 'element');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set listener on input', function (done) {
             browser(function (window) {
@@ -124,7 +121,7 @@ describe('dom', function () {
                 browser.sendKey(el.$, 'l');
                 obj.value.should.eql('l', 'onchange');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set listener on checkbox', function (done) {
             browser(function (window) {
@@ -138,7 +135,7 @@ describe('dom', function () {
                 browser.fireEvent(el.$, 'change');
                 obj.value.should.eql(true, 'onchange');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set listener on textarea', function (done) {
             browser(function (window) {
@@ -150,7 +147,7 @@ describe('dom', function () {
                 browser.sendKey(el.$, 'l');
                 obj.value.should.eql('l', 'onchange');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set listener on select', function (done) {
             browser(function (window) {
@@ -174,7 +171,7 @@ describe('dom', function () {
                 browser.fireEvent(el.$, 'change');
                 obj.value.should.eql('l', 'onchange');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should remember display type on show/hide ', function (done) {
             browser(function (window) {
@@ -187,7 +184,7 @@ describe('dom', function () {
                 el.show(true);
                 el.$.style.display.should.eql('dummy', 'show');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set external text on input ', function (done) {
             browser(function (window) {
@@ -198,7 +195,7 @@ describe('dom', function () {
                 el.textEl.textContent.should.eql('dummy', 'text el');
                 el.text().should.eql('dummy', 'text');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set attribute ', function (done) {
             browser(function (window) {
@@ -208,7 +205,7 @@ describe('dom', function () {
                 el.setAttribute('name', 'dummy');
                 el.$.getAttribute('name').should.eql('dummy', 'el attr');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set value ', function (done) {
             browser(function (window) {
@@ -219,7 +216,7 @@ describe('dom', function () {
                 el.value().should.eql('dummy', 'value');
                 el.$.value.should.eql('dummy', 'el value');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set text ', function (done) {
             browser(function (window) {
@@ -229,7 +226,7 @@ describe('dom', function () {
                 el.setAttribute('text', 'dummy');
                 el.text().should.eql('dummy', 'text');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should set listener ', function (done) {
             browser(function (window) {
@@ -245,10 +242,10 @@ describe('dom', function () {
                 should.exist(el.events.click);
                 i.should.eql('bbb', 'text');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
     });
-    describe('view', function () {
+    describe('render', function () {
         it('should process $view', function (done) {
             browser(function (window) {
                 var $ = window.exports().el;
@@ -256,7 +253,7 @@ describe('dom', function () {
                 var obj = __ret.obj;
                 should.exist(obj.$view.style, 'view');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process asterisk $view', function (done) {
             browser(function (window) {
@@ -269,7 +266,7 @@ describe('dom', function () {
                 should.not.exist(obj.$view._uid, 'no private');
                 should.not.exist(obj.$view.$name, 'no handles');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process attributes mapper $view', function (done) {
             browser(function (window) {
@@ -286,7 +283,7 @@ describe('dom', function () {
                     should.not.exists(input.getAttribute('trigger'), 'not exists');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process empty property path in $view', function (done) {
             browser(function (window) {
@@ -298,7 +295,7 @@ describe('dom', function () {
                 obj.$view.value.should.eql('lala', 'path in view');
                 should.not.exist(obj.$view.style, 'no other');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process property path in $view', function (done) {
             browser(function (window) {
@@ -310,7 +307,7 @@ describe('dom', function () {
                 obj.$view.value.should.eql('blue', 'path in view');
                 should.not.exist(obj.$view.style, 'no other');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process property attribute', function (done) {
             browser(function (window) {
@@ -321,7 +318,7 @@ describe('dom', function () {
                 var obj = window.tie('a', {value: 'lala', $view: {style: 'value'.prop()}});
                 obj.$view.style.should.eql('lala', 'property attr');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process value attribute', function (done) {
             browser(function (window) {
@@ -334,7 +331,7 @@ describe('dom', function () {
                 }.val()}});
                 obj.$view.style.should.eql('color:lala', 'value attr');
                 done();
-            }, ['dom']);
+            }, ['view']);
         });
         it('should select element', function (done) {
             browser(function (window) {
@@ -349,7 +346,7 @@ describe('dom', function () {
                     should.exist(element, 'element');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should not select wrong element', function (done) {
             browser(function (window) {
@@ -367,7 +364,7 @@ describe('dom', function () {
                     r.$.length.should.eql(1, 'element');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should render attributes', function (done) {
             browser(function (window) {
@@ -381,7 +378,7 @@ describe('dom', function () {
                     r.$[0].$.getAttribute('style').should.eql('color:blue', 'attribute');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should re-render attribute on change', function (done) {
             browser(function (window) {
@@ -397,7 +394,7 @@ describe('dom', function () {
                     r.$[0].$.getAttribute('style').should.eql('color:red', 're-render');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should render property attribute', function (done) {
             browser(function (window) {
@@ -410,7 +407,7 @@ describe('dom', function () {
                     input.getAttribute('style').should.eql('lala', 'property attribute');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should re-render property attribute', function (done) {
             browser(function (window) {
@@ -425,7 +422,7 @@ describe('dom', function () {
                     input.getAttribute('style').should.eql('balaba', 're-render property');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should render value attribute', function (done) {
             browser(function (window) {
@@ -440,7 +437,7 @@ describe('dom', function () {
                     input.getAttribute('style').should.eql('color:lala', 'value attribute');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should re-render value attribute', function (done) {
             browser(function (window) {
@@ -457,7 +454,7 @@ describe('dom', function () {
                     input.getAttribute('style').should.eql('color:green', 're-render value');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should not re-render when unrelated', function (done) {
             browser(function (window) {
@@ -474,7 +471,7 @@ describe('dom', function () {
                     input.getAttribute('style').should.eql('color:lala', 'not  re-render value');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process pipe', function (done) {
             browser(function (window) {
@@ -491,7 +488,7 @@ describe('dom', function () {
                     input.getAttribute('value').should.eql('LALA', 'pipe');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process property pipe', function (done) {
             browser(function (window) {
@@ -504,7 +501,7 @@ describe('dom', function () {
                     input.getAttribute('value').should.eql('baba', 'property pipe');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should process property change for pipe', function (done) {
             browser(function (window) {
@@ -519,7 +516,7 @@ describe('dom', function () {
                     input.getAttribute('value').should.eql('lala', 'property pipe');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should update property', function (done) {
             browser(function (window) {
@@ -536,7 +533,7 @@ describe('dom', function () {
                     obj.value.should.eql('lala', 'not updated');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should work with app defaults', function (done) {
             browser(function (window) {
@@ -551,7 +548,7 @@ describe('dom', function () {
                     input.getAttribute('value').should.eql('lala', 'app default');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should merge with app defaults', function (done) {
             browser(function (window) {
@@ -569,7 +566,7 @@ describe('dom', function () {
                     input.getAttribute('style').should.eql('color:blue', 'app default');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should not merge string with app defaults', function (done) {
             browser(function (window) {
@@ -586,7 +583,7 @@ describe('dom', function () {
                     input.getAttribute('style').should.eql('color:blue', 'app default');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should work with function', function (done) {
             browser(function (window) {
@@ -603,7 +600,7 @@ describe('dom', function () {
                     input.getAttribute('value').should.eql('color:blue', 'fn value');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should not allow html as value', function (done) {
             browser(function (window) {
@@ -617,7 +614,7 @@ describe('dom', function () {
                     div.textContent.should.eql('<span>lala</span>', 'inner text');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
     });
     describe('viewHandles', function () {
@@ -635,7 +632,7 @@ describe('dom', function () {
                     el.$.style.display.should.eql('none', 'hidden');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should default $shown', function (done) {
             browser(function (window) {
@@ -649,7 +646,7 @@ describe('dom', function () {
                     div.style.display.should.eql('none', 'hidden');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should react on $parent by id', function (done) {
             browser(function (window) {
@@ -668,7 +665,7 @@ describe('dom', function () {
                     parent.firstChild.value.should.eql('a', 'combine $view');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should react on $parent change', function (done) {
             browser(function (window) {
@@ -692,7 +689,7 @@ describe('dom', function () {
                     parent2.firstChild.tagName.toLowerCase().should.eql('input', 'new $parent');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should react on $parent by tie', function (done) {
             browser(function (window) {
@@ -713,7 +710,7 @@ describe('dom', function () {
                     parent.firstChild.value.should.eql('a', 'combine $view');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should react on $children', function (done) {
             browser(function (window) {
@@ -738,7 +735,39 @@ describe('dom', function () {
                     div.children[1].href.should.eql('https://kucoe.net/', 'child href');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
+        });
+        it('should build deep $children', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var child1 = {
+                    $tag: 'input',
+                    type: 'text'
+                };
+                var child2 = {
+                    $tag: 'a',
+                    href: 'https://kucoe.net'
+                };
+                window.tie('a', {value: 'a', $view: {value: '#', $children: [
+                    {$children: child1},
+                    {$children: child2}
+                ]}});
+                setTimeout(function () {
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('div', 'child tag');
+                    div.children[0].children.length.should.eql(1, 'child of child');
+                    div.children[0].children[0].tagName.toLowerCase().should.eql('input', 'child of child tag');
+                    div.children[0].children[0].type.should.eql('text', 'child of child type');
+                    div.children[1].tagName.toLowerCase().should.eql('div', 'child tag');
+                    div.children[1].children.length.should.eql(1, 'child of child');
+                    div.children[1].children[0].tagName.toLowerCase().should.eql('a', 'child of child tag');
+                    div.children[1].children[0].href.should.eql('https://kucoe.net/', 'child of child href');
+                    done();
+                }, 500);
+            }, ['view']);
         });
         it('should react on $children generator', function (done) {
             browser(function (window) {
@@ -767,7 +796,7 @@ describe('dom', function () {
                     div.children[1].href.should.eql('https://kucoe.net/', 'child href');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should react on $children change', function (done) {
             browser(function (window) {
@@ -798,7 +827,7 @@ describe('dom', function () {
                     div.children[1].type.should.eql('text', 'child change type');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should use object for $children attr values', function (done) {
             browser(function (window) {
@@ -817,7 +846,7 @@ describe('dom', function () {
                     div.children[0].href.should.eql('https://kucoe.net/', 'child href');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should react on object change in $children', function (done) {
             browser(function (window) {
@@ -840,7 +869,7 @@ describe('dom', function () {
                     div.children[0].href.should.eql('http://becevka.com/', 'value change');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should react on array changes in $children', function (done) {
             browser(function (window) {
@@ -873,7 +902,7 @@ describe('dom', function () {
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
         it('should be fast in rendering children', function (done) {
             browser(function (window) {
@@ -902,7 +931,7 @@ describe('dom', function () {
                     (end - start).should.be.below(2000, 'fast');
                     done();
                 }, 200);
-            }, ['dom']);
+            }, ['view']);
         });
     });
 });

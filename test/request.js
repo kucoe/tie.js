@@ -8,6 +8,11 @@ describe('request', function () {
         var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1'}});
         (typeof obj.$request.get).should.eql('function', 'request get');
     });
+    it('should process $request as url', function () {
+        var obj = tie('a', {$request: 'http://jsonplaceholder.typicode.com/posts/1'});
+        var req = obj.$request.get({}, {});
+        req.request.url.should.eql('http://jsonplaceholder.typicode.com/posts/1', 'request url');
+    });
     it('should default not cache', function () {
         var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1'}});
         obj.$request.cache.should.eql(false, 'request not cache');
@@ -47,6 +52,11 @@ describe('request', function () {
         var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/', params: {title: 'a'}}});
         var req = obj.$request.post({body: 'b'}, {});
         req.request.params.should.eql('userId=1&title=a&body=b', 'request params');
+    });
+    it('should process params in url', function () {
+        var obj = tie('a', {$request: 'http://jsonplaceholder.typicode.com/posts/:id'});
+        var req = obj.$request.get({id: 1}, {});
+        req.request.url.should.eql('http://jsonplaceholder.typicode.com/posts/1', 'url with params');
     });
     it('should combine headers', function () {
         tie('app', {$request: {headers: {'X-Requested-With': 'XMLHttpRequest'}}});
@@ -92,14 +102,14 @@ describe('request', function () {
         }, 1000);
     });
     it('should map correct method', function () {
-        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/1'}});
-        var req = obj.$request.get({}, {});
+        var obj = tie('a', {$request: {url: 'http://jsonplaceholder.typicode.com/posts/:id'}});
+        var req = obj.$request.get({id:1}, {});
         req.request.method.should.eql('GET', 'request get');
         req = obj.$request.post({}, {});
         req.request.method.should.eql('POST', 'request post');
-        req = obj.$request.put({}, {});
+        req = obj.$request.put({id:2}, {});
         req.request.method.should.eql('PUT', 'request put');
-        req = obj.$request.delete({}, {});
+        req = obj.$request.delete({id:3}, {});
         req.request.method.should.eql('DELETE', 'request delete');
     });
 });

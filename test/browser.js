@@ -54,7 +54,7 @@ module.exports = function (callback, handles) {
     var h = handles || [];
     _.forEach(h, function (elem) {
         require('../lib/' + elem + '.js');
-        if('dom' === elem) {
+        if('view' === elem) {
             global.window.exports().clean();
         }
     });

@@ -28,18 +28,21 @@ var XHRMockFactory = function (status, text, xml) {
 
 describe('http', function () {
     it('should process $http', function (done) {
-        browser(function (window) {
-            var obj = window.tie('a', {$http: {url: 'data.json'}});
-            (typeof obj.$http.get).should.eql('function', 'http get');
-            done();
-        }, ['dom', 'http']);
+        this.timeout(10000);
+        setTimeout(function () {
+            browser(function (window) {
+                var obj = window.tie('a', {$http: {url: 'data.json'}});
+                (typeof obj.$http.get).should.eql('function', 'http get');
+                done();
+            }, ['view', 'http']);
+        }, 3000);
     });
     it('should default cache', function (done) {
         browser(function (window) {
             var obj = window.tie('a', {$http: {url: 'data.json'}});
             obj.$http.cache.should.eql(true, 'http cache');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should combine url', function (done) {
         var xhr = new XHRMockFactory(200, "{}", "");
@@ -50,7 +53,7 @@ describe('http', function () {
             var req = obj.$http.get({}, {});
             req.xhr.url.should.eql('data/data.json', 'http url');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should combine url with url template', function (done) {
         var xhr = new XHRMockFactory(200, "{}", "");
@@ -61,7 +64,7 @@ describe('http', function () {
             var req = obj.$http.get({}, {});
             req.xhr.url.should.eql('data/data.json?lang=de', 'http url');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should combine url with url template and empty url', function (done) {
         var xhr = new XHRMockFactory(200, "{}", "");
@@ -72,7 +75,7 @@ describe('http', function () {
             var req = obj.$http.get({}, {});
             req.xhr.url.should.eql('data/?lang=de', 'http url');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should combine params in url', function (done) {
         var xhr = new XHRMockFactory(200, "{}", "");
@@ -83,7 +86,17 @@ describe('http', function () {
             var req = obj.$http.get({c: 3}, {});
             req.xhr.url.should.eql('data.json?a=1&b=2&c=3', 'http params');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
+    });
+    it('should process params in url', function (done) {
+        var xhr = new XHRMockFactory(200, "{}", "");
+        browser(function (window) {
+            window.XMLHttpRequest = xhr;
+            var obj = window.tie('a', {$http: 'data.json/:action'});
+            var req = obj.$http.get({action: 'invoke'}, {});
+            req.xhr.url.should.eql('data.json/invoke', 'http params');
+            done();
+        }, ['view', 'http']);
     });
     it('should combine params', function (done) {
         var xhr = new XHRMockFactory(200, "{}", "");
@@ -94,7 +107,7 @@ describe('http', function () {
             var req = obj.$http.post({c: 3}, {});
             req.xhr.params.should.eql('a=1&b=2&c=3', 'http params');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should combine headers', function (done) {
         var xhr = new XHRMockFactory(200, "{}", "");
@@ -107,7 +120,7 @@ describe('http', function () {
                 'Content-Length': 348,
                 'Accept': 'application/json'}, 'http headers');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should memo result', function (done) {
         var xhr = new XHRMockFactory(200, '{"a":12}', "");
@@ -117,7 +130,7 @@ describe('http', function () {
             obj.$http.get({}, {});
             obj.$http.memo('data.json', 'json').should.eql({a: 12}, 'http memo');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should use memo', function (done) {
         var xhr = new XHRMockFactory(200, '{"a":12}', "");
@@ -130,7 +143,7 @@ describe('http', function () {
             obj.$http.get({}, a);
             a.should.eql({a: 12}, 'http use memo');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should refetch when needed', function (done) {
         var xhr = new XHRMockFactory(200, '{"a":12}', "");
@@ -143,7 +156,7 @@ describe('http', function () {
             obj.$http.get({}, a, true);
             a.should.eql({a: 13}, 'http refetch');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
     it('should map correct type', function (done) {
         var xhr = new XHRMockFactory(200, '{"a":12}', "");
@@ -159,7 +172,7 @@ describe('http', function () {
             req = obj.$http.delete({}, {});
             req.xhr.type.should.eql('DELETE', 'http delete');
             done();
-        }, ['dom', 'http']);
+        }, ['view', 'http']);
     });
 
     //JSONP tests
