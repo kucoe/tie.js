@@ -150,9 +150,44 @@ describe('model', function () {
         it('should support calculated props', function () {
             var a = tie('a', {value: 'jack', hello: function() {
                 return 'hello ' + this.value;
+            }.calc()});
+            a.hello.should.eql('hello jack', 'initial');
+            a.value = 'wolf';
+            a.hello.should.eql('hello wolf', 'after change');
+        });
+        it('should support dynamic props', function () {
+            var a = tie('a', {value: 'jack', hello: function() {
+                return 'hello ' + this.value;
             }.val()});
-            a.value = 'aa';
-            c.$$b.$$a.value.should.eql('aa', "value");
+            a.hello.should.eql('hello jack', 'initial');
+            a.value = 'wolf';
+            a.hello.should.eql('hello wolf', 'after change');
+            a = tie('a', {name: 'jack', hello: function() {
+                return 'hello ' + this.name;
+            }.val('name')});
+            a.hello.should.eql('hello jack', 'initial');
+            a.name = 'wolf';
+            a.hello.should.eql('hello wolf', 'after change');
+        });
+        it('should notify dynamic props on dependency change', function () {
+            tie('b', 'jack');
+            var a = tie('a', {hello: function() {
+                return 'hello ' + this.$$b.value;
+            }.val()}, ['b']);
+            a.hello.should.eql('hello jack', 'initial');
+            tie('b', 'wolf');
+            a.hello.should.eql('hello wolf', 'after change');
+        });
+        it('should react on dynamic prop update', function () {
+            var a = tie('a', {value: 'jack', hello: function() {
+                return 'hello ' + this.value;
+            }.val()});
+            a.hello.should.eql('hello jack', 'initial');
+            a.hello = function() {
+                return 'hello ' + this.name;
+            }.val('name');
+            a.name = 'wolf';
+            a.hello.should.eql('hello wolf', 'after change');
         });
     });
 });

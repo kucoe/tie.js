@@ -130,26 +130,6 @@ describe('handle', function () {
         test.name.should.eql("Wolf");
         test.total.should.eql("Hello Wolf");
     });
-    it('should watch property get', function () {
-        tie.handle("a", function (obj, config, observer) {
-            var w = function () {
-                return config + ' ' + obj.name;
-            };
-            observer.add('total', this._uid, function () {
-                return w;
-            });
-            observer.add('total.count', this._uid, function() {
-                return w().length;
-            });
-            return config;
-        });
-        var test = tie("test", {$a: "Hello", name: 'Jack'});
-        test.total().should.eql("Hello Jack", 'value');
-        test.total.count.should.eql(10, 'total');
-        test.name = 'Lee';
-        test.total().should.eql("Hello Lee", 'value');
-        test.total.count.should.eql(9, 'total');
-    });
     it('should watch property delete', function () {
         var watch = null;
         tie.handle("a", function (obj, config, observer) {
@@ -272,7 +252,6 @@ describe('handle', function () {
             };
             watch = observer;
             observer.watch(config + '_.+', this._uid, w);
-            console.log('called ' + config);
             return config + ' resolver';
         });
         var test = tie("test", {$a: "app", name:'uu', app_name: 'Jack'});

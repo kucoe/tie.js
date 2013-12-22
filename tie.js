@@ -13,6 +13,8 @@
     var DEPS = '$deps';
     var DEP_PREFIX = '$$';
     var HANDLE_PREFIX = '$';
+    var CALC_FN = '_calc_fn';
+    var VALUE_FN = '_val_fn';
 
     var app = null;
 
@@ -82,8 +84,20 @@
             return typeof value == 'boolean' || {}.toString.apply(value) == '[object Boolean]';
         },
     
-        trim: function (value) {
-            return this.isString(value) ? value.replace(/^\s*/, '').replace(/\s*$/, '') : value;
+        isHandle: function (property) {
+            return property && property.indexOf(HANDLE_PREFIX) == 0;
+        },
+    
+        isDependency: function (property) {
+            return property && property.indexOf(DEP_PREFIX) == 0;
+        },
+    
+        isEnumerable: function (property) {
+            return property && !this.isHandle(property) && property.charAt(0) != '_';
+        },
+    
+        trim: function (string) {
+            return this.isString(string) ? string.trim() : string;
         },
     
         lowercase: function (string) {
@@ -184,7 +198,7 @@
             } else if ('false' === string) {
                 res = false
             } else if (/^\d+$/.test(string)) {
-                if (string.indexOf('.') != -1) {
+                if (string.contains('.')) {
                     res = this.toFloat(string);
                 } else {
                     res = this.toInt(string);
@@ -243,50 +257,15 @@
             return object;
         },
     
-        sequence: function (obj, callback, last, thisArg) {
-            var keys = [];
-            if (!thisArg) {
-                thisArg = this;
-            }
-            if (callback) {
-                if (this.isCollection(obj)) {
-                    var index = -1;
-                    var length = obj.length;
-                    while (++index < length) {
-                        keys.push(index);
-                    }
-                } else {
-                    keys = Object.keys(obj);
-                }
-    
-                var next = function () {
-                    var key = keys.shift();
-                    if (key === 0 || key) {
-                        var value = obj[key];
-                        callback.call(thisArg, value, next);
-                    } else {
-                        if (last) {
-                            last.call(thisArg, obj);
-                        }
-                    }
-                };
-                next();
-            }
-        },
-    
-        safeCall: function (fn, fnThis, bindReady) {
+        safeCall: function (fn, fnThis) {
             var res;
-            var spliceArgs = 3;
-            if (this.isUndefined(bindReady) && this.isFunction(fnThis.$ready)) {
-                bindReady = fnThis.$ready();
-                spliceArgs = 2;
-            }
+            var spliceArgs = 2;
             try {
                 var args = args2Array(arguments, spliceArgs);
                 res = fn.apply(fnThis, args);
             } catch (e) {
                 res = undefined;
-                if (bindReady) {
+                if (this.isFunction(fnThis.$ready) && fnThis.$ready()) {
                     console.error('Is ready and had an error:' + e.message);
                     console.log(e.stack);
                     _.debug(e, 'User code error');
@@ -392,7 +371,7 @@
                 });
             }
             if (fn && _.isFunction(fn)) {
-                obj = _.safeCall(fn, p, true, obj, params, next);
+                obj = _.safeCall(fn, p, obj, params, next);
             }
             _.debug("Ready pipe " + name);
             return obj;
@@ -410,8 +389,7 @@
     };
     
     var pipeModel = function (obj) {
-        obj = _.clone(obj);
-        observeClone(obj);
+        observe(obj);
         return chain(obj);
     };
     
@@ -463,10 +441,10 @@
         return r;
     };
     
-    var observeClone = function (obj) {
+    var observe = function (obj) {
         var o = new observer(obj);
         o.apply = function (prop, ready) {
-            if (prop && prop[0] == HANDLE_PREFIX) {
+            if (_.isHandle(prop)) {
                 var name = prop.substring(1);
                 var h = handlesRegistry[name];
                 if (h) {
@@ -506,6 +484,12 @@
         if (!obj) {
             obj = tie(t);
         } else {
+            if (obj.$name) {
+                var r = ties[obj.$name];
+                if (r) {
+                    obj = r.observer.unbind(obj);
+                }
+            }
             obj = pipeModel(obj);
         }
         _.forEach(tokens, function (item) {
@@ -526,14 +510,15 @@
         parse: function (str) {
             var index = str.indexOf(':');
             var pipe = {};
-            pipe.name = _.trim(index + 1 ? str.substr(0, index) : str);
+            var hasParams = index != -1;
+            pipe.name = _.trim(hasParams ? str.substr(0, index) : str);
             pipe.params = [];
-            if (pipe.name[0] == '.') {
+            if (pipe.name.charAt(0) == '.') {
                 pipe.params = [pipe.name.substring(1)];
                 pipe.name = 'property';
                 index = -1;
             }
-            if (index >= 0) {
+            if (hasParams) {
                 var p = _.trim(str.substr(++index));
                 p = '[' + p + ']';
                 var array = _.convert(p, {});
@@ -572,7 +557,7 @@
                 h[DEP_PREFIX + item] = handlesRegistry[item];
             });
             if (fn && _.isFunction(fn)) {
-                config = _.safeCall(fn, h, true, obj, config, watcher, appConfig);
+                config = _.safeCall(fn, h, obj, config, watcher, appConfig);
             }
             _.debug("Processed handle " + name);
             return config;
@@ -605,16 +590,19 @@
         };
     
         this.$ready = function () {
-            var ready = true;
+            if(_.isDefined(this._ready)) {
+                return this._ready;
+            }
+            this._ready = true;
             _.forEach(this.$deps, function (dep) {
                 var d = this[DEP_PREFIX + dep];
                 if (!d || d._empty) {
-                    ready = false;
+                    this._ready = false;
                     return false;
                 }
                 return true;
             }, this);
-            return ready;
+            return this._ready;
         };
     };
     
@@ -631,42 +619,41 @@
     var observer = function (obj) {
         this.obj = obj;
         this.props = [];
-        this.newProps = [];
         this.listeners = [];
+        this.deps = {};
+        this.proxy = {};
     };
     
     observer.prototype = {
     
+        unbind: function (obj, top) {
+            if (!obj) {
+                obj = this.obj;
+            }
+            var res = Object.create(Object.getPrototypeOf(obj));
+            _.forIn(obj, function (value, prop) {
+                var full = top ? top + '.' + prop : prop;
+                var proxy = this.proxy[full];
+                var val = proxy ? proxy.value : value;
+                if (_.isObject(value)) {
+                    res[prop] = this.unbind(val, prop);
+                } else {
+                    res[prop] = val;
+                }
+            }, this);
+            return res;
+        },
+    
         observe: function () {
             var obj = this.obj;
-            var ready = obj.$ready();
             _.debug("Exploring object " + obj.$name);
-            var added = explore(obj, ready, this);
-            if (this.newProps.length > 0) {
-                _.forEach(this.newProps, function (prop) {
-                    _.debug("Observing dynamic property " + prop);
-                    var splits = prop.split('.');
-                    var next = splits.shift();
-                    var o = obj;
-                    var current = '';
-                    while (next) {
-                        current += next;
-                        var desc = Object.getOwnPropertyDescriptor(o, next);
-                        if (o && observeProperty(o, next, desc, ready, this, current)) {
-                            added.push(prop);
-                        }
-                        o = o[next];
-                        next = splits.shift();
-                        current += '.';
-                    }
-                }, this);
-                this.newProps = [];
-            }
-            _.forEach(this.props, function (prop) {
+            var added = explore(obj, this);
+            _.forEach(this.props, function (prop, i) {
                 _.debug('Check for property being deleted ' + prop);
                 if (_.isUndefined(this.obj.$prop(prop))) {
                     _.debug("Notify deleted property " + prop);
-                    this.onDelete(prop, ready);
+                    this.onDelete(prop);
+                    //this.props.splice(i, 1);
                 }
             }, this);
             this.props = added;
@@ -678,13 +665,10 @@
             }
             _.debug('Dynamic property listener: ' + prop);
             if (onChange || onDelete) {
-                var property = listener(toRegex(prop), handlerId, null, onChange, onDelete);
+                var property = listener(toRegex(prop), handlerId, onChange, onDelete);
                 this.listeners.push(property);
                 return function () {
-                    var indexOf = this.listeners.indexOf(property);
-                    if (indexOf != -1) {
-                        this.listeners.splice(indexOf, 1);
-                    }
+                    this.listeners.remove(property);
                 }.bind(this);
             }
             return null;
@@ -700,7 +684,7 @@
             _.forEach(['push', 'unshift'], function (item) {
                 array[item] = function () {
                     var args = [].map.call(arguments, function (arg) {
-                        return onAdd ? _.safeCall(onAdd, array, true, arg) : arg;
+                        return onAdd ? _.safeCall(onAdd, array, arg) : arg;
                     });
                     return [][item].apply(array, args);
                 };
@@ -708,7 +692,7 @@
             _.forEach(['pop', 'shift'], function (item) {
                 array[item] = function () {
                     var res = [][item].call(array);
-                    return onRemove ? _.safeCall(onRemove, array, true, res) : res;
+                    return onRemove ? _.safeCall(onRemove, array, res) : res;
                 };
             });
             _.forEach(['sort', 'reverse', 'splice'], function (item) {
@@ -716,7 +700,7 @@
                     var res = [][item].call(array, arguments);
                     if ('splice' === item) {
                         res = res.map(function (r) {
-                            return onRemove ? _.safeCall(onRemove, array, true, r) : r;
+                            return onRemove ? _.safeCall(onRemove, array, r) : r;
                         });
                     }
                     this.check();
@@ -725,9 +709,9 @@
             });
             array._cmp = function (index, item, prev) {
                 if (_.isUndefined(prev)) {
-                    this[index] = _.safeCall(onAdd, array, true, item);
+                    this[index] = _.safeCall(onAdd, array, item);
                 } else if (!_.isEqual(item, prev)) {
-                    this[index] = _.safeCall(onChange, array, true, item, prev, index);
+                    this[index] = _.safeCall(onChange, array, item, prev, index);
                 }
             };
             array.set = function (index, item) {
@@ -749,94 +733,92 @@
             return array;
         },
     
-        add: function (prop, handlerId, valueFn) {
-            if (this.props.indexOf(prop) == -1) {
-                this.newProps.push(prop);
-                if (this.props.length > 0) { //check whether it was observed already
-                    this.observe()
-                }
-            }
-            if (this.newProps.indexOf(prop) != -1 && valueFn) {
-                _.debug('Dynamic property added: ' + prop);
-                var property = listener(prop, handlerId, valueFn);
-                this.listeners.push(property);
-                return function () {
-                    var indexOf = this.listeners.indexOf(property);
-                    if (indexOf != -1) {
-                        this.listeners.splice(indexOf, 1);
-                    }
-                    indexOf = this.newProps.indexOf(prop);
-                    if (indexOf != -1) {
-                        this.newProps.splice(indexOf, 1);
-                    }
-                }.bind(this);
-            }
-            return null;
-        },
-    
         remove: function (prop) {
-            var indexOf;
             if (_.isString(prop)) { //removes listeners by handlerId or by property name
                 _.forEach(this.listeners, function (item, i) {
                     var property = item.property;
                     if (prop && (property === prop || (_.isRegExp(property) && property.test(prop)) || item.handlerId === prop)) {
                         this.listeners.splice(i, 1);
-                        indexOf = this.newProps.indexOf(property);
-                        if (indexOf != -1) {
-                            this.newProps.splice(indexOf, 1);
-                        }
                     }
                 }, this, true);
             }
         },
     
-        onGet: function (prop, ready) {
-            return react(prop, this.obj, ready, this.listeners, 'get');
+        onChange: function (prop) {
+            _.debug('Property change: ' + prop);
+            return react(prop, this, 'change');
         },
     
-        onChange: function (prop, ready) {
-            return react(prop, this.obj, ready, this.listeners, 'change');
+        onDelete: function (prop) {
+            _.debug('Property delete: ' + prop);
+            return react(prop, this, 'del');
         },
     
-        onDelete: function (prop, ready) {
-            return react(prop, this.obj, ready, this.listeners, 'del');
-        },
-    
-        apply: function (prop, ready) {
-            this.onChange(prop, ready);
+        apply: function (prop) {
+            this.onChange(prop);
         }
     };
     
-    var listener = function (prop, handlerId, valueFn, onChange, onDelete) {
+    function clean(observer, name) {
+        var proxy = observer.proxy[name];
+        if (proxy) {
+            delete proxy.memo;
+        }
+    }
+    
+    var listener = function (prop, handlerId, onChange, onDelete) {
         return {
             property: prop,
             handlerId: handlerId,
-            valueFn: valueFn,
             onChange: onChange,
             onDelete: onDelete
         };
     };
     
-    var react = function (prop, obj, ready, array, action) {
-        if (!ready) {
-            ready = obj.$ready();
-        }
+    var notify = function (obj, prop, observer) {
+        var vanes = [];
+        //update itself first
+        clean(observer, prop);
+        // dependencies lookup
+        _.forIn(observer.deps, function (list, name) {
+            if (_.isDependency(prop) && _.isEqual(list, [VALUE])) {
+                clean(observer, name);
+                if (!vanes.contains(name)) {
+                    vanes.push(name);
+                }
+            } else {
+                _.forEach(list, function (item) {
+                    if (item === prop) {
+                        clean(observer, name);
+                        if (!vanes.contains(name)) {
+                            vanes.push(name);
+                        }
+                    }
+                });
+            }
+        });
+        return vanes;
+    };
+    
+    var react = function (prop, observer, action) {
+        var obj = observer.obj;
+        var vanes = notify(obj, prop, observer);
         _.debug('React on ' + action + ' for ' + prop);
-        var val = action === 'get' ? null : obj[prop];
-        _.forEach(array, function (item) {
+        var val = obj[prop];
+        _.forEach(observer.listeners, function (item) {
             var property = item.property;
-            var test = action === 'get' ? property === prop : (_.isRegExp(property) && property.test(prop));
+            var test = _.isRegExp(property) && property.test(prop);
             if (test) {
-                var fn = action === 'get' ? item.valueFn : (action === 'del' ? item.onDelete : item.onChange);
+                var fn = action === 'del' ? item.onDelete : item.onChange;
                 if (_.isFunction(fn)) {
-                    val = _.safeCall(fn, obj, ready, obj, prop, val);
+                    val = _.safeCall(fn, obj, obj, prop, val, vanes);
                 }
             }
         });
         return val;
     };
     
-    var explore = function (obj, ready, observer, context) {
+    var explore = function (obj, observer, context) {
         var visited = [];
         _.forIn(obj, function (value, prop) {
             if ('prototype' == prop) {
@@ -849,64 +831,83 @@
             if (!desc.configurable || (desc.value === undefined && !desc.set) || desc.writable === false) {
                 return true; // skip readonly
             }
-            var dep = prop.indexOf(DEP_PREFIX) == 0 && obj.$deps.indexOf(prop.substring(2)) != -1;
+            var dep = _.isDependency() && obj.$deps.indexOf(prop.substring(2)) != -1;
             var fullProp = context ? context + '.' + prop : prop;
             if (_.isObject(value) && !_.isArray(value) && !dep && prop != DEPS && prop !== (DEP_PREFIX + APP)) {
                 _.debug("Exploring object " + prop);
-                _.extend(visited, explore(value, ready, observer, fullProp));
+                _.extend(visited, explore(value, observer, fullProp));
             }
             _.debug("Observing property " + prop);
-            if (observeProperty(obj, prop, desc, ready, observer, fullProp)) {
+            if (observeProperty(obj, prop, desc, observer, fullProp)) {
                 visited.push(prop);
-                observer.onChange(fullProp, ready);
+                observer.onChange(fullProp);
             }
             return true;
         });
         return visited;
     };
     
-    var observeProperty = function (obj, prop, desc, ready, observer, fullProp) {
-        if (desc && desc._proxyMark) {
+    var observeProperty = function (obj, prop, desc, observer, fullProp) {
+        var proxy = observer[fullProp];
+        if (_.isDefined(proxy)) {
             return false; //proxy already set
         }
+        proxy = {
+            get: desc.get,
+            set: desc.set,
+            value: desc.value,
+            memo: desc.memo
+        };
+    
         var newGet = function () {
-            if (desc) {
-                if (desc.get) {
-                    return desc.get.call(this);
-                }
-                return desc.value;
+            var val = null;
+            if (proxy.get) {
+                val = proxy.get.call(this);
+            } else {
+                val = proxy.value;
             }
-            return observer.onGet(fullProp, ready);
+            if (_.isFunction(val)) {
+                if (val.$name == VALUE_FN) {
+                    if (_.isUndefined(proxy.memo)) {
+                        observer.deps[fullProp] = val.$deps;
+                        val = proxy.memo = _.safeCall(val, observer.obj);
+                    } else {
+                        val = proxy.memo;
+                    }
+                } else if (val.$name == CALC_FN) {
+                    val = _.safeCall(val, observer.obj);
+                }
+            }
+            return val;
         };
         var changed = function (val) {
-            var prev = newGet();
+            var prev = newGet.call(this);
             return !_.isEqual(prev, val);
         };
         var newSet = function (val) {
-            if (!changed(val)) {
+            if (!changed.call(this, val)) {
                 return;
             }
-            if (desc) {
-                if (desc.set) {
-                    desc.set.call(this, val);
-                } else {
-                    desc.value = val;
-                }
+            if (proxy.set) {
+                proxy.set.call(this, val);
+            } else {
+                proxy.value = val;
             }
             if (!newSet._apply && !this._silent) {
                 newSet._apply = true;
-                observer.apply(fullProp, ready);
+                observer.apply(fullProp);
                 newSet._apply = false;
             }
         };
-        var enumerable = desc ? desc.enumerable : true;
+        newGet.call(obj);
+        var enumerable = desc.enumerable;
         Object.defineProperty(obj, prop, {
             get: newGet,
             set: newSet,
             configurable: true,
-            enumerable: enumerable,
-            _proxyMark: true
+            enumerable: enumerable
         });
+        observer.proxy[fullProp] = proxy;
         return true;
     };
 
@@ -920,16 +921,16 @@
         this.obj = obj;
         this.observer = new observer(obj);
         var self = this;
-        this.observer.apply = function(prop, ready) {
-            self.apply(prop, ready);
+        this.observer.apply = function (prop) {
+            self.apply(prop);
         };
     };
     
     bind.prototype = {
     
-        apply: function (property, ready) {
+        apply: function (property) {
             _.debug("Calling apply on '" + this.name + "' after changed property '" + property + "'");
-            if (property && property[0] == HANDLE_PREFIX) {
+            if (_.isHandle(property)) {
                 var n = property.substring(1);
                 var h = handlesRegistry[n];
                 if (h) {
@@ -937,12 +938,13 @@
                 }
             }
             if (property) {
-                this.observer.onChange(property, ready);
+                this.observer.onChange(property);
             }
             _.forEach(this.reliers, function (item) {
                 var bind = ties[item];
                 if (bind) {
                     bind.obj[DEP_PREFIX + this.name] = this.obj;
+                    delete bind.obj._ready;
                 }
             }, this);
         },
@@ -953,7 +955,7 @@
             if (name != APP) {
                 this.processedHandles = [];
                 _.forIn(handlesRegistry, function (handle, prop) {
-                    if (this.processedHandles.indexOf(prop) == -1) {
+                    if (!this.processedHandles.contains(prop)) {
                         this.resolveHandle(obj, prop, handle);
                     }
                 }, this);
@@ -963,9 +965,9 @@
         resolveHandle: function (obj, prop, handle) {
             _.debug("Check handle " + prop);
             _.forEach(handle.$deps, function (item) {
-                if (this.processedHandles.indexOf(item) == -1) {
+                if (!this.processedHandles.contains(item)) {
                     var h = handlesRegistry[item];
-                    if(h) {
+                    if (h) {
                         this.resolveHandle(obj, item, h);
                     }
                 }
@@ -983,12 +985,12 @@
                 obj[n] = handle(obj, config, this.observer, appConfig);
                 delete obj._silent;
             }
-            if (this.processedHandles.indexOf(prop) == -1) {
+            if (!this.processedHandles.contains(prop)) {
                 this.processedHandles.push(prop);
             }
         },
     
-        checkApplyCount: function() {
+        checkApplyCount: function () {
             this.applyCount++;
             if (this.applyCount > 10) {
                 _.debug("Too many apply :" + this.name + " - " + this.applyCount);
@@ -1014,7 +1016,7 @@
         }
         var r = ties[name];
         if (_.isUndefined(tiedObject)) {
-            return  pipeModel(r.obj);
+            return  pipeModel(r.observer.unbind());
         }
         if (r && r.obj.$sealed) {
             throw new Error(name + ' tie is already registered and sealed. Please choose another name for your tie');
@@ -1041,7 +1043,7 @@
             var name = bind.name;
             if (name != APP) {
                 bind.obj[DEP_PREFIX + APP] = app.obj;
-                if (app.reliers.indexOf(name) == -1) {
+                if (!app.reliers.contains(name)) {
                     app.reliers.push(name);
                 }
             }
@@ -1057,7 +1059,8 @@
                     this.define(dep, found);
                 }
                 bind.obj[DEP_PREFIX + dep] = found.obj;
-                if (found.reliers.indexOf(name) == -1) {
+                delete bind.obj._ready;
+                if (!found.reliers.contains(name)) {
                     found.reliers.push(name);
                 }
             }, this);
@@ -1088,6 +1091,39 @@
             _.debug("Bind model ready");
             return r;
         }
+    };
+
+    Function.prototype.val = function (dependencies) {
+        if (_.isDefined(dependencies) && !_.isArray(dependencies)) {
+            dependencies = [dependencies];
+        }
+        _.define(this, VALUE_FN, false, dependencies || [VALUE]);
+        return this;
+    };
+
+    Function.prototype.calc = function () {
+        _.define(this, CALC_FN, false);
+        return this;
+    };
+
+    Array.prototype.contains = function (item) {
+        return this.indexOf(item) != -1;
+    };
+
+    Array.prototype.remove = function(item) {
+        var idx = this.indexOf(item);
+        if(idx != -1) {
+            return this.splice(idx, 1);
+        }
+        return [];
+    };
+
+    String.prototype.contains = function (substring) {
+        return this.indexOf(substring) != -1;
+    };
+
+    String.prototype.contains = function (substring) {
+        return this.indexOf(substring) != -1;
     };
 
     module.tie = tie;
@@ -1208,7 +1244,7 @@
         removeClass: function (elem, className) {
             var newClass = ' ' + elem.className.replace(/[\t\r\n]/g, ' ') + ' ';
             if (this.hasClass(elem, className)) {
-                while (~newClass.indexOf(' ' + className + ' ')) {
+                while (newClass.contains(' ' + className + ' ')) {
                     newClass = newClass.replace(' ' + className + ' ', ' ');
                 }
                 elem.className = newClass.replace(/^\s+|\s+$/g, '');
@@ -1220,7 +1256,7 @@
                 // check if document already is loaded
                 var f = this.readyFn.bind(this);
                 if (document.readyState === 'complete') {
-                    setTimeout(fn, 0);
+                    _.nextTick(fn);
                     this.domReady = true;
                 } else {
                     if (this.readyListeners.length == 0) {
@@ -1303,7 +1339,7 @@
             var tokens = string.split('|');
             var t = tokens[0];
             var dot = t.indexOf('.');
-            if (~dot) {
+            if (dot != -1) {
                 return t.substring(dot + 1);
             }
             return VALUE;
@@ -1329,7 +1365,7 @@
                 handler = function (event) {
                     event.index = that.index;
                     event.tie = that.tie;
-                    _.safeCall(value, obj, obj && obj.$ready(), event);
+                    _.safeCall(value, obj, event);
                 };
                 this.events[name] = handler;
                 this.$.addEventListener(name, handler);
@@ -1460,87 +1496,30 @@
         }
     };
 
-    var Attr = function (name, value, prop, deps) {
-        this.name = name;
-        this.prop = prop;
-        if (value) {
-            this.value = value;
-            this.$get = function () {
-                return value;
-            }
-        } else {
-            this.deps = deps || [];
-            this.$get = function (obj, bindReady) {
-                if (_.isFunction(prop)) {
-                    return _.safeCall(prop, obj, bindReady)
-                } else {
-                    return obj.$prop(prop);
-                }
-            };
-        }
-        //TODO think on index
-        this.$render = function (obj, ready, el) {
-            var name = this.name;
-            var value = this.value;
-            if (_.isUndefined(value)) {
-                value = this.value = this.$get(obj, ready);
-            }
-            _.debug("Render attribute '" + name + "' with value " + value);
-            el.setAttribute(name, value, obj);
-        };
-    };
-
-    var createAttr = function (name, prop, deps, obj) {
-        var attr = new Attr(name, null, prop, deps);
-        attr.value = attr.$get(obj);
-        return attr;
-    };
-
     var prepareView = function (view, obj) {
         var res = view;
-        if (_.isString(view) && (~view.indexOf('#') || view === '*' || view === '@')) {
-            //TODO implement @
+        if (_.isString(view) && (view.contains('#') || view === '*' || view === '@')) {
             res = {};
-            if (view === '*') {
+            if (view === '@') {
+                res._amap = true;
+            } else if (view === '*') {
                 _.forIn(obj, function (val, prop) {
-                    if (prop.charAt(0) != '$' && prop.charAt(0) != '_') {
-                        res[prop] = createAttr(prop, prop, [prop], obj);
+                    if (_.isEnumerable(prop)) {
+                        res[prop] = prop.prop();
                     }
                 });
             } else {
                 var s = view.split('#');
                 var name = s[0] || VALUE;
                 var prop = s[1] || VALUE;
-                if (prop == VALUE && _.isFunction(obj.value)) {
-                    res[name] = createAttr(name, obj.value, obj.value.$deps, obj);
-                } else {
-                    res[name] = createAttr(name, prop, [prop], obj);
-                }
+                res[name] = prop.prop();
             }
-        } else if (_.isFunction(view)) {
-            res = {
-                value: createAttr(VALUE, view, view.$deps, obj)
-            };
         } else if (_.isFunction(view) || _.isArray(view) || _.isRegExp(view) || _.isBoolean(view)
             || _.isNumber(view) || _.isString(view) || _.isDate(view) || !_.isObject(view)) {
             res = {
-                value: new Attr(VALUE, view)
+                value: view
             };
         } else {
-            _.forIn(view, function (value, prop) {
-                if (prop.charAt(0) == '$' || prop.charAt(0) == '_' || value instanceof  Attr) {
-                    view[prop] = value; //prevent view handle or private or attribute
-                } else if (VALUE === prop && _.isFunction(obj.value)) {
-                    view[prop] = createAttr(VALUE, obj.value, [VALUE], obj);
-                } else if (_.isString(value) && value.charAt(0) === '#') {
-                    var property = value.substring(1) || prop;
-                    view[prop] = createAttr(prop, property, [property], obj);
-                } else if (_.isFunction(value) && (value.name == VALUE || value.$name == VALUE)) {
-                    view[prop] = createAttr(prop, value, value.$deps, obj);
-                } else {
-                    view[prop] = new Attr(prop, value)
-                }
-            });
             res = view;
         }
         res._ids = [];
@@ -1566,9 +1545,9 @@
         register: function (viewHandle, onChange, interest) {
             var vh = viewHandlers[viewHandle];
             if (vh && onChange) {
-                vh.onChange = function (obj, prop) {
+                vh.onChange = function (obj, prop, val, vanes) {
                     if (!interest || interest === prop) {
-                        onChange.call(this, obj, prop);
+                        onChange.call(this, obj, prop, val, vanes);
                     }
                 }
             }
@@ -1590,16 +1569,14 @@
             return res;
         },
 
-        $renderAttr: function (attr, pipe, obj, ready, el) {
-            if (attr instanceof Attr) {
-                if (pipe) {
-                    delete attr.value;
-                }
-                attr.$render(obj, ready, el);
+        $renderAttr: function (obj, prop, val, el) {
+            if (_.isEnumerable(prop)) {
+                _.debug("Render attribute '" + prop + "' with value " + val);
+                el.setAttribute(prop, val, obj);
             }
         },
 
-        $render: function (obj, ready, prop) {
+        $render: function (obj, prop) {
             var tieName = obj.$name;
             _.debug("Render " + tieName, tieName + " Render");
             if (this.$.length == 0) {
@@ -1615,18 +1592,31 @@
             var $shown = obj.$view.$shown;
             _.forEach(this.$, function (el) {
                 if (el) {
-                    var pipe = el.tie !== tieName;
-                    if (pipe) {
+                    if (el.tie !== tieName) {
                         obj = parse(el.tie, undefined, obj);
                         $shown = obj.$view.$shown;
                     }
                     if (prop) {
-                        var p = obj.$prop('$view.' + prop);
-                        this.$renderAttr(p, pipe, obj, ready, el);
+                        var val = obj.$prop('$view.' + prop);
+                        if (!val && obj.$view._amap) {
+                            val = obj.$prop(prop);
+                        }
+                        if (val) {
+                            this.$renderAttr(obj, prop, val, el);
+                        }
                     } else {
-                        _.forIn(obj.$view, function (val) {
-                            this.$renderAttr(val, pipe, obj, ready, el);
-                        }, this);
+                        if (obj.$view._amap) {
+                            var attrs = [].slice.call(el.$.attributes);
+                            _.forEach(attrs, function (item) {
+                                prop = item.nodeName;
+                                var val = obj.$prop(prop);
+                                this.$renderAttr(obj, prop, val, el);
+                            }, this);
+                        } else {
+                            _.forIn(obj.$view, function (val, prop) {
+                                this.$renderAttr(obj, prop, val, el);
+                            }, this);
+                        }
                         el.setAttribute(TIED);
                         el.setAttribute(CLASS, tieName);
                         if (el.isInput) {
@@ -1640,7 +1630,6 @@
         },
 
         $renderChildren: function (children, obj, clean) {
-            var ready = obj.$ready();
             _.forEach(this.$, function (el) {
                 var $ = el.$;
                 if (clean) {
@@ -1657,8 +1646,8 @@
                         newEl = true;
                     }
                     var w = new wrap(c, obj);
-                    _.forIn(child, function (val) {
-                        this.$renderAttr(val, false, obj, ready, w);
+                    _.forIn(child, function (val, prop) {
+                        this.$renderAttr(obj, prop, val, w);
                     }, this);
                     if (newEl) {
                         w.setAttribute(ID, w._id);
@@ -1672,39 +1661,24 @@
             }, this);
         },
 
-        inspectAttr: function (name, val, obj, ready, prop, els) {
-            els = els || this.$;
-            if (val instanceof  Attr) {
-                var deps = val.deps || [];
-                if (~deps.indexOf(prop)) {
-                    val.value = val.$get(obj, ready);
-                    _.forEach(els, function (el) {
-                        val.$render(obj, ready, el);
-                    });
-                }
-            } else if (name.charAt(0) == '$') {
-                var vh = viewHandlers[name.substring(1)];
-                if (vh && _.isFunction(vh.onChange)) {
-                    vh.onChange(obj, prop);
-                }
-            }
-        },
 
-        notify: function (obj, prop) {
-            _.debug("Fire attributes on property change " + prop);
-            var ready = obj.$ready();
-            //search among attribute dependencies
-            _.forIn(obj.$view, function (val, name) {
-                this.inspectAttr(name, val, obj, ready, prop);
-            }, this);
-            var val = obj.$view.value;
-            // search among elements with property pipe
-            _.forEach(this.$, function (el) {
-                if (prop === el.property && val instanceof Attr) {
-                    val.value = obj.$prop(prop);
-                    val.$render(obj, ready, el);
+        inspectAttrs: function (obj, prop, val, vanes, els) {
+            els = els || this.$;
+            _.forEach(vanes, function (item) {
+                if (item.indexOf('$view') == 0) {
+                    var name = item.replace(/\$view\./g, '');
+                    if (_.isHandle(name)) {
+                        var vh = viewHandlers[name.substring(1)];
+                        if (vh && _.isFunction(vh.onChange)) {
+                            vh.onChange(obj, prop, val, vanes);
+                        }
+                    } else {
+                        _.forEach(els, function (el) {
+                            this.$renderAttr(obj, name, obj.$prop(item), el);
+                        }, this);
+                    }
                 }
-            });
+            }, this);
         },
 
         show: function (shown) {
@@ -1736,7 +1710,7 @@
                 h['$$' + item] = viewHandlers[item];
             });
             if (fn && _.isFunction(fn)) {
-                config = _.safeCall(fn, h, true, view, config, renderer, obj);
+                config = _.safeCall(fn, h, view, config, renderer, obj);
             }
             _.debug("Processed view handle " + name);
             return config;
@@ -1761,7 +1735,7 @@
         var vh = viewHandlers[name];
         if (vh && view._resolved) {
             _.forEach(vh.$deps, function (item) {
-                if (!~view._resolved.indexOf(item)) {
+                if (!view._resolved.contains(item)) {
                     resolveViewHandle(obj, view, item);
                 }
             });
@@ -1773,7 +1747,7 @@
                 view._silent = true;
                 view[h] = vh(view, c, renderer, obj);
                 view._silent = false;
-                if (!~view._resolved.indexOf(name)) {
+                if (!view._resolved.contains(name)) {
                     view._resolved.push(name);
                 }
             }
@@ -1797,40 +1771,36 @@
                 return;
             }
             this.rendering = true;
-            this.$render(obj, obj.$ready(), prop);
+            this.$render(obj, prop);
             this.rendering = false;
             this.rendered = true;
             if (!prop) {
                 _.forIn(viewHandlers, function (handle, prop) {
-                    if (!~view._resolved.indexOf(prop)) {
+                    if (!view._resolved.contains(prop)) {
                         resolveViewHandle(obj, view, prop);
                     }
                 });
             }
         };
         renders[tieName] = r;
-        observer.watch('.*', handlerId, function (obj, prop, val) {
+        observer.watch('.*', handlerId, function (obj, prop, val, vanes) {
             if ('_deleted' === prop && !!val) {
                 delete renders[tieName];
                 observer.remove(handlerId);
             } else if (prop.indexOf('$view.') == 0) {
                 var vh = prop.replace('$view.', '');
-                if (vh.charAt(0) == '$') {
+                if (_.isHandle(vh)) {
                     resolveViewHandle(obj, view, vh.substring(1));
                 }
                 r.render(prop);
-            } else if (prop.indexOf('$$') == 0) {
-                _.forIn(view, function (val) {
-                    if (val instanceof  Attr) {
-                        if(obj.$name == 'label' && val.name == 'value') {
-                            console.log(val.$get(obj, true))
-                        }
-                        delete val.value;
+            }
+            r.inspectAttrs(obj, prop, val, vanes);
+            if (_.isDefined(obj.$view.value)) {
+                _.forEach(r.$, function (el) {
+                    if (prop === el.property) {
+                        r.$renderAttr(obj, VALUE, val, el)
                     }
-                }, this);
-                r.render(); // re-render whole element
-            } else {
-                r.notify(obj, prop);
+                });
             }
         });
         if (dom.ready()) {
@@ -1874,13 +1844,12 @@
 
     viewHandle("children", function (view, config, renderer, obj) {
         var views = [];
-        var ready = obj.$ready();
         if (_.isFunction(config)) {
             var idx = 0;
-            var next = _.safeCall(config, obj, ready, idx);
+            var next = _.safeCall(config, obj, idx);
             while (next != null) {
                 views.push(prepareView(next, obj));
-                next = _.safeCall(config, obj, ready, ++idx);
+                next = _.safeCall(config, obj, ++idx);
             }
         } else {
             _.forEach(config, function (child) {
@@ -1907,15 +1876,14 @@
             });
         };
         views = renderer.observeArray(views, onChange, onChange, onRemove);
-        renderer.register(this.$name, function (obj, prop) {
+        renderer.register(this.$name, function (obj, prop, val, vanes) {
             _.forEach(views, function (v) {
                 _.forEach(v._ids, function (id) {
                     var c = document.getElementById(id);
                     if (c) {
                         var w = new wrap(c, obj);
-                        var ready = obj.$ready();
                         _.forIn(v, function (val, name) {
-                            renderer.inspectAttr(name, val, obj, ready, prop, w);
+                            renderer.inspectAttrs(obj, name, val, w);
                         });
                     }
                 });
@@ -1926,9 +1894,11 @@
 
     dom.ready(onReady);
 
-    Function.prototype.val = function (dependencies) {
-        _.define(this, VALUE, false, dependencies || [VALUE]);
-        return this;
+    String.prototype.prop = function () {
+        var s = this || VALUE;
+        return function () {
+            return this[s];
+        }.val(s);
     };
 
     window.tie.domReady = function () {
@@ -2050,7 +2020,7 @@
             this.err = err;
             _.debug('Request ready with response:' + JSON.stringify(data) + ' and error:' + err);
             if (this.fn) {
-                _.safeCall(this.fn, this, true, data, err);
+                _.safeCall(this.fn, this, data, err);
             } else {
                 console.log('Response received:' + data);
             }
@@ -2062,7 +2032,7 @@
             return url;
         }
         var index = url.indexOf('?');
-        var clearUrl = url.substring(0, index + 1 ? index : url.length);
+        var clearUrl = url.substring(0, index != -1 ? index : url.length);
         var splits = clearUrl.split('/');
         _.forEach(splits, function (split) {
             if (split[0] === ':') {
@@ -2080,7 +2050,7 @@
     var gatherParams = function (params, url) {
         var sign = "";
         if (url) {
-            sign = url.indexOf("?") + 1 ? "&" : "?";
+            sign = url.contains("?") ? "&" : "?";
         }
         var res = sign;
         _.forIn(params, function (param, name) {
