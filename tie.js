@@ -1009,7 +1009,7 @@
     /**  TIE **/
 
     var ties = {};
-    
+
     var tie = function (name, tiedObject, dependencies, sealed) {
         if (name != APP && ties[APP] == null) {
             tie(APP, {});
@@ -1028,9 +1028,9 @@
         }
         return r.obj;
     };
-    
+
     tie.prototype = {
-    
+
         check: function (obj) {
             if (_.isFunction(obj) || _.isArray(obj) || _.isRegExp(obj) || _.isBoolean(obj)
                 || _.isNumber(obj) || _.isString(obj) || _.isDate(obj) || !_.isObject(obj)) {
@@ -1038,7 +1038,7 @@
             }
             return new model(obj);
         },
-    
+
         resolveDependencies: function (bind, dependencies) {
             var name = bind.name;
             if (name != APP) {
@@ -1065,7 +1065,7 @@
                 }
             }, this);
         },
-    
+
         define: function (name, bind) {
             var old = ties[name];
             ties[name] = bind;
@@ -1078,7 +1078,7 @@
                 }
             }
         },
-    
+
         init: function (name, tiedObject, dependencies, sealed) {
             _.debug("Tie " + name, name);
             var obj = this.check(tiedObject);
@@ -1574,9 +1574,9 @@
         register: function (viewHandle, onChange, onRender, interest) {
             var vh = viewHandlers[viewHandle];
             if (vh && onChange) {
-                vh.onChange = function (obj, prop, val, vanes) {
+                vh.onChange = function (obj, prop, val) {
                     if (!interest || interest === prop) {
-                        onChange.call(this, obj, prop, val, vanes);
+                        onChange.call(this, obj, prop, val);
                     }
                 }
             }
@@ -1663,55 +1663,16 @@
             _.debug("Rendered " + tieName);
         },
     
-        $renderChildren: function (children, obj, clean, els) {
-            els = els || this.$;
-            _.forEach(els, function (el) {
-                var $ = el.$;
-                if (clean) {
-                    dom.removeChildren($);
-                }
-                var fragment = document.createDocumentFragment();
-                _.forEach(children, function (child) {
-                    var id = child._parents[el._id];
-                    var c = id ? document.getElementById(id) : null;
-                    var newEl = false;
-                    if (!c) {
-                        c = document.createElement(child.$tag || 'div');
-                        fragment.appendChild(c);
-                        newEl = true;
-                    }
-                    var w = new wrap(c, obj);
-                    _.forIn(child, function (val, prop) {
-                        if (_.isHandle(prop)) {
-                            child.$tie = obj.$name;
-                            child._resolved = [];
-                            resolveViewHandle(obj, child, prop.substring(1), [w]);
-                        } else {
-                            this.$renderAttr(obj, prop, val, w);
-                        }
-                    }, this);
-                    if (newEl) {
-                        w.setAttribute(ID, w._id);
-                        child._ids.push(w._id);
-                        child._parents[el._id] = w._id;
-                    }
-                }, this);
-                _.debug('Processed children');
-                $.appendChild(fragment);
-                _.debug('Append children to main');
-            }, this);
-        },
-    
-    
         inspectAttrs: function (obj, prop, val, vanes, els) {
             els = els || this.$;
             _.forEach(vanes, function (item) {
                 if (item.indexOf('$view') == 0) {
                     var name = item.replace(/\$view\./g, '');
                     if (_.isHandle(name)) {
-                        var vh = viewHandlers[name.substring(1)];
+                        var end = name.indexOf('.');
+                        var vh = viewHandlers[name.substring(1, end)];
                         if (vh && _.isFunction(vh.onChange)) {
-                            vh.onChange(obj, prop, val, vanes);
+                            vh.onChange(obj, name.substring(end), val);
                         }
                     } else {
                         _.forEach(els, function (el) {
@@ -1769,6 +1730,46 @@
 
     /**  CHILDREN **/
 
+    var renderChildren = function (children, obj, clean, renderer, els) {
+        els = els || renderer.$;
+        _.forEach(els, function (el) {
+            var $ = el.$;
+            if (clean) {
+                dom.removeChildren($);
+            }
+            var fragment = document.createDocumentFragment();
+            _.forEach(children, function (child) {
+                var id = child._parents[el._id];
+                var c = id ? document.getElementById(id) : null;
+                var newEl = false;
+                if (!c) {
+                    c = document.createElement(child.$tag || 'div');
+                    fragment.appendChild(c);
+                    newEl = true;
+                }
+                var w = new wrap(c, obj);
+                _.forIn(child, function (val, prop) {
+                    if (_.isHandle(prop)) {
+                        child.$tie = obj.$name;
+                        child._resolved = [];
+                        resolveViewHandle(obj, child, prop.substring(1), [w]);
+                    } else {
+                        renderer.$renderAttr(obj, prop, val, w);
+                    }
+                });
+                if (newEl) {
+                    w.setAttribute(ID, w._id);
+                    child._ids.push(w._id);
+                    child._parents[el._id] = w._id;
+                }
+            });
+            _.debug('Processed children');
+            $.appendChild(fragment);
+            _.debug('Append children to main');
+        }, this);
+    };
+    
+    
     viewHandle("children", function (view, config, renderer, obj, els) {
         var views = [];
         if (_.isFunction(config)) {
@@ -1783,7 +1784,7 @@
                 views.push(prepareView(child, obj));
             });
         }
-        renderer.$renderChildren(views, obj, true, els);
+        renderChildren(views, obj, true, renderer, els);
         var onChange = function (item, prev) {
             if (prev) {
                 onRemove(prev);
@@ -1791,7 +1792,7 @@
             if (!item._ids) {
                 item = prepareView(item, obj);
             }
-            renderer.$renderChildren(item, obj, false, els);
+            renderChildren(item, obj, false, renderer, els);
             return item;
         };
         var onRemove = function (item) {
@@ -1803,7 +1804,7 @@
             });
         };
         views = renderer.observeArray(views, onChange, onChange, onRemove);
-        renderer.register(this.$name, function (obj, prop, val, vanes) {
+        renderer.register(this.$name, function (obj, prop, val) {
             _.forEach(views, function (v) {
                 _.forEach(v._ids, function (id) {
                     var c = document.getElementById(id);
@@ -1818,6 +1819,8 @@
         });
         return views;
     }, [], true);
+
+    /**  VIEW **/
 
     var prepareView = function (view, obj) {
         var res = view;

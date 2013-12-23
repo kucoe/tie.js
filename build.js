@@ -1,14 +1,17 @@
 var fs = require("fs");
 var ugly = require('uglify-js');
+
 var sourcePath = "lib";
-var corePath = "lib/core";
 var tie = sourcePath + "/tie.js";
+
 var dest = "tie.js";
 var min = "tie.min.js";
 
-var core = fs.readFileSync(corePath + '/core.js', 'utf8');
+var corePath = sourcePath + "/core";
 
-var modules = ['util', 'pipe', 'parser', 'handle', 'model', 'observer', 'bind', 'tie'];
+var core = fs.readFileSync(corePath + '/tie.js', 'utf8');
+
+var modules = ['util', 'pipe', 'parser', 'handle', 'model', 'observer', 'bind'];
 
 modules.forEach(function(item){
     var content = fs.readFileSync(corePath + '/' + item + '.js', 'utf8');
