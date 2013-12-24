@@ -468,7 +468,42 @@ describe('view', function () {
                 setTimeout(function () {
                     input.getAttribute('style').should.eql('color:lala', 'value attribute');
                     obj.style = 'green';
-                    input.getAttribute('style').should.eql('color:lala', 'not  re-render value');
+                    input.getAttribute('style').should.eql('color:lala', 'not re-render value');
+                    done();
+                }, 200);
+            }, ['view']);
+        });
+        it('should bind to dependency', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a');
+                document.body.appendChild(input);
+                var span = document.createElement("span");
+                span.setAttribute('data-tie', 'b');
+                document.body.appendChild(span);
+                var span2 = document.createElement("span");
+                span2.setAttribute('data-tie', 'c');
+                document.body.appendChild(span2);
+                window.tie('app', {$view: '#'});
+                window.tie('b', function () {
+                    return this.$$a.value
+                }.val(), ['a']);
+                window.tie('c', function () {
+                    if (this.isUndefined(this.$$b.value)) {
+                        return 0;
+                    }
+                    return this.$$b.value.length
+                }.val(), ['b']);
+                var obj = window.tie('a', 'lala');
+                setTimeout(function () {
+                    input.value.should.eql('lala', 'value');
+                    span.textContent.should.eql('lala', 'value');
+                    span2.textContent.should.eql('4', 'value length');
+                    obj.value = 'green';
+                    input.value.should.eql('green', 'value');
+                    span.textContent.should.eql('green', 'after change value');
+                    span2.textContent.should.eql('5', 'value length');
                     done();
                 }, 200);
             }, ['view']);

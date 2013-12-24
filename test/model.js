@@ -179,7 +179,7 @@ describe('model', function () {
             a.hello.should.eql('hello wolf', 'after change');
         });
         it('should react on dynamic prop update', function () {
-            var a = tie('a', {value: 'jack', hello: function() {
+            var a = tie('a', {value: 'jack', name:'', hello: function() {
                 return 'hello ' + this.value;
             }.val()});
             a.hello.should.eql('hello jack', 'initial');

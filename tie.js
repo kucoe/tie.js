@@ -776,33 +776,27 @@
     };
     
     var notify = function (obj, prop, observer) {
-        var vanes = [];
         //update itself first
         clean(observer, prop);
         // dependencies lookup
         _.forIn(observer.deps, function (list, name) {
             if (_.isDependency(prop) && _.isEqual(list, [VALUE])) {
                 clean(observer, name);
-                if (!vanes.contains(name)) {
-                    vanes.push(name);
-                }
+                observer.onChange(name);
             } else {
                 _.forEach(list, function (item) {
-                    if (item === prop) {
+                    if (item === prop && name != prop) {
                         clean(observer, name);
-                        if (!vanes.contains(name)) {
-                            vanes.push(name);
-                        }
+                        observer.onChange(name);
                     }
                 });
             }
         });
-        return vanes;
     };
     
     var react = function (prop, observer, action) {
         var obj = observer.obj;
-        var vanes = notify(obj, prop, observer);
+        notify(obj, prop, observer);
         _.debug('React on ' + action + ' for ' + prop);
         var val = obj[prop];
         _.forEach(observer.listeners, function (item) {
@@ -811,7 +805,7 @@
             if (test) {
                 var fn = action === 'del' ? item.onDelete : item.onChange;
                 if (_.isFunction(fn)) {
-                    val = _.safeCall(fn, obj, obj, prop, val, vanes);
+                    val = _.safeCall(fn, obj, obj, prop, val);
                 }
             }
         });
@@ -880,12 +874,8 @@
             }
             return val;
         };
-        var changed = function (val) {
-            var prev = newGet.call(this);
-            return !_.isEqual(prev, val);
-        };
         var newSet = function (val) {
-            if (!changed.call(this, val)) {
+            if (!_.isDependency(prop) && _.isEqual(proxy.value, val)) {
                 return;
             }
             if (proxy.set) {
@@ -1574,9 +1564,9 @@
         register: function (viewHandle, onChange, onRender, interest) {
             var vh = viewHandlers[viewHandle];
             if (vh && onChange) {
-                vh.onChange = function (obj, prop, val) {
+                vh.onChange = function (obj, prop, name, val, els) {
                     if (!interest || interest === prop) {
-                        onChange.call(this, obj, prop, val);
+                        onChange.call(this, obj, prop, name, val, els);
                     }
                 }
             }
@@ -1663,24 +1653,20 @@
             _.debug("Rendered " + tieName);
         },
     
-        inspectAttrs: function (obj, prop, val, vanes, els) {
+        inspectChange: function (obj, prop, name, val, els) {
             els = els || this.$;
-            _.forEach(vanes, function (item) {
-                if (item.indexOf('$view') == 0) {
-                    var name = item.replace(/\$view\./g, '');
-                    if (_.isHandle(name)) {
-                        var end = name.indexOf('.');
-                        var vh = viewHandlers[name.substring(1, end)];
-                        if (vh && _.isFunction(vh.onChange)) {
-                            vh.onChange(obj, name.substring(end), val);
-                        }
-                    } else {
-                        _.forEach(els, function (el) {
-                            this.$renderAttr(obj, name, obj.$prop(item), el);
-                        }, this);
-                    }
+            if (_.isHandle(name)) {
+                var end = name.indexOf('.');
+                var h = name.substring(1, end);
+                var vh = viewHandlers[h];
+                if (vh && _.isFunction(vh.onChange)) {
+                    vh.onChange(obj, prop, name.substring(end + 1), val[HANDLE_PREFIX + h], els);
                 }
-            }, this);
+            } else {
+                _.forEach(els, function (el) {
+                    this.$renderAttr(obj, name, val[name], el);
+                }, this);
+            }
         },
     
         show: function (shown) {
@@ -1804,15 +1790,13 @@
             });
         };
         views = renderer.observeArray(views, onChange, onChange, onRemove);
-        renderer.register(this.$name, function (obj, prop, val) {
-            _.forEach(views, function (v) {
+        renderer.register(this.$name, function (obj, prop, name, val) {
+            _.forEach(val, function (v, i) {
                 _.forEach(v._ids, function (id) {
                     var c = document.getElementById(id);
                     if (c) {
                         var w = new wrap(c, obj);
-                        _.forIn(v, function (val, name) {
-                            renderer.inspectAttrs(obj, name, val, w);
-                        });
+                        renderer.inspectChange(obj, prop, name, val[i], w);
                     }
                 });
             });
@@ -1884,18 +1868,18 @@
             }
         };
         renders[tieName] = r;
-        observer.watch('.*', handlerId, function (obj, prop, val, vanes) {
+        observer.watch('.*', handlerId, function (obj, prop, val) {
             if ('_deleted' === prop && !!val) {
                 delete renders[tieName];
                 observer.remove(handlerId);
             } else if (prop.indexOf('$view.') == 0) {
-                var vh = prop.replace('$view.', '');
-                if (_.isHandle(vh)) {
-                    resolveViewHandle(obj, view, vh.substring(1));
+                var name = prop.replace('$view.', '');
+                if (_.isHandle(name) && !name.contains('.')) {
+                    resolveViewHandle(obj, view, name.substring(1));
+                } else {
+                    r.inspectChange(obj, prop, name, view);
                 }
-                r.render(prop);
             }
-            r.inspectAttrs(obj, prop, val, vanes);
             if (_.isDefined(obj.$view.value)) {
                 _.forEach(r.$, function (el) {
                     if (prop === el.property) {

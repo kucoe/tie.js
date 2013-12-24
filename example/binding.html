@@ -19,7 +19,6 @@
     tie("label", {
         style: 'color:red',
         $view: {style:'style'.prop(), value: function () {
-            console.log(this.$$text);
             return this.$$text.value
         }.val()}
     }, ['text']);
