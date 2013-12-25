@@ -23,10 +23,10 @@
         }.val()}
     }, ['text']);
     tie("label2", function () {
-        if (this.isUndefined(this.$$label.value)) {
+        if (this.isUndefined(this.$$label.$view.value)) {
             return 0;
         }
-        return this.$$label.value.length;
+        return this.$$label.$view.value.length;
     }.val(), ['label']);
     tie("text", 'test');
     tie("trigger", {
