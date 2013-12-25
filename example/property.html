@@ -24,7 +24,7 @@ Show: <input type="checkbox" data-tie="switch"/>
         name: 'John',
         age: 25,
         $view: {
-            value: ''.prop(),
+            value: '#{}',
             style: function() {
                 return 'color:' + this.color;
             }.val('color')
@@ -32,7 +32,7 @@ Show: <input type="checkbox" data-tie="switch"/>
     });
     tie("switch", {
         $view : {
-            value: '$$person.$view.$shown'.prop()
+            value: '#{$$person.$view.$shown}'
         }
     }, ['person']);
 </script>

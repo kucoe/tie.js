@@ -187,9 +187,10 @@
         //string to type
         convert: function (string, context) {
             var res = string;
+            console.log(context);
             var reviver = function (k, v) {
-                if (_.isString(v) && v[0] == '#') {
-                    return context[v.substring(1)];
+                if (_.isString(v) && v.indexOf('#{') == 0 && v.indexOf('}' == (v.length -1))) {
+                    return context[v.substring(2, v.length -1)];
                 }
                 return v;
             };
@@ -861,6 +862,12 @@
             } else {
                 val = proxy.value;
             }
+            if(_.isString(val) && val.indexOf('#{') == 0 && val.indexOf('}') == (val.length -1)) {
+                var s = val.substring(2, val.length -1) || VALUE;
+                val = function () {
+                    return this.$prop(s);
+                }.val(s);
+            }
             if (_.isFunction(val)) {
                 if (val.$name == VALUE_FN) {
                     if (_.isUndefined(proxy.memo)) {
@@ -1109,6 +1116,11 @@
         return [];
     };
 
+    String.prototype.prop = function () {
+        var s = this || VALUE;
+        return '#{' + s + '}';
+    };
+
     String.prototype.contains = function (substring) {
         return this.indexOf(substring) != -1;
     };
@@ -1125,7 +1137,6 @@
     };
     module.tie.$ = parser;
     module.tie._ = _;
-    console.log(global.test);
     if (typeof module.exports === 'object') {
         var res = module.tie;
         if (global.test) {
@@ -1920,13 +1931,6 @@
     };
 
     dom.ready(onReady);
-
-    String.prototype.prop = function () {
-        var s = this || VALUE;
-        return function () {
-            return this.$prop(s);
-        }.val(s);
-    };
 
     window.tie.domReady = function () {
         return dom.ready.apply(dom, arguments)

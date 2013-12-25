@@ -21,7 +21,7 @@ function prepareInput(window, $, tag, type) {
     }
     input.setAttribute('data-tie', 'a');
     document.body.appendChild(input);
-    var obj = window.tie('a', {value: 'lala', style: 'color:blue', $view: {style: 'style'.prop()}});
+    var obj = window.tie('a', {value: 'lala', style: 'color:blue', $view: {style: '#{style}'}});
     var el = new $(input, obj);
     return {input: input, obj: obj, el: el};
 }
@@ -315,7 +315,7 @@ describe('view', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', $view: {style: 'value'.prop()}});
+                var obj = window.tie('a', {value: 'lala', $view: {style: '#{value}'}});
                 obj.$view.style.should.eql('lala', 'property attr');
                 done();
             }, ['view']);
@@ -675,7 +675,7 @@ describe('view', function () {
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                window.tie('a', {value: 'lala', $view: {value: ''.prop(), $shown: false}});
+                window.tie('a', {value: 'lala', $view: {value: '#{value}', $shown: false}});
                 setTimeout(function () {
                     div.textContent.should.eql('lala', 'value');
                     div.style.display.should.eql('none', 'hidden');
@@ -872,7 +872,7 @@ describe('view', function () {
                 document.body.appendChild(div);
                 var child = {
                     $tag: 'a',
-                    href: 'value'.prop()
+                    href: '#{value}'
                 };
                 window.tie('a', {value: 'https://kucoe.net', $view: {$children: child}});
                 setTimeout(function () {
@@ -891,7 +891,7 @@ describe('view', function () {
                 document.body.appendChild(div);
                 var child = {
                     $tag: 'a',
-                    href: 'value'.prop()
+                    href: '#{value}'
                 };
                 var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children: child}});
                 setTimeout(function () {

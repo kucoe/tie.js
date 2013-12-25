@@ -170,6 +170,12 @@ describe('model', function () {
             a.name = 'wolf';
             a.hello.should.eql('hello wolf', 'after change');
         });
+        it('should support dynamic prop string', function () {
+            var a = tie('a', {value: 'jack', hello: '#{value}'});
+            a.hello.should.eql('jack', 'initial');
+            a.value = 'wolf';
+            a.hello.should.eql('wolf', 'after change');
+        });
         it('should notify dynamic props on dependency change', function () {
             tie('b', 'jack');
             var a = tie('a', {hello: function() {

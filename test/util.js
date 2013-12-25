@@ -154,7 +154,7 @@ describe('util', function () {
         });
         it('should parse references', function () {
             var context = {b: 'b'};
-            util.convert("['a', '#b', 'c']", context).should.eql(['a', context.b, 'c'], "object");
+            util.convert("['a', '#{b}', 'c']", context).should.eql(['a', context.b, 'c'], "object");
         });
         it('should parse empty string', function () {
             util.convert('').should.eql('', "empty");

@@ -18,7 +18,7 @@
     tie("app", {$view: '#'});
     tie("label", {
         style: 'color:red',
-        $view: {style:'style'.prop(), value: function () {
+        $view: {style:'#{style}', value: function () {
             return this.$$text.value
         }.val()}
     }, ['text']);
@@ -43,7 +43,7 @@
             tie('text', 'changed');
         },
         value: 'Out',
-        $view: {value:''.prop(), mouseover:'float'.prop(), mouseout:'float'.prop(), click:'trigger'.prop()}
+        $view: {value:'#{}', mouseover:'#{float}', mouseout:'#{float}', click:'#{trigger}'}
     }, ['label']);
 </script>
 
