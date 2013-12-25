@@ -1,5 +1,6 @@
-var tie = require('../lib/tie')();
-var util = tie.util;
+global.test = true;
+var tie = require('../lib/tie');
+var util = tie._;
 
 var should = require('should');
 var assert;

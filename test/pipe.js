@@ -1,4 +1,5 @@
-var tie = require('../lib/tie')(true);
+global.test = true;
+var tie = require('../lib/tie');
 var pipes = tie.pipesRegistry;
 
 var should = require('should');

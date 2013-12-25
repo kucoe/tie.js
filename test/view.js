@@ -72,7 +72,7 @@ describe('view', function () {
     describe('dom', function () {
         it('should add next', function (done) {
             browser(function (window) {
-                var q = window.exports().q;
+                var q = window.exports.q;
                 var document = window.document;
                 var a = prepareA(document);
                 q.insertAfter(a, a.cloneNode(true));
@@ -82,7 +82,7 @@ describe('view', function () {
         });
         it('should remove element', function (done) {
             browser(function (window) {
-                var q = window.exports().q;
+                var q = window.exports.q;
                 var document = window.document;
                 var a = prepareA(document);
                 document.body.appendChild(a.cloneNode(true));
@@ -94,7 +94,7 @@ describe('view', function () {
         });
         it('should run on ready', function (done) {
             browser(function (window) {
-                var q = window.exports().q;
+                var q = window.exports.q;
                 q.ready(function () {
                     done();
                 });
@@ -102,7 +102,7 @@ describe('view', function () {
         });
         it('should wrap element', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var document = window.document;
                 var a = document.createElement("a");
                 var obj = {value: 'lala'};
@@ -113,7 +113,7 @@ describe('view', function () {
         });
         it('should set listener on input', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 var el = __ret.el;
@@ -125,7 +125,7 @@ describe('view', function () {
         });
         it('should set listener on checkbox', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $, 'input', 'checkbox');
                 var obj = __ret.obj;
                 var el = __ret.el;
@@ -139,7 +139,7 @@ describe('view', function () {
         });
         it('should set listener on textarea', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $, 'textarea');
                 var obj = __ret.obj;
                 var el = __ret.el;
@@ -151,7 +151,7 @@ describe('view', function () {
         });
         it('should set listener on select', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $, 'select');
                 var obj = __ret.obj;
                 var el = __ret.el;
@@ -175,7 +175,7 @@ describe('view', function () {
         });
         it('should remember display type on show/hide ', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var el = __ret.el;
                 el.$.style.display = 'dummy';
@@ -188,7 +188,7 @@ describe('view', function () {
         });
         it('should set external text on input ', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var el = __ret.el;
                 el.text('dummy');
@@ -199,7 +199,7 @@ describe('view', function () {
         });
         it('should set attribute ', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var el = __ret.el;
                 el.setAttribute('name', 'dummy');
@@ -209,7 +209,7 @@ describe('view', function () {
         });
         it('should set value ', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var el = __ret.el;
                 el.setAttribute('value', 'dummy');
@@ -220,7 +220,7 @@ describe('view', function () {
         });
         it('should set text ', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var el = __ret.el;
                 el.setAttribute('text', 'dummy');
@@ -230,7 +230,7 @@ describe('view', function () {
         });
         it('should set listener ', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var el = __ret.el;
                 var i = 'aaa';
@@ -248,7 +248,7 @@ describe('view', function () {
     describe('render', function () {
         it('should process $view', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
+                var $ = window.exports.el;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 should.exist(obj.$view.style, 'view');
@@ -335,8 +335,8 @@ describe('view', function () {
         });
         it('should select element', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
-                var renders = window.exports().renders;
+                var $ = window.exports.el;
+                var renders = window.exports.renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 var r = renders[obj.$name];
@@ -357,7 +357,7 @@ describe('view', function () {
                 input = document.createElement("input");
                 input.setAttribute('data-tie', 'a2');
                 document.body.appendChild(input);
-                var renders = window.exports().renders;
+                var renders = window.exports.renders;
                 window.tie('a', {value: 'lala', $view: '#'});
                 var r = renders['a'];
                 setTimeout(function () {
@@ -368,8 +368,8 @@ describe('view', function () {
         });
         it('should render attributes', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
-                var renders = window.exports().renders;
+                var $ = window.exports.el;
+                var renders = window.exports.renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 var r = renders[obj.$name];
@@ -382,8 +382,8 @@ describe('view', function () {
         });
         it('should re-render attribute on change', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
-                var renders = window.exports().renders;
+                var $ = window.exports.el;
+                var renders = window.exports.renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 var r = renders[obj.$name];
@@ -655,8 +655,8 @@ describe('view', function () {
     describe('viewHandles', function () {
         it('should react on $shown', function (done) {
             browser(function (window) {
-                var $ = window.exports().el;
-                var renders = window.exports().renders;
+                var $ = window.exports.el;
+                var renders = window.exports.renders;
                 var __ret = prepareInput(window, $);
                 var obj = __ret.obj;
                 setTimeout(function () {

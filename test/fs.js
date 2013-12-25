@@ -1,4 +1,5 @@
-var tie = require('../lib/tie')();
+global.test = true;
+var tie = require('../lib/tie');
 require('../lib/fs')(tie);
 var fs = require('fs');
 

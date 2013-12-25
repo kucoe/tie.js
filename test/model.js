@@ -1,5 +1,6 @@
-var tie = require('../lib/tie')(true);
-var util = tie.util;
+global.test = true;
+var tie = require('../lib/tie');
+var util = tie._;
 var model = tie.model;
 var bind = tie.bind;
 var ties = tie.ties;

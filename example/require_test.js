@@ -1,3 +1,3 @@
-var tie = require('../lib/tie')();
+var tie = require('../lib/tie');
 tie("b", "b");
 

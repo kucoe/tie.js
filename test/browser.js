@@ -1,6 +1,7 @@
+global.test = true;
 var jsdom = require('jsdom');
-var tie = require('../lib/tie')(true);
-var _ = tie.util;
+var tie = require('../lib/tie');
+var _ = tie._;
 
 jsdom.env(
     {
@@ -14,7 +15,7 @@ jsdom.env(
             window.document.querySelectorAll = function (selector) {
                 return window.Sizzle(selector);
             };
-            window.tie = require('../lib/tie')(true);
+            window.tie = require('../lib/tie');
             //window.tie.enableDebug(true);
             console.log('Window ready');
         }
@@ -55,7 +56,7 @@ module.exports = function (callback, handles) {
     _.forEach(h, function (elem) {
         require('../lib/' + elem + '.js');
         if('view' === elem) {
-            global.window.exports().clean();
+            global.window.exports.clean();
         }
     });
     call(global.window, callback);
