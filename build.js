@@ -42,11 +42,16 @@ var http = fs.readFileSync(sourcePath + '/http.js', 'utf8');
 var all = [core, view, http].join("\n\n");
 fs.writeFileSync(dest, all, 'utf8');
 
+var html = fs.readFileSync(sourcePath + '/html.js', 'utf8');
+fs.writeFileSync('tie.html.js', html, 'utf8');
+
 console.log('Build browser version');
 
-var code = fs.readFileSync(dest, 'utf8');
-code = ugly.minify(code, {fromString: true});
+code = ugly.minify(all, {fromString: true});
 fs.writeFileSync(min, code.code, 'utf8');
+
+code = ugly.minify(html, {fromString: true});
+fs.writeFileSync('tie.html.min.js', code.code, 'utf8');
 
 console.log('Build minified version');
 
