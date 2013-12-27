@@ -1525,13 +1525,13 @@
         if (h && h.$sealed) {
             throw new Error(name + ' view handle already registered and sealed. Please choose another name for your handle');
         }
-        h = function (view, config, renderer, obj, els) {
+        h = function (view, config, els, obj) {
             _.debug("Process view handle " + name);
             _.forEach(dependencies || [], function (item) {
                 h['$' + item] = viewHandlers[item];
             });
             if (fn && _.isFunction(fn)) {
-                config = _.safeCall(fn, h, view, config, renderer, obj, els);
+                config = _.safeCall(fn, h, view, config, els, obj);
             }
             _.debug("Processed view handle " + name);
             return config;
@@ -1555,8 +1555,9 @@
             _.debug("View handle " + name + ' with config ' + c);
             var renderer = renders[view.$tie];
             if (_.isDefined(c) && renderer && renderer.rendered) {
+                els = els || renderer.$;
                 view._silent = true;
-                view[h] = vh(view, c, renderer, obj, els);
+                view[h] = vh(view, c, els, obj);
                 delete view._silent;
                 if (!view._resolved.contains(name)) {
                     view._resolved.push(name);
@@ -1688,29 +1689,23 @@
                     this.$renderAttr(obj, name, val[name], el);
                 }, this);
             }
-        },
-    
-        show: function (shown) {
-            if (this.rendered) {
-                _.forEach(this.$, function (el) {
-                    if (el) {
-                        el.show(shown);
-                    }
-                });
-            }
         }
     };
 
     /**  SHOWN **/
 
-    viewHandle("shown", function (view, config, renderer) {
-        renderer.show(config);
+    viewHandle("shown", function (view, config, els) {
+        _.forEach(els, function (el) {
+            if (el) {
+                el.show(config);
+            }
+        });
         return config;
     }, [], true);
 
     /**  PARENT **/
 
-    viewHandle("parent", function (view, config, renderer) {
+    viewHandle("parent", function (view, config, els) {
         var parents = [];
         if (_.isString(config)) {
             if (config.charAt(0) == '#') {
@@ -1726,7 +1721,7 @@
         }
         _.forEach(parents, function (parent) {
             dom.removeChildren(parent);
-            _.forEach(renderer.$, function (el) {
+            _.forEach(els, function (el) {
                 var $ = el.$;
                 dom.remove($);
                 parent.appendChild($);
@@ -1738,7 +1733,6 @@
     /**  CHILDREN **/
 
     var renderChildren = function (children, obj, clean, renderer, els) {
-        els = els || renderer.$;
         _.forEach(els, function (el) {
             var $ = el.$;
             if (clean) {
@@ -1777,7 +1771,8 @@
     };
     
     
-    viewHandle("children", function (view, config, renderer, obj, els) {
+    viewHandle("children", function (view, config, els, obj) {
+        var renderer = renders[obj.$name];
         var views = [];
         if (_.isFunction(config)) {
             var idx = 0;
