@@ -10,9 +10,11 @@
     <li>Upper: <span data-tie="text | upper"></span></li>
     <li>Filter letters (a,b,c): <span data-tie="text | filterLetter: 'a', 'b', 'c'"></span></li>
     <li>Filter words (bad, sad): <span data-tie="text | filterWord: 'bad', '#{special}'"></span></li>
+    <li>Strike words (bad, sad): <span data-tie="text | strikeWord: 'bad', '#{special}'"></span></li>
 </ul>
 
 <script src="../tie.js"></script>
+<script src="../tie.html.js"></script>
 <script>
     tie("app", {$view: '#'});
     var s = tie("text", "sad");
@@ -32,6 +34,16 @@
             words.remove(param);
         });
         obj.value = words.join(' ');
+        return obj;
+    });
+    tie.pipe("strikeWord", function (obj, params) {
+        var words = obj.value.split(' ');
+        this.forEach(params, function (param, i) {
+            words[i] = '<s>' + param + '</s>';
+        });
+        var html = '<span>' +words.join(' ')+ '</span>';
+        var newObj = tie.pipe('html')(obj, html);
+        obj.$view = {$children: newObj.$view.$children}
         return obj;
     });
 </script>

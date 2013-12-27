@@ -212,6 +212,7 @@
 
     module.tie.pipe('html', function (obj, params) {
         obj.$view.$children = html2view(params[0]);
+        return obj;
     });
 
 })(typeof exports === 'object' ? module : window);
