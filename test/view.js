@@ -525,6 +525,25 @@ describe('view', function () {
                 }, 200);
             }, ['view']);
         });
+        it('should process pipe change', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                window.tie.pipe("upper", function (obj) {
+                    obj.value = this.uppercase(obj.value);
+                    return obj;
+                });
+                var input = document.createElement("input");
+                input.setAttribute('data-tie', 'a | upper');
+                document.body.appendChild(input);
+                var obj = window.tie('a', {value: 'lala', $view: '#'});
+                setTimeout(function () {
+                    input.getAttribute('value').should.eql('LALA', 'pipe');
+                    obj.value = 'bbb';
+                    input.getAttribute('value').should.eql('BBB', 'pipe');
+                    done();
+                }, 200);
+            }, ['view']);
+        });
         it('should process property pipe', function (done) {
             browser(function (window) {
                 var document = window.document;

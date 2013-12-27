@@ -188,7 +188,7 @@
         convert: function (string, context) {
             var res = string;
             var reviver = function (k, v) {
-                if (_.isString(v) && v.indexOf('#{') == 0 && v.indexOf('}' == (v.length - 1))) {
+                if (_.isObject(context) && _.isString(v) && v.indexOf('#{') == 0 && v.indexOf('}' == (v.length - 1))) {
                     return context[v.substring(2, v.length - 1)];
                 }
                 return v;
@@ -363,7 +363,7 @@
             _.forEach(dependencies, function (item) {
                 p[DEP_PREFIX + item] = pipesRegistry[item];
             });
-            if (params && params.length > 0) {
+            if (_.isString(params) && params.length > 0) {
                 var array = _.convert(params, obj);
                 params = [];
                 _.forEach(array, function (param) {
@@ -482,6 +482,7 @@
         } else {
             tokens = tokens.splice(1);
         }
+        var local = obj;
         if (!obj) {
             obj = tie(t);
         } else {
@@ -494,7 +495,7 @@
             obj = pipeModel(obj);
         }
         _.forEach(tokens, function (item) {
-            var p = parser.prototype.parse(item);
+            var p = parser.prototype.parse(item, local);
             var args = [p.name];
             args = _.extend(args, p.params);
             _.debug("Parsed pipe" + JSON.stringify(args));
@@ -508,7 +509,7 @@
     };
     
     parser.prototype = {
-        parse: function (str) {
+        parse: function (str, local) {
             var index = str.indexOf(':');
             var pipe = {};
             var hasParams = index != -1;
@@ -522,7 +523,7 @@
             if (hasParams) {
                 var p = _.trim(str.substr(++index));
                 p = '[' + p + ']';
-                var array = _.convert(p, {});
+                var array = _.convert(p, local);
                 _.forEach(array, function (param) {
                     param = _.trim(param);
                     pipe.params.push(param);
@@ -1196,6 +1197,7 @@
 
     var document = window.document;
     var _ = window.tie._;
+    var handle = window.tie.handle;
     var parse = window.tie.$;
 
     var HANDLE_PREFIX = '$';
@@ -1318,7 +1320,7 @@
         this.$ = el;
         this._id = el.getAttribute(ID) || _.uid();
         this.index = idx ? parseInt(idx) : -1;
-        this.tie = el.getAttribute(TIE);
+        this.tie = el.getAttribute(TIE) || name;
         this.property = this.getProperty(this.tie);
         this.events = {};
         this.isSelect = _.eqi(tagName, 'select');
@@ -1638,14 +1640,15 @@
             var $shown = obj.$view.$shown;
             _.forEach(this.$, function (el) {
                 if (el) {
+                    var updated = obj;
                     if (el.tie !== tieName) {
-                        obj = parse(el.tie, undefined, obj);
-                        $shown = obj.$view.$shown;
+                        updated = parse(el.tie, undefined, updated);
+                        $shown = updated.$view.$shown;
                     }
                     if (prop) {
-                        var val = obj.$prop('$view.' + prop);
+                        var val = updated.$prop('$view.' + prop);
                         if (!val && obj.$view._amap) {
-                            val = obj.$prop(prop);
+                            val = updated.$prop(prop);
                         }
                         if (val) {
                             this.$renderAttr(obj, prop, val, el);
@@ -1655,11 +1658,11 @@
                             var attrs = [].slice.call(el.$.attributes);
                             _.forEach(attrs, function (item) {
                                 prop = item.nodeName;
-                                var val = obj.$prop(prop);
+                                var val = updated.$prop(prop);
                                 this.$renderAttr(obj, prop, val, el);
                             }, this);
                         } else {
-                            _.forIn(obj.$view, function (val, prop) {
+                            _.forIn(updated.$view, function (val, prop) {
                                 this.$renderAttr(obj, prop, val, el);
                             }, this);
                         }
@@ -1676,6 +1679,7 @@
         },
     
         inspectChange: function (obj, prop, name, val, els) {
+            var tieName = obj.$name;
             els = els || this.$;
             if (_.isHandle(name)) {
                 var end = name.indexOf('.');
@@ -1686,7 +1690,12 @@
                 }
             } else {
                 _.forEach(els, function (el) {
-                    this.$renderAttr(obj, name, val[name], el);
+                    var value = val[name];
+                    if (el.tie !== tieName) {
+                        var updated = parse(el.tie, undefined, obj);
+                        value = updated.$prop(prop);
+                    }
+                    this.$renderAttr(obj, name, value, el);
                 }, this);
             }
         }
@@ -1853,8 +1862,6 @@
         return res;
     };
 
-    var handle = window.tie.handle;
-
     handle('view', function (obj, config, observer, appConfig) {
         var handlerId = this._uid;
         var view = prepareView(config, obj);
@@ -1899,7 +1906,12 @@
             if (_.isDefined(obj.$view.value)) {
                 _.forEach(r.$, function (el) {
                     if (prop === el.property) {
-                        r.$renderAttr(obj, VALUE, val, el)
+                        var value = val;
+                        if (el.tie !== tieName) {
+                            var updated = parse(el.tie, undefined, obj);
+                            value = updated.$prop(prop);
+                        }
+                        r.$renderAttr(obj, VALUE, value, el)
                     }
                 });
             }

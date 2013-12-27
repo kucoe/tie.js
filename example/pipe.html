@@ -6,30 +6,29 @@
 </head>
 <body>
 <input id="text" type="text" data-tie="text"/>
-<div data-tie="text | upper"></div>
-<div data-tie="text | filterLetter: 'a', 'b', 'c'"></div>
-<div data-tie="text | filterWord: 'bad', '#{special}'"></div>
+<ul>
+    <li>Upper: <span data-tie="text | upper"></span></li>
+    <li>Filter letters (a,b,c): <span data-tie="text | filterLetter: 'a', 'b', 'c'"></span></li>
+    <li>Filter words (bad, sad): <span data-tie="text | filterWord: 'bad', '#{special}'"></span></li>
+</ul>
 
 <script src="../tie.js"></script>
-<script src="../tie.html.js"></script>
 <script>
-    tie("app",{$view: '#'});
-    var s = tie("text","sad");
+    tie("app", {$view: '#'});
+    var s = tie("text", "sad");
     s.special = 'sad';
-    tie.pipe("upper", function(obj) {
+    tie.pipe("upper", function (obj) {
         obj.value = this.uppercase(obj.value);
-       return obj;
+        return obj;
     });
-    tie.pipe("filterLetter", function(obj, params) {
+    tie.pipe("filterLetter", function (obj, params) {
         var search = new RegExp(params.join('|'), 'gi');
-        var html = obj.value.replace(search, function(match) {
-            return "<s>" + match + "</s>";
-        });
-        return tie.pipe('html')(obj, html);
-    }, ['html']);
-    tie.pipe("filterWord", function(obj, params) {
+        obj.value = obj.value.replace(search, '');
+        return obj;
+    });
+    tie.pipe("filterWord", function (obj, params) {
         var words = obj.value.split(' ');
-        this.forEach(params, function(param){
+        this.forEach(params, function (param) {
             words.remove(param);
         });
         obj.value = words.join(' ');
