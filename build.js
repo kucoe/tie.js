@@ -39,7 +39,8 @@ fs.writeFileSync(sourcePath + '/view.js', view, 'utf-8');
 
 view = fs.readFileSync(sourcePath + '/view.js', 'utf8');
 var http = fs.readFileSync(sourcePath + '/http.js', 'utf8');
-var all = [core, view, http].join("\n\n");
+var route = fs.readFileSync(sourcePath + '/route.js', 'utf8');
+var all = [core, view, http, route].join("\n\n");
 fs.writeFileSync(dest, all, 'utf8');
 
 var html = fs.readFileSync(sourcePath + '/html.js', 'utf8');
