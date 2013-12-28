@@ -265,9 +265,10 @@
                 res = fn.apply(fnThis, args);
             } catch (e) {
                 res = undefined;
+                throw e;
                 if (!this.isFunction(fnThis.$ready) || fnThis.$ready()) {
-                    console.error('Is ready and had an error:' + e.message);
-                    console.log(e.stack);
+                    //console.error('Is ready and had an error:' + e.message);
+                    //console.log(e.stack);
                     _.debug(e, 'User code error');
                 }
             }
@@ -1037,7 +1038,7 @@
             return new model(obj);
         },
 
-        resolveDependencies: function (bind, dependencies) {
+        resolveApp: function (bind) {
             var name = bind.name;
             if (name != APP) {
                 bind.obj[DEP_PREFIX + APP] = app.obj;
@@ -1045,6 +1046,10 @@
                     app.reliers.push(name);
                 }
             }
+        },
+
+        resolveDependencies: function (bind, dependencies) {
+            var name = bind.name;
             if (!dependencies) {
                 return;
             }
@@ -1083,6 +1088,7 @@
             var r = new bind(name, obj);
             _.define(obj, name, sealed, dependencies);
             obj._deleted = false;
+            this.resolveApp(r);
             r.resolveHandles();
             this.resolveDependencies(r, dependencies);
             r.observer.observe();
@@ -2307,101 +2313,88 @@
     var _ = window.tie._;
 
     var routes = {
-        list: [],
 
-        init: function (routes) {
-            this.list = [];
-            _.forIn(routes, function (r, path) {
-                path = path.toLowerCase();
-                this.list.push(new route(path, r));
-            }, this);
-            _.debug("Routes initialized");
+        list: {},
+
+        attached: false,
+
+        init: function (obj, routes) {
+            if (!_.isEqual(this.list, routes)) {
+                this.list = routes;
+                this.app = obj.$$app;
+                _.debug("Routes initialized");
+            }
+            this.attached = true;
+            return this.list;
         },
 
-        locate: function (ties) {
-            var current = window.location.hash.substring(1);
-            current = this.find(current);
-            if (!current) {
-                if (this.list.length > 0) {
+        locate: function () {
+            if (_.isDefined(this.list['/'])) {
+                var current = window.location.hash.substring(1);
+                current = this.find(current);
+                if (current == null) {
                     this.move('/');
                 } else {
-                    _.debug("Process default route");
-                    _.forIn(ties, function (bind) {
-                        if (!bind.rendered) {
-                            bind.render();
-                        }
-                        bind.obj.$location = function () {
-                            return {
-                                route: {
-                                    has: function () {
-                                        return true
-                                    }
-                                }
-                            }
-                        };
-                        bind.obj.$shown = true;
-                    });
-                    _.debug("Processed default route");
-                }
-            } else {
-                _.debug("Process route " + current.path);
-                var that = this;
-                app.$location = function (url) {
-                    if (url) {
-                        that.move(url);
-                        return null;
+                    var path = current.path;
+                    _.debug("Process route " + path);
+                    if (_.isFunction(current.handler)) {
+                        _.safeCall(current.handler, this.app);
                     }
-                    return {
-                        href: window.location.href,
-                        route: current
+                    this.list.$location = function (url) {
+                        if (url) {
+                            routes.move(url);
+                        }
+                        return current;
                     };
-                };
-                if (current.handler) {
-                    safeCall(current.handler, app.obj);
+                    _.debug("Processed route " + path);
                 }
-                _.forIn(ties, function (bind) {
-                    var obj = bind.obj;
-                    obj.$location = app.$location;
-                    var shown = current.has(obj);
-                    obj.$shown = shown;
-                    if (!bind.rendered) {
-                        bind.render();
-                    }
-                    bind.validateShow();
-                    var bindRoutes = obj.$routes;
-                    if (bindRoutes && shown) {
-                        var r = bindRoutes[current.path];
-                        if (r && r.handler) {
-                            safeCall(r.handler, obj);
-                        }
-                    }
-                });
-                _.debug("Processed route " + current.path);
             }
         },
 
         find: function (path) {
+            if(!path || path === '/') {
+                return {path: '#/', handler: this.list['/']};
+            }
             if (path.charAt(path.length - 1) == '/') {
                 path = path.substring(0, path.length - 1);
             }
-            var res;
-            _.forEach(this.list, function (route) {
-                var routeChunks = route.path.split('/');
-                var pathChunks = path.split('/');
-                if (routeChunks.length === pathChunks.length) {
-                    _.forEach(routeChunks, function (chunk, i) {
-                        if (chunk.charAt(0) == ':') {
-                            routeChunks[i] = pathChunks[i];
+            var res = null;
+            _.forIn(this.list, function (fn, route) {
+                if (route.charAt(0) === '/') {
+                    var routeChunks = route.split('/');
+                    var pathChunks = path.split('/');
+                    if (routeChunks.length === pathChunks.length) {
+                        _.forEach(routeChunks, function (chunk, i) {
+                            if (chunk.charAt(0) == ':') {
+                                routeChunks[i] = pathChunks[i];
+                            }
+                        });
+                        if (routeChunks.join('/') === path) {
+                            res = {path: route, handler: fn};
+                            return true;
                         }
-                    });
-                    if (routeChunks.join('/') === path) {
-                        res = route;
-                        return true;
                     }
                 }
                 return true;
             });
             return res;
+        },
+
+        has: function (obj, current) {
+            var routes = obj.$view.$routes;
+            if (routes) {
+                var exclude = routes['-'] != null;
+                var contains = false;
+                _.forIn(routes, function (route, path) {
+                    if (path.toLowerCase() === current.path) {
+                        contains = true;
+                        return false;
+                    }
+                    return true;
+                });
+                return exclude != contains;
+            }
+            return false;
         },
 
         move: function (url) {
@@ -2412,34 +2405,13 @@
     };
 
 
-    var route = function (path, handler) {
-        this.path = path;
-        this.handler = handler;
-    };
-
-    route.prototype = {
-
-        has: function (obj) {
-            var routes = obj.$routes;
-            if (routes) {
-                var exclude = routes['-'] != null;
-                var contains = false;
-                _.forIn(routes, function (route, path) {
-                    if (path.toLowerCase() == this.path) {
-                        contains = true;
-                        return false;
-                    }
-                    return true;
-                }, this);
-                return exclude != contains;
-            }
-            return false;
-        }
-    };
-
     window.tie.handle("route", function (obj, config, observer, appConfig) {
-        routes.init(appConfig);
-        return appConfig;
+        if (!routes.attached) {
+            window.tie.domReady(function () {
+                routes.locate();
+            });
+        }
+        return routes.init(obj, appConfig);
     }, ['view'], true);
 
     if (typeof window.exports === 'object') {
