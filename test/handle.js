@@ -65,13 +65,27 @@ describe('handle', function () {
     });
     it('should handle property from app', function () {
         tie.handle("a", function (obj, config) {
-            obj.name = config;
+            obj.name = config.name || config;
             return {name: config};
         });
         tie("app", {$a: 'John'});
         var a = tie("a", {});
         a.name.should.eql('John', 'name');
         a.$a.should.eql({name: 'John'}, 'config');
+    });
+    it.only('should recalculate configs on app change', function () {
+        tie.handle("a", function (obj, config) {
+            console.log(config.name || config)
+            obj.name = config.name || config;
+            return {name: config};
+        });
+        var app = tie("app", {$a: 'John'});
+        var a = tie("a", {});
+        a.name.should.eql('John', 'name');
+        a.$a.should.eql({name: 'John'}, 'config');
+        app.$a = 'Wolf';
+        a.name.should.eql('Wolf', 'name changed');
+        a.$a.should.eql({name: 'Wolf'}, 'config changed');
     });
     it('should use dependencies order', function () {
         var b = tie.handle("b", function (obj, config) {
@@ -109,7 +123,7 @@ describe('handle', function () {
         test.$a = 'Wolf';
         test.name.should.eql("Wolf");
     });
-    it('should prevent config in handler', function () {
+    it('should update config from handler', function () {
         tie.handle("a", function () {
             return 'Me';
         });

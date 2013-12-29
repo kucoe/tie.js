@@ -2,17 +2,17 @@ var browser = require('./browser');
 var should = require('should');
 
 
-describe.only('route', function () {
+describe('route', function () {
     it('should process $route', function (done) {
-        this.timeout(10000);
-        setTimeout(function () {
+        //this.timeout(10000);
+        //setTimeout(function () {
             browser(function (window) {
                 var routes = window.exports.routes;
                 window.tie('app', {$route: {'/': {}}});
                 should.exists(routes);
                 done();
             }, ['view', 'route']);
-        }, 3000);
+        //}, 3000);
     });
     it('should find $route paths', function (done) {
         browser(function (window) {

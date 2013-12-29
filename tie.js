@@ -930,7 +930,8 @@
     bind.prototype = {
     
         apply: function (property) {
-            _.debug("Calling apply on '" + this.name + "' after changed property '" + property + "'");
+            var name = this.name;
+            _.debug("Calling apply on '" + name + "' after changed property '" + property + "'");
             if (_.isHandle(property)) {
                 var n = property.substring(1);
                 var h = handlesRegistry[n];
@@ -944,7 +945,10 @@
             _.forEach(this.reliers, function (item) {
                 var bind = ties[item];
                 if (bind) {
-                    bind.obj[DEP_PREFIX + this.name] = this.obj;
+                    if(h && name === APP) {
+                        this.resolveHandle(bind.obj, n, h);
+                    }
+                    bind.obj[DEP_PREFIX + name] = this.obj;
                     delete bind.obj._ready;
                 }
             }, this);
@@ -953,7 +957,7 @@
         resolveHandles: function () {
             var name = this.name;
             var obj = this.obj;
-            if (name != APP) {
+            if (name !== APP) {
                 this.processedHandles = [];
                 _.forIn(handlesRegistry, function (handle, prop) {
                     if (!this.processedHandles.contains(prop)) {
