@@ -7,9 +7,9 @@
 <body>
 
 <div data-tie="app"></div>
-<div data-tie="one | routes:'one'"></div>
+<div data-tie="one"></div>
 <div data-tie="two"></div>
-<div data-tie="three | routes:'three'"></div>
+<div data-tie="three"></div>
 <div data-tie="not on three"></div>
 
 <a href="#/">Home</a>
@@ -20,24 +20,28 @@
 <script>
     tie("app", {
         value: 'Select path',
-        $routes: ['/', 'one', 'two', 'three']._({
-            three: function(){
-                tie("three","Surprise Three");
+        $route: {'/': {}, 'one': {}, 'two': {},
+            'three': function () {
+                tie("three", "Surprise Three");
             }
-        }),
-        $attrs: ['value']
+        },
+        $view: '#'
     });
-    tie("one","One");
-    tie("two",{
+    tie("one", {
+        value: "One",
+        $view: {$routes: ['one']}
+    });
+    tie("two", {
         value: 'Two',
-        $routes: ['two'],
-        $attrs: ['value']
+        $view: {$routes: ['two']}
     });
-    tie("three","Three");
+    tie("three", {
+        value: "Three",
+        $view: {$routes: ['three']}
+    });
     tie("not on three", {
         value: 'Not on three',
-        $routes: ['-', '/', 'three'],
-        $attrs: ['value']
+        $view: {$routes: ['-', '/', 'three']}
     });
 </script>
 

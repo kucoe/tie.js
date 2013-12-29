@@ -459,7 +459,9 @@
                     _.debug("Got handle config " + config);
                     if (_.isDefined(config)) {
                         this.remove(h._uid);
+                        obj._silent = true;
                         obj[prop] = h(obj, config, this, appConfig);
+                        delete obj._silent;
                     }
                 }
             }
@@ -1552,11 +1554,6 @@
     var resolveViewHandle = function (obj, view, name, els) {
         var vh = viewHandlers[name];
         if (vh && view._resolved) {
-            _.forEach(vh.$deps, function (item) {
-                if (!view._resolved.contains(item)) {
-                    resolveViewHandle(obj, view, item, els);
-                }
-            });
             var h = (HANDLE_PREFIX + name);
             var c = view[h];
             _.debug("View handle " + name + ' with config ' + c);
@@ -1569,6 +1566,10 @@
                 if (!view._resolved.contains(name)) {
                     view._resolved.push(name);
                 }
+                _.forEach(vh.$deps, function (item) {
+                    // we need update all dependencies as they might be changed and failed react dynamically
+                    resolveViewHandle(obj, view, item, els);
+                });
             }
         }
     };
@@ -2346,13 +2347,19 @@
                         }
                         return current;
                     };
+                    this.current = current;
+                    if (!this.app.$view) {
+                        this.app.$view = {$routes: []};
+                    } else {
+                        this.app.$view.$routes = [];
+                    }
                     _.debug("Processed route " + path);
                 }
             }
         },
 
         find: function (path) {
-            if(!path || path === '/') {
+            if (!path || path === '/') {
                 return {path: '#/', handler: this.list['/']};
             }
             if (path.charAt(path.length - 1) == '/') {
@@ -2360,7 +2367,7 @@
             }
             var res = null;
             _.forIn(this.list, function (fn, route) {
-                if (route.charAt(0) === '/') {
+                if (!_.isHandle(route)) {
                     var routeChunks = route.split('/');
                     var pathChunks = path.split('/');
                     if (routeChunks.length === pathChunks.length) {
@@ -2380,21 +2387,21 @@
             return res;
         },
 
-        has: function (obj, current) {
-            var routes = obj.$view.$routes;
-            if (routes) {
-                var exclude = routes['-'] != null;
+        has: function (routes) {
+            console.log(this.current);
+            if (routes && this.current) {
+                var exclude = routes.contains('-');
                 var contains = false;
-                _.forIn(routes, function (route, path) {
-                    if (path.toLowerCase() === current.path) {
+                _.forEach(routes, function (path) {
+                    if (path.toLowerCase() === this.current.path) {
                         contains = true;
                         return false;
                     }
                     return true;
-                });
+                }, this);
                 return exclude != contains;
             }
-            return false;
+            return true;
         },
 
         move: function (url) {
@@ -2404,7 +2411,6 @@
         }
     };
 
-
     window.tie.handle("route", function (obj, config, observer, appConfig) {
         if (!routes.attached) {
             window.tie.domReady(function () {
@@ -2413,6 +2419,13 @@
         }
         return routes.init(obj, appConfig);
     }, ['view'], true);
+
+    window.tie.viewHandle("routes", function (view, config) {
+        if (config && !routes.has(config)) {
+            view.$shown = false;
+        }
+        return config;
+    }, ['shown'], true);
 
     if (typeof window.exports === 'object') {
         window.exports.routes = routes;
