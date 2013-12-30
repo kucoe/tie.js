@@ -671,6 +671,108 @@ describe('view', function () {
             }, ['view']);
         });
     });
+    describe('viewHandle', function () {
+        it('should prevent existing', function (done) {
+            browser(function (window) {
+                window.tie.viewHandle("a", function () {
+                }, [], true);
+                var a = function () {
+                    window.tie.viewHandle("a", function () {
+                    });
+                }.should.throw();
+                done();
+            }, ['view']);
+        });
+        it('should have name', function (done) {
+            browser(function (window) {
+                delete window.exports.viewHandlers['a'];
+                var a = window.tie.viewHandle("a", function (view, config) {
+                    config.name = this.$name;
+                    return config;
+                });
+                a({}, {}).name.should.eql("a");
+                done();
+            }, ['view']);
+        });
+        it('should have dependencies', function (done) {
+            browser(function (window) {
+                window.tie.viewHandle("a", function (view, config) {
+                    config.name = "John";
+                    return config;
+                });
+                var b = window.tie.viewHandle("b", function (view, config) {
+                    return this.$$a(view, config);
+                }, ['a']);
+                b({}, {}).name.should.eql("John");
+                done();
+            }, ['view']);
+        });
+        it('should handle property', function (done) {
+            browser(function (window) {
+                window.tie.viewHandle("a", function (view, config) {
+                    view.name = config;
+                    return {name: config};
+                });
+                var a = window.tie("a", {$view: {$a: 'John'}});
+                setTimeout(function () {
+                    a.$view.$a.should.eql({name: 'John'}, 'config');
+                    a.$view.name.should.eql('John', 'name');
+                    done();
+                }, 200);
+            }, ['view']);
+        });
+        it('should update dependencies', function (done) {
+            browser(function (window) {
+                window.tie.viewHandle("a", function (view, config) {
+                    view.$tag = config;
+                    return config;
+                });
+                var b = window.tie.viewHandle("b", function (view, config) {
+                    view.$a = config;
+                    return config;
+                }, ['a']);
+                var obj = window.tie('a', {$view: {$b: 'John'}});
+                setTimeout(function () {
+                    obj.$view.$a.should.eql("John");
+                    obj.$view.$tag.should.eql("John");
+                    done();
+                }, 200);
+            }, ['view']);
+        });
+        it('should handle property from app', function (done) {
+            browser(function (window) {
+                window.tie.viewHandle("a", function (view, config) {
+                    view.name = config.name || config;
+                    return {name: config};
+                });
+                window.tie("app", {$view: {$a: 'John'}});
+                var a = window.tie("a", {});
+                setTimeout(function () {
+                    a.$view.name.should.eql('John', 'name');
+                    a.$view.$a.should.eql({name: 'John'}, 'config');
+                    done();
+                }, 200);
+            }, ['view']);
+        });
+        it('should recalculate configs on app change', function (done) {
+            browser(function (window) {
+                window.tie.viewHandle("a", function (view, config) {
+                    view.name = 'Hello ' + config;
+                    return config;
+                });
+                var app = window.tie("app", {$view: {$a: 'John'}});
+                var a = window.tie("a", {});
+                setTimeout(function () {
+                    a.$view.name.should.eql('Hello John', 'name');
+                    a.$view.$a.should.eql('John', 'config');
+                    app.$view.$a = 'Wolf';
+                    a.$view.name.should.eql('Hello Wolf', 'name changed');
+                    a.$view.$a.should.eql('Wolf', 'config changed');
+                    done();
+                }, 200);
+            }, ['view']);
+        });
+    });
     describe('viewHandles', function () {
         it('should react on $shown', function (done) {
             browser(function (window) {

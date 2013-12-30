@@ -64,6 +64,10 @@
             return {}.toString.apply(value) == '[object RegExp]';
         },
     
+        isUID: function(value) {
+            return this.isString(value) && /[0-9A-Ha-h]{8}-[0-9A-Ha-h]{4}-[0-9A-Ha-h]{4}-[0-9A-Ha-h]{4}-[0-9A-Ha-h]{12}/.test(value);
+        },
+    
         isArray: function (value) {
             return Array.isArray(value) || {}.toString.apply(value) == '[object Array]';
         },
@@ -265,10 +269,9 @@
                 res = fn.apply(fnThis, args);
             } catch (e) {
                 res = undefined;
-                throw e;
                 if (!this.isFunction(fnThis.$ready) || fnThis.$ready()) {
-                    //console.error('Is ready and had an error:' + e.message);
-                    //console.log(e.stack);
+                    console.error('Is ready and had an error:' + e.message);
+                    console.log(e.stack);
                     _.debug(e, 'User code error');
                 }
             }
@@ -742,7 +745,8 @@
             if (_.isString(prop)) { //removes listeners by handlerId or by property name
                 _.forEach(this.listeners, function (item, i) {
                     var property = item.property;
-                    if (prop && (property === prop || (_.isRegExp(property) && property.test(prop)) || item.handlerId === prop)) {
+                    if (prop && (property === prop || item.handlerId === prop
+                        || (!_.isUID(prop) && _.isRegExp(property) && property.test(prop)))) {
                         this.listeners.splice(i, 1);
                     }
                 }, this, true);
@@ -803,14 +807,16 @@
         var obj = observer.obj;
         notify(obj, prop, observer);
         _.debug('React on ' + action + ' for ' + prop);
-        var val = obj[prop];
+        var val = obj.$prop(prop);
         _.forEach(observer.listeners, function (item) {
-            var property = item.property;
-            var test = _.isRegExp(property) && property.test(prop);
-            if (test) {
-                var fn = action === 'del' ? item.onDelete : item.onChange;
-                if (_.isFunction(fn)) {
-                    val = _.safeCall(fn, obj, obj, prop, val);
+            if (_.isDefined(item)) {
+                var property = item.property;
+                var test = _.isRegExp(property) && property.test(prop);
+                if (test) {
+                    var fn = action === 'del' ? item.onDelete : item.onChange;
+                    if (_.isFunction(fn)) {
+                        val = _.safeCall(fn, obj, obj, prop, val);
+                    }
                 }
             }
         });
@@ -865,8 +871,8 @@
             } else {
                 val = proxy.value;
             }
-            if(_.isString(val) && val.indexOf('#{') == 0 && val.indexOf('}') == (val.length -1)) {
-                var s = val.substring(2, val.length -1) || VALUE;
+            if (_.isString(val) && val.indexOf('#{') == 0 && val.indexOf('}') == (val.length - 1)) {
+                var s = val.substring(2, val.length - 1) || VALUE;
                 val = function () {
                     return this.$prop(s);
                 }.val(s);
@@ -935,7 +941,7 @@
             if (_.isHandle(property)) {
                 var n = property.substring(1);
                 var h = handlesRegistry[n];
-                if (h) {
+                if (h && name !== APP) {
                     this.resolveHandle(this.obj, n, h);
                 }
             }
@@ -945,7 +951,7 @@
             _.forEach(this.reliers, function (item) {
                 var bind = ties[item];
                 if (bind) {
-                    if(h && name === APP) {
+                    if (h && name === APP) {
                         this.resolveHandle(bind.obj, n, h);
                     }
                     bind.obj[DEP_PREFIX + name] = this.obj;
@@ -1212,6 +1218,7 @@
     var parse = window.tie.$;
 
     var HANDLE_PREFIX = '$';
+    var DEP_PREFIX = '$$';
 
     var VALUE = 'value';
     var TEXT = 'text';
@@ -1541,7 +1548,7 @@
         h = function (view, config, els, obj) {
             _.debug("Process view handle " + name);
             _.forEach(dependencies || [], function (item) {
-                h['$' + item] = viewHandlers[item];
+                h[DEP_PREFIX + item] = viewHandlers[item];
             });
             if (fn && _.isFunction(fn)) {
                 config = _.safeCall(fn, h, view, config, els, obj);
@@ -1648,8 +1655,8 @@
                 }
             });
             var $shown = obj.$view.$shown;
-            _.forEach(this.$, function (el) {
-                if (el) {
+            if (this.$) {
+                _.forEach(this.$, function (el) {
                     var updated = obj;
                     if (el.tie !== tieName) {
                         updated = parse(el.tie, undefined, updated);
@@ -1683,8 +1690,8 @@
                         }
                         el.show($shown);
                     }
-                }
-            }, this);
+                }, this);
+            }
             _.debug("Rendered " + tieName);
         },
     
@@ -1714,11 +1721,11 @@
     /**  SHOWN **/
 
     viewHandle("shown", function (view, config, els) {
-        _.forEach(els, function (el) {
-            if (el) {
+        if (els) {
+            _.forEach(els, function (el) {
                 el.show(config);
-            }
-        });
+            });
+        }
         return config;
     }, [], true);
 
@@ -1901,7 +1908,7 @@
             }
         };
         renders[tieName] = r;
-        observer.watch('.*', handlerId, function (obj, prop, val) {
+        observer.watch('*', handlerId, function (obj, prop, val) {
             if ('_deleted' === prop && !!val) {
                 delete renders[tieName];
                 observer.remove(handlerId);
@@ -1960,6 +1967,7 @@
         res.renders = renders;
         res.clean = function () {
             dom.fetched = [];
+            res.viewHandlers = viewHandlers;
             res.renders = renders = {};
         };
         window.exports = res;
@@ -2321,15 +2329,13 @@
 
         list: {},
 
-        attached: false,
-
         init: function (obj, routes) {
             if (!_.isEqual(this.list, routes)) {
                 this.list = routes;
+                this.list.$current = {};
                 this.app = obj.$$app;
                 _.debug("Routes initialized");
             }
-            this.attached = true;
             return this.list;
         },
 
@@ -2345,18 +2351,13 @@
                     if (_.isFunction(current.handler)) {
                         _.safeCall(current.handler, this.app);
                     }
+                    this.list.$current = current;
                     this.list.$location = function (url) {
                         if (url) {
                             routes.move(url);
                         }
                         return current;
                     };
-                    this.current = current;
-                    if (!this.app.$view) {
-                        this.app.$view = {$routes: []};
-                    } else {
-                        this.app.$view.$routes = [];
-                    }
                     _.debug("Processed route " + path);
                 }
             }
@@ -2364,7 +2365,7 @@
 
         find: function (path) {
             if (!path || path === '/') {
-                return {path: '#/', handler: this.list['/']};
+                return {path: '/', handler: this.list['/']};
             }
             if (path.charAt(path.length - 1) == '/') {
                 path = path.substring(0, path.length - 1);
@@ -2392,12 +2393,11 @@
         },
 
         has: function (routes) {
-            console.log(this.current);
-            if (routes && this.current) {
+            if (_.isArray(routes) && this.list.$current) {
                 var exclude = routes.contains('-');
                 var contains = false;
                 _.forEach(routes, function (path) {
-                    if (path.toLowerCase() === this.current.path) {
+                    if (path.toLowerCase() === this.list.$current.path) {
                         contains = true;
                         return false;
                     }
@@ -2415,19 +2415,29 @@
         }
     };
 
+    window.tie.domReady(function () {
+        routes.locate();
+    });
+
     window.tie.handle("route", function (obj, config, observer, appConfig) {
-        if (!routes.attached) {
-            window.tie.domReady(function () {
-                routes.locate();
-            });
-        }
+        observer.watch('\\$route\\.\\$current', this._uid, function(obj) {
+            var view = obj.$view;
+            var config = view && view.$routes;
+            updateShown(config, view);
+        });
         return routes.init(obj, appConfig);
     }, ['view'], true);
 
-    window.tie.viewHandle("routes", function (view, config) {
+    function updateShown(config, view) {
         if (config && !routes.has(config)) {
             view.$shown = false;
+        } else if (view) {
+            view.$shown = true;
         }
+    }
+
+    window.tie.viewHandle("routes", function (view, config) {
+        updateShown(config, view);
         return config;
     }, ['shown'], true);
 

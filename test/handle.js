@@ -73,9 +73,11 @@ describe('handle', function () {
         a.name.should.eql('John', 'name');
         a.$a.should.eql({name: 'John'}, 'config');
     });
-    it.only('should recalculate configs on app change', function () {
-        tie.handle("a", function (obj, config) {
-            console.log(config.name || config)
+    it('should recalculate configs on app change', function () {
+        tie.handle("a", function (obj, config, observer, webAppConfig) {
+            if (tie._.isString(webAppConfig)) {
+                config = webAppConfig;
+            }
             obj.name = config.name || config;
             return {name: config};
         });
@@ -167,7 +169,7 @@ describe('handle', function () {
             var onChange = function (item) {
                 return 'Hello ' + item;
             };
-            tie._.forEach(config, function(item, i) {
+            tie._.forEach(config, function (item, i) {
                 config[i] = onChange(item);
             });
             config = observer.observeArray(config, onChange);
@@ -183,7 +185,7 @@ describe('handle', function () {
             var onChange = function (item) {
                 return 'Hello ' + item;
             };
-            tie._.forEach(config, function(item, i) {
+            tie._.forEach(config, function (item, i) {
                 config[i] = onChange(item);
             });
             config = observer.observeArray(config, onChange, onChange);
@@ -269,7 +271,7 @@ describe('handle', function () {
             observer.watch(config + '_.+', this._uid, w);
             return config + ' resolver';
         });
-        var test = tie("test", {$a: "app", name:'uu', app_name: 'Jack'});
+        var test = tie("test", {$a: "app", name: 'uu', app_name: 'Jack'});
         test.app_name.should.eql('jack', 'app name');
         test.$a = 'name';
     });

@@ -4,15 +4,12 @@ var should = require('should');
 
 describe('route', function () {
     it('should process $route', function (done) {
-        //this.timeout(10000);
-        //setTimeout(function () {
-            browser(function (window) {
-                var routes = window.exports.routes;
-                window.tie('app', {$route: {'/': {}}});
-                should.exists(routes);
-                done();
-            }, ['view', 'route']);
-        //}, 3000);
+        browser(function (window) {
+            var routes = window.exports.routes;
+            window.tie('app', {$route: {'/': {}}});
+            should.exists(routes);
+            done();
+        }, ['view', 'route']);
     });
     it('should find $route paths', function (done) {
         browser(function (window) {
@@ -61,7 +58,7 @@ describe('route', function () {
             window.tie('example', '');
             window.location.hash = '';
             setTimeout(function () {
-                app.$route.$location().path.should.eql('#/', 'current path');
+                app.$route.$location().path.should.eql('/', 'current path');
                 done();
             }, 300);
         }, ['view', 'route']);
@@ -93,6 +90,30 @@ describe('route', function () {
             }, 200);
         }, ['view', 'route']);
     });
+    it('should show on route change', function (done) {
+        browser(function (window) {
+            var document = window.document;
+            var div = document.createElement("div");
+            div.setAttribute('data-tie', 'example');
+            document.body.appendChild(div);
+            var app = window.tie('app', {$route: {'/': {}, 'welcome': {}, home: {}}, $view: '#'});
+            var obj = window.tie('example', {value: 'lala', $view: {$routes: ['/', 'home']}});
+            window.location.hash = '';
+            window.location.hash = 'welcome';
+            setTimeout(function () {
+                obj.$view.$shown.should.eql(false, 'not shown');
+                div.textContent.should.eql('lala', 'value');
+                div.style.display.should.eql('none', 'hidden');
+                window.location.hash = 'home';
+                setTimeout(function () {
+                    obj.$view.$shown.should.eql(true, 'shown');
+                    div.textContent.should.eql('lala', 'value');
+                    div.style.display.should.eql('', 'visible');
+                    done();
+                }, 300);
+            }, 200);
+        }, ['view', 'route']);
+    });
     it('should show on no routes', function (done) {
         browser(function (window) {
             var document = window.document;
@@ -100,7 +121,7 @@ describe('route', function () {
             div.setAttribute('data-tie', 'example');
             document.body.appendChild(div);
             var app = window.tie('app', {$route: {'/': {}, 'welcome': {}}, $view: '#'});
-            var obj = window.tie('example','lala');
+            var obj = window.tie('example', 'lala');
             window.location.hash = 'welcome';
             setTimeout(function () {
                 obj.$view.$shown.should.eql(true, 'shown');
