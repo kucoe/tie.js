@@ -26,7 +26,7 @@ var viewPath = "lib/view";
 
 var view = fs.readFileSync(viewPath + '/view.js', 'utf8');
 
-modules = ['dom', 'el', 'renderer', 'viewHandle', 'shown', 'parent', 'children'];
+modules = ['dom', 'el', 'renderer', 'viewHandle', 'shown', 'parent', 'children', 'repeat'];
 
 modules.forEach(function(item){
     var content = fs.readFileSync(viewPath + '/' + item + '.js', 'utf8');

@@ -925,6 +925,34 @@ describe('view', function () {
                 }, 500);
             }, ['view']);
         });
+        it('should react on $children function', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                document.body.appendChild(div);
+                var child1 = {
+                    $tag: 'input',
+                    type: 'text'
+                };
+                var child2 = {
+                    $tag: 'a',
+                    href: 'https://kucoe.net'
+                };
+                var arr = function () {
+                    return [child1, child2];
+                };
+                window.tie('a', {value: 'a', $view: {value: '#', $children: arr}});
+                setTimeout(function () {
+                    div.children.length.should.eql(2, 'children');
+                    div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
+                    div.children[0].type.should.eql('text', 'child type');
+                    div.children[1].tagName.toLowerCase().should.eql('a', 'child tag');
+                    div.children[1].href.should.eql('https://kucoe.net/', 'child href');
+                    done();
+                }, 200);
+            }, ['view']);
+        });
         it('should react on $children generator', function (done) {
             browser(function (window) {
                 var document = window.document;
@@ -1088,6 +1116,67 @@ describe('view', function () {
                     done();
                 }, 200);
             }, ['view']);
+        });
+        it('should react on $repeat', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var top = document.createElement("div");
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                top.appendChild(div);
+                document.body.appendChild(top);
+                var item = 'https://kucoe.net';
+                var item2 = 'https://becevka.com';
+                window.tie('a', {$view: {value: '#', $repeat: [item, item2]}});
+                setTimeout(function () {
+                    top.children.length.should.eql(3, 'repeat');
+                    top.children[0].style.display.should.eql('none', 'hidden');
+                    top.children[1].tagName.toLowerCase().should.eql('div', 'item tag');
+                    top.children[1].textContent.should.eql(item, 'content');
+                    top.children[1].style.display.should.eql('', 'visible');
+                    top.children[2].tagName.toLowerCase().should.eql('div', 'item tag');
+                    top.children[2].textContent.should.eql(item2, 'content');
+                    top.children[2].style.display.should.eql('', 'visible');
+                    done();
+                }, 200);
+            }, ['view']);
+        });
+        it.only('should react on objects in $repeat', function (done) {
+            this.timeout(10000);
+            setTimeout(function () {
+
+                browser(function (window) {
+                    var document = window.document;
+                    var top = document.createElement("div");
+                    var div = document.createElement("div");
+                    div.setAttribute('data-tie', 'a');
+                    top.appendChild(div);
+                    document.body.appendChild(top);
+                    var item = { value: 'https://kucoe.net', color: 'green' };
+                    var item2 =  { value: 'https://becevka.com', color: 'blue' };
+                    window.tie('a', {$view: {
+                        value: '#{value}',
+                        style: function() {
+                            return 'color' + this.color
+                        }.val('color'),
+                        $repeat: [item, item2]
+                    }});
+                    setTimeout(function () {
+                        console.log(top.innerHTML)
+                        top.children.length.should.eql(3, 'repeat');
+                        top.children[0].style.display.should.eql('none', 'hidden');
+                        top.children[1].tagName.toLowerCase().should.eql('div', 'item tag');
+                        top.children[1].textContent.should.eql(item.value, 'content');
+                        top.children[1].style.color.should.eql(item.color, 'color');
+                        top.children[1].style.display.should.eql('', 'visible');
+                        top.children[2].tagName.toLowerCase().should.eql('div', 'item tag');
+                        top.children[2].textContent.should.eql(item2.value, 'content');
+                        top.children[2].style.color.should.eql(item2.color, 'color');
+                        top.children[2].style.display.should.eql('', 'visible');
+                        done();
+                    }, 200);
+                }, ['view']);
+            }, 5000);
         });
     });
 });
