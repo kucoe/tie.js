@@ -315,7 +315,7 @@ describe('view', function () {
                 var input = document.createElement("input");
                 input.setAttribute('data-tie', 'a');
                 document.body.appendChild(input);
-                var obj = window.tie('a', {value: 'lala', $view: {style: '#{value}'}});
+                var obj = window.tie('a', {value: 'lala', $view: {style: '#{}'}});
                 obj.$view.style.should.eql('lala', 'property attr');
                 done();
             }, ['view']);
@@ -796,7 +796,7 @@ describe('view', function () {
                 var div = document.createElement("div");
                 div.setAttribute('data-tie', 'a');
                 document.body.appendChild(div);
-                window.tie('a', {value: 'lala', $view: {value: '#{value}', $shown: false}});
+                window.tie('a', {value: 'lala', $view: {value: '#{}', $shown: false}});
                 setTimeout(function () {
                     div.textContent.should.eql('lala', 'value');
                     div.style.display.should.eql('none', 'hidden');
@@ -882,7 +882,7 @@ describe('view', function () {
                     $tag: 'a',
                     href: 'https://kucoe.net'
                 };
-                window.tie('a', {value: 'a', $view: {value: '#', $children: [child1, child2]}});
+                window.tie('a', {value: 'a', $view: {value: '#{}', $children: [child1, child2]}});
                 setTimeout(function () {
                     div.children.length.should.eql(2, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -907,7 +907,7 @@ describe('view', function () {
                     $tag: 'a',
                     href: 'https://kucoe.net'
                 };
-                window.tie('a', {value: 'a', $view: {value: '#', $children: [
+                window.tie('a', {value: 'a', $view: {value: '#{}', $children: [
                     {$children: child1},
                     {$children: child2}
                 ]}});
@@ -942,7 +942,7 @@ describe('view', function () {
                 var arr = function () {
                     return [child1, child2];
                 };
-                window.tie('a', {value: 'a', $view: {value: '#', $children: arr}});
+                window.tie('a', {value: 'a', $view: {value: '#{}', $children: arr}});
                 setTimeout(function () {
                     div.children.length.should.eql(2, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -971,7 +971,7 @@ describe('view', function () {
                 var generator = function () {
                     return arr.shift();
                 };
-                window.tie('a', {value: 'a', $view: {value: '#', $children: generator}});
+                window.tie('a', {value: 'a', $view: {value: '#{}', $children: generator}});
                 setTimeout(function () {
                     div.children.length.should.eql(2, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -996,7 +996,7 @@ describe('view', function () {
                     $tag: 'a',
                     href: 'https://kucoe.net'
                 };
-                var a = window.tie('a', {value: 'a', $view: {value: '#', $children: [child1, child2]}});
+                var a = window.tie('a', {value: 'a', $view: {value: '#{}', $children: [child1, child2]}});
                 setTimeout(function () {
                     div.children.length.should.eql(2, 'children');
                     div.children[0].tagName.toLowerCase().should.eql('input', 'child tag');
@@ -1021,7 +1021,7 @@ describe('view', function () {
                 document.body.appendChild(div);
                 var child = {
                     $tag: 'a',
-                    href: '#{value}'
+                    href: '#{}'
                 };
                 window.tie('a', {value: 'https://kucoe.net', $view: {$children: child}});
                 setTimeout(function () {
@@ -1040,7 +1040,7 @@ describe('view', function () {
                 document.body.appendChild(div);
                 var child = {
                     $tag: 'a',
-                    href: '#{value}'
+                    href: '#{}'
                 };
                 var a = window.tie('a', {value: 'https://kucoe.net', $view: {$children: child}});
                 setTimeout(function () {
@@ -1127,7 +1127,7 @@ describe('view', function () {
                 document.body.appendChild(top);
                 var item = 'https://kucoe.net';
                 var item2 = 'https://becevka.com';
-                window.tie('a', {$view: {value: '#', $repeat: [item, item2]}});
+                window.tie('a', {value:'', $view: {value: '#{}', $repeat: [item, item2]}});
                 setTimeout(function () {
                     top.children.length.should.eql(3, 'repeat');
                     top.children[0].style.display.should.eql('none', 'hidden');
@@ -1141,42 +1141,37 @@ describe('view', function () {
                 }, 200);
             }, ['view']);
         });
-        it.only('should react on objects in $repeat', function (done) {
-            this.timeout(10000);
-            setTimeout(function () {
-
-                browser(function (window) {
-                    var document = window.document;
-                    var top = document.createElement("div");
-                    var div = document.createElement("div");
-                    div.setAttribute('data-tie', 'a');
-                    top.appendChild(div);
-                    document.body.appendChild(top);
-                    var item = { value: 'https://kucoe.net', color: 'green' };
-                    var item2 =  { value: 'https://becevka.com', color: 'blue' };
-                    window.tie('a', {$view: {
-                        value: '#{value}',
-                        style: function() {
-                            return 'color' + this.color
-                        }.val('color'),
-                        $repeat: [item, item2]
-                    }});
-                    setTimeout(function () {
-                        console.log(top.innerHTML)
-                        top.children.length.should.eql(3, 'repeat');
-                        top.children[0].style.display.should.eql('none', 'hidden');
-                        top.children[1].tagName.toLowerCase().should.eql('div', 'item tag');
-                        top.children[1].textContent.should.eql(item.value, 'content');
-                        top.children[1].style.color.should.eql(item.color, 'color');
-                        top.children[1].style.display.should.eql('', 'visible');
-                        top.children[2].tagName.toLowerCase().should.eql('div', 'item tag');
-                        top.children[2].textContent.should.eql(item2.value, 'content');
-                        top.children[2].style.color.should.eql(item2.color, 'color');
-                        top.children[2].style.display.should.eql('', 'visible');
-                        done();
-                    }, 200);
-                }, ['view']);
-            }, 5000);
+        it('should react on objects in $repeat', function (done) {
+            browser(function (window) {
+                var document = window.document;
+                var top = document.createElement("div");
+                var div = document.createElement("div");
+                div.setAttribute('data-tie', 'a');
+                top.appendChild(div);
+                document.body.appendChild(top);
+                var item = { value: 'https://kucoe.net', color: 'green' };
+                var item2 = { value: 'https://becevka.com', color: 'blue' };
+                window.tie('a', {color: '', value: '', $view: {
+                    value: '#{}',
+                    style: function () {
+                        return 'color:' + this.color
+                    }.val('color'),
+                    $repeat: [item, item2]
+                }});
+                setTimeout(function () {
+                    top.children.length.should.eql(3, 'repeat');
+                    top.children[0].style.display.should.eql('none', 'hidden');
+                    top.children[1].tagName.toLowerCase().should.eql('div', 'item tag');
+                    top.children[1].textContent.should.eql(item.value, 'content');
+                    top.children[1].style.color.should.eql(item.color, 'color');
+                    top.children[1].style.display.should.eql('', 'visible');
+                    top.children[2].tagName.toLowerCase().should.eql('div', 'item tag');
+                    top.children[2].textContent.should.eql(item2.value, 'content');
+                    top.children[2].style.color.should.eql(item2.color, 'color');
+                    top.children[2].style.display.should.eql('', 'visible');
+                    done();
+                }, 200);
+            }, ['view']);
         });
     });
 });

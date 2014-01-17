@@ -1865,6 +1865,13 @@
         return res;
     };
     
+    var tie = function (item, obj, idx) {
+        item = check(item);
+        obj = window.tie(obj.$name)();
+        obj = _.extend(obj, item);
+        return obj;
+    };
+    
     var repeat = function (array, obj, clean, renderer, els) {
         _.forEach(els, function (el) {
             var $ = el.$;
@@ -1882,8 +1889,10 @@
                     newEl = true;
                 }
                 var w = new wrap(c, obj);
-                _.forIn(item, function (val, prop) {
-                    renderer.$renderAttr(obj, prop, val, w);
+                _.forIn(item.$view, function (val, prop) {
+                    if (!_.isHandle(prop)) {
+                        renderer.$renderAttr(obj, prop, val, w);
+                    }
                 });
                 if (newEl) {
                     w.setAttribute(ID, w._id);
@@ -1907,18 +1916,18 @@
             var idx = 0;
             var next = _.safeCall(config, obj, idx);
             if (config.length == 0 && _.isArray(next)) {
-                _.forEach(next, function (item) {
-                    items.push(check(item, obj));
+                _.forEach(next, function (item, i) {
+                    items.push(tie(item, obj, i));
                 });
             } else {
                 while (next != null) {
-                    items.push(check(next, obj));
+                    items.push(tie(next, obj, idx));
                     next = _.safeCall(config, obj, ++idx);
                 }
             }
         } else {
-            _.forEach(config, function (item) {
-                items.push(check(item, obj));
+            _.forEach(config, function (item, i) {
+                items.push(tie(item, obj, i));
             });
         }
         repeat(items, obj, true, renderer, els);
